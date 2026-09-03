@@ -1,0 +1,26 @@
+# LaTeX build artifacts
+*.aux
+*.bbl
+*.bcf
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.nav
+*.out
+*.run.xml
+*.snm
+*.synctex.gz
+*.toc
+*.vrb
+_minted-*
+build/
+
+# Generated presentation output
+*.pdf
+
+# Local editor and operating-system files
+.DS_Store
+*.swp
+*.swo
+*~
