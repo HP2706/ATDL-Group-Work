@@ -75,24 +75,27 @@
 
 \begin{frame}{Mutual information}
   \begin{columns}[T,onlytextwidth]
-    \column{0.48\textwidth}
+    \column{0.36\textwidth}
       {\color{Accent}\large Definition}\par
       \vspace{0.12cm}
       \begin{equation}
-        I(X;T)
-        = \sum_{x,t} p(x,t)
-          \log\frac{p(x,t)}{p(x)p(t)}.
+        I(X;T) = H(X)-H(X\mid T).
       \end{equation}
       Mutual information measures how much observing $T$ reduces uncertainty about $X$.
-    \column{0.48\textwidth}
-      {\color{Teal}\large KL-divergence view}\par
+    \column{0.60\textwidth}
+      {\color{Teal}\large Distributional and KL-divergence view}\par
       \vspace{0.12cm}
+      {\small
       \begin{equation}
-        I(X;T)
-        = D_{\mathrm{KL}}\!\left(
-          p_{X,T}\,\middle\|\,p_Xp_T
-        \right).
-      \end{equation}
+        \begin{aligned}
+          I(X;T)
+          &= \sum_{x,t} p(x,t)
+            \log\frac{p(x,t)}{p(x)p(t)} \\
+          &= D_{\mathrm{KL}}\!\left(
+            p_{X,T}\,\middle\|\,p_Xp_T
+          \right).
+        \end{aligned}
+      \end{equation}}
       It compares the joint distribution with the product of the marginals. It is zero exactly when $X$ and $T$ are independent.
   \end{columns}
   \vspace{0.3cm}
