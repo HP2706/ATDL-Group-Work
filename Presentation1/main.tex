@@ -73,36 +73,68 @@
     
 \end{frame}
 
-\begin{frame}{Mutual Information and the Information Plane}
-  \begin{columns}[c,onlytextwidth]
-    \column{0.47\textwidth}
-      \centering
-      {\color{Muted}\large A network forms a Markov chain}\par
-      \vspace{0.25cm}
-      \[
-        X \longrightarrow T_1 \longrightarrow T_2
-          \longrightarrow \cdots \longrightarrow T_n
-      \]
-      \vspace{0.2cm}
-      \[
-        \mutualinfo{X}{T_1}
-        \ge \mutualinfo{X}{T_2}
-        \ge \cdots
-        \ge \mutualinfo{X}{T_n}
-      \]
-      {\color{Muted}\small Later layers cannot recover discarded input information.}
-    \column{0.47\textwidth}
-      {\color{Accent}\large $\mutualinfo{X}{T}$}\par
-      Input information retained by representation $T$\par
-      \vspace{0.45cm}
-      {\color{Teal}\large $\mutualinfo{T}{Y}$}\par
-      Label information available for prediction\par
-      \vspace{0.45cm}
-      Each layer is one point in the information plane. Training first increases label information, then compresses input information.
+\begin{frame}{Mutual information}
+  \begin{columns}[T,onlytextwidth]
+    \column{0.48\textwidth}
+      {\color{Accent}\large Definition}\par
+      \vspace{0.12cm}
+      \begin{equation}
+        I(X;T)
+        = \sum_{x,t} p(x,t)
+          \log\frac{p(x,t)}{p(x)p(t)}.
+      \end{equation}
+      Mutual information measures how much observing $T$ reduces uncertainty about $X$.
+    \column{0.48\textwidth}
+      {\color{Teal}\large KL-divergence view}\par
+      \vspace{0.12cm}
+      \begin{equation}
+        I(X;T)
+        = D_{\mathrm{KL}}\!\left(
+          p_{X,T}\,\middle\|\,p_Xp_T
+        \right).
+      \end{equation}
+      It compares the joint distribution with the product of the marginals. It is zero exactly when $X$ and $T$ are independent.
   \end{columns}
-  \vspace{0.25cm}
-  \centering
-  {\color{Muted}\small For the paper's balanced binary target, $\mutualinfo{T}{Y}\le H(Y)\approx 1$ bit.}
+  \vspace{0.3cm}
+  For the feed-forward Markov chain
+  $X\!\longrightarrow\!H_1\!\longrightarrow\!\cdots\!\longrightarrow\!H_n\!\longrightarrow\!\hat{Y}$,
+  the data-processing inequality gives
+  {\small
+  \begin{equation}
+    H(X) \ge I(X;H_1) \ge I(X;H_2) \ge \cdots \ge I(X;H_n) \ge I(X;\hat{Y}).
+  \end{equation}}
+\end{frame}
+
+\begin{frame}{The information plane}
+  \begin{columns}[c,totalwidth=0.94\textwidth]
+    \column{0.51\textwidth}
+      \centering
+      \resizebox{\linewidth}{!}{%
+      \begin{tikzpicture}[x=0.72cm,y=0.72cm,>=Latex]
+        \draw[->,thick,Ink] (0,0) -- (6.1,0)
+          node[below right] {$\mutualinfo{X}{T}$};
+        \draw[->,thick,Ink] (0,0) -- (0,4.6)
+          node[above left] {$\mutualinfo{T}{Y}$};
+        \draw[Accent,very thick]
+          (0.35,0.25) .. controls (1.2,2.1) and (3.0,3.55) .. (5.55,4.0);
+        \node[Accent,above] at (4.15,3.85) {IB curve};
+        \fill[Teal] (4.7,3.82) circle (2.6pt);
+        \node[Teal,below right] at (4.7,3.82) {$T$};
+      \end{tikzpicture}
+      }
+    \column{0.43\textwidth}
+      Each hidden layer is represented by
+      \begin{equation}
+        \left(I(X;T),\,I(T;Y)\right).
+      \end{equation}
+      Moving left means retaining fewer details about the input. Moving up means retaining more information about the target.
+      \vspace{0.35cm}
+
+      The paper reports a fast upward fitting phase followed by a slower leftward compression phase.
+      \vspace{0.25cm}
+
+      {\color{Muted}\small For the balanced binary target, $I(T;Y)\le H(Y)\approx 1$ bit.}
+  \end{columns}
 \end{frame}
 
 \begin{frame}{The Information Bottleneck Objective}
@@ -206,25 +238,6 @@ $I(X;T)$ falls more slowly after gradient fluctuations dominate the mean.
 
 \end{columns}
 
-\end{frame}
-
-\begin{frame}{Discussion}
-  \begin{columns}[c,onlytextwidth]
-    \column{0.58\textwidth}
-      \centering
-      \includegraphics[width=\textwidth,height=0.58\textheight,keepaspectratio]{figures/figure4.png}
-    \column{0.38\textwidth}
-      {\color{Accent}\large Observation}\par
-      The binned hidden representations first fit the labels, then compress the inputs.
-      \vspace{0.35cm}
-
-      {\color{Teal}\large Hypothesis}\par
-      Once training error is low, minibatch noise drives diffusion across a flat low-error region.
-      \vspace{0.35cm}
-
-      {\color{Muted}\large Limitation}\par
-      The mechanism is inferred from a synthetic task, $\tanh$ networks, and discretized activations.
-  \end{columns}
 \end{frame}
 
 \end{document}
