@@ -92,25 +92,23 @@
           &= \sum_{x,t} p(x,t)
             \log\frac{p(x,t)}{p(x)p(t)} \\
           &= D_{\mathrm{KL}}\!\left(
-            p_{X,T}\,\middle\|\,p_Xp_T
+            p(x,t)\,\middle\|\,p(x)p(t)
           \right).
         \end{aligned}
       \end{equation}}
       It compares the joint distribution with the product of the marginals. It is zero exactly when $X$ and $T$ are independent.
   \end{columns}
-  \vspace{0.3cm}
-  For the feed-forward Markov chain
-  $X\!\longrightarrow\!H_1\!\longrightarrow\!\cdots\!\longrightarrow\!H_n\!\longrightarrow\!\hat{Y}$,
-  the data-processing inequality gives
-  {\small
-  \begin{equation}
-    H(X) \ge I(X;H_1) \ge I(X;H_2) \ge \cdots \ge I(X;H_n) \ge I(X;\hat{Y}).
-  \end{equation}}
 \end{frame}
 
 \begin{frame}{The information plane}
+  \centering
+  {\small
+    The network forms the Markov chain
+    $Y\!\longrightarrow\!X\!\longrightarrow\!H_1\!\longrightarrow\!\cdots
+    \!\longrightarrow\!H_n\!\longrightarrow\!\hat{Y}$.}
+  \vspace{-0.05cm}
   \begin{columns}[c,totalwidth=0.94\textwidth]
-    \column{0.51\textwidth}
+    \column{0.46\textwidth}
       \centering
       \resizebox{\linewidth}{!}{%
       \begin{tikzpicture}[x=0.72cm,y=0.72cm,>=Latex]
@@ -125,19 +123,24 @@
         \node[Teal,below right] at (4.7,3.82) {$T$};
       \end{tikzpicture}
       }
-    \column{0.43\textwidth}
+    \column{0.48\textwidth}
       Each hidden layer is represented by
       \begin{equation}
         \left(I(X;T),\,I(T;Y)\right).
       \end{equation}
       Moving left means retaining fewer details about the input. Moving up means retaining more information about the target.
-      \vspace{0.35cm}
-
-      The paper reports a fast upward fitting phase followed by a slower leftward compression phase.
       \vspace{0.25cm}
-
-      {\color{Muted}\small For the balanced binary target, $I(T;Y)\le H(Y)\approx 1$ bit.}
+      The paper reports a fast upward fitting phase followed by a slower leftward compression phase.
   \end{columns}
+  \vspace{-0.15cm}
+  {\small
+  \begin{equation}
+    I(X;Y) \ge I(H_1;Y) \ge I(H_2;Y) \ge \cdots \ge I(H_n;Y) \ge I(\hat{Y};Y).
+  \end{equation}
+  \vspace{-0.2cm}
+  \begin{equation}
+    H(X) \ge I(X;H_1) \ge I(X;H_2) \ge \cdots \ge I(X;H_n) \ge I(X;\hat{Y}).
+  \end{equation}}
 \end{frame}
 
 \begin{frame}{The Information Bottleneck Objective}
