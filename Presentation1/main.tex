@@ -28,11 +28,122 @@
 
 \begin{document}
 
-\begin{frame}[plain]
-  \vspace{0.8cm}
-  \titlepage
-  \vfill
-  {\color{Accent}\rule{2.2cm}{2pt}}
+\begin{frame}{Problem and intuition}
+    
+\end{frame}
+
+\begin{frame}{Mutual Information and the Information Plane}
+    
+\end{frame}
+
+\begin{frame}{The Information Bottleneck Objective}
+    
+\end{frame}
+
+\begin{frame}{Experimental setup}
+
+\begin{itemize}
+    \item Synthetic binary classification problem
+    \item 12 binary inputs $\Rightarrow 2^{12} = 4096$ possible input patterns
+    \item Binary target $Y \in \{0,1\}$ generated probabilistically from $X$
+    \item Fully connected DNN, trained with SGD and cross-entropy
+    \item No explicit regularization
+\end{itemize}
+
+\vspace{0.3cm}
+
+For each hidden layer $T_i$, the authors compute
+
+\[
+I(X;T_i)
+\qquad \text{and} \qquad
+I(T_i;Y)
+\]
+
+\[
+I(X;T_i) = \text{input information / complexity}
+\]
+
+\[
+I(T_i;Y) = \text{label information / fitness}
+\]
+
+\end{frame}
+
+
+\begin{frame}{Main result: two phases of training}
+
+\begin{columns}
+
+\begin{column}{0.60\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{Presentation1/figures/figure3.png}
+\end{column}
+
+\begin{column}{0.40\textwidth}
+
+\textbf{Phase 1: Fitting}
+\[
+I(T;Y) \uparrow
+\]
+
+\begin{itemize}
+    \item Label information increases
+    \item Fast phase
+\end{itemize}
+
+\vspace{0.3cm}
+
+\textbf{Phase 2: Compression}
+\[
+I(X;T) \downarrow
+\]
+
+\begin{itemize}
+    \item Input information decreases
+    \item Much longer phase
+\end{itemize}
+
+
+
+Transition from large mean gradient, small variance, to larger fluctuations, smaller mean.
+\end{column}
+\end{columns}
+\end{frame}
+
+\begin{frame}{What does depth change?}
+
+\begin{columns}
+
+\begin{column}{0.62\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{Presentation1/figures/figure5.png}
+\end{column}
+
+\begin{column}{0.38\textwidth}
+
+\begin{itemize}
+    \item More hidden layers $\Rightarrow$ faster convergence
+    \item Deeper layers compress faster
+    \item Intermediate representations make later compression easier
+\end{itemize}
+
+\vspace{0.4cm}
+
+\[
+\text{depth}
+\rightarrow
+\text{more efficient compression}
+\]
+
+\end{column}
+
+\end{columns}
+
+\end{frame}
+
+\begin{frame}{Discussion}
+    Conclusions, Hypothesis and limitations 
 \end{frame}
 
 \end{document}
