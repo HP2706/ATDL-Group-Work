@@ -2,24 +2,56 @@
 
 \usepackage[T1]{fontenc}
 \usepackage{lmodern}
+\usepackage{amsmath,amssymb,mathtools}
+\usepackage{graphicx}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta}
+
+\graphicspath{{../../papers/opening-the-black-box-via-information/}}
 
 \definecolor{Ink}{HTML}{162033}
 \definecolor{Muted}{HTML}{657084}
 \definecolor{Accent}{HTML}{2364AA}
+\definecolor{Teal}{HTML}{148F88}
 \definecolor{Paper}{HTML}{F7F8FA}
 
 \setbeamercolor{normal text}{fg=Ink,bg=Paper}
+\setbeamercolor{structure}{fg=Accent}
+\setbeamercolor{frametitle}{fg=Ink,bg=Paper}
 \setbeamercolor{title}{fg=Ink}
 \setbeamercolor{subtitle}{fg=Accent}
 \setbeamercolor{author}{fg=Muted}
 \setbeamercolor{date}{fg=Muted}
+\setbeamercolor{alerted text}{fg=Accent}
 
 \setbeamerfont{title}{size=\fontsize{30}{34}\selectfont,series=\bfseries}
 \setbeamerfont{subtitle}{size=\fontsize{16}{19}\selectfont}
+\setbeamerfont{frametitle}{size=\fontsize{20}{24}\selectfont,series=\bfseries}
 
 \setbeamertemplate{navigation symbols}{}
 \setbeamertemplate{headline}{}
-\setbeamertemplate{footline}{}
+\setbeamertemplate{footline}{%
+  \leavevmode\hbox{%
+    \begin{beamercolorbox}[wd=.88\paperwidth,ht=2.8ex,dp=1.2ex,leftskip=.055\paperwidth]{author in head/foot}%
+      \color{Muted}\scriptsize Shwartz-Ziv and Tishby, 2017
+    \end{beamercolorbox}%
+    \begin{beamercolorbox}[wd=.12\paperwidth,ht=2.8ex,dp=1.2ex,center]{author in head/foot}%
+      \color{Muted}\scriptsize\insertframenumber
+    \end{beamercolorbox}%
+  }
+}
+
+\setbeamertemplate{frametitle}{%
+  \vspace{0.35cm}
+  \hspace{0.2cm}\insertframetitle\par
+  \vspace{-0.15cm}
+  \hspace{0.2cm}{\color{Accent}\rule{1.15cm}{1.5pt}}
+}
+
+\setbeamertemplate{itemize item}{\color{Accent}\small$\bullet$}
+\setbeamersize{text margin left=0.8cm,text margin right=0.8cm}
+
+\newcommand{\mutualinfo}[2]{I\!\left(#1;#2\right)}
 
 \title{Opening the Black Box of\\Deep Neural Networks via Information}
 \subtitle{Section 2: Information Theory of Deep Learning}
@@ -28,16 +60,81 @@
 
 \begin{document}
 
+{\setbeamertemplate{footline}{}
+\begin{frame}[plain]
+  \vspace{0.8cm}
+  \titlepage
+  \vfill
+  {\color{Accent}\rule{2.2cm}{2pt}}
+\end{frame}
+}
+
 \begin{frame}{Problem and intuition}
     
 \end{frame}
 
 \begin{frame}{Mutual Information and the Information Plane}
-    
+  \begin{columns}[c,onlytextwidth]
+    \column{0.47\textwidth}
+      \centering
+      {\color{Muted}\large A network forms a Markov chain}\par
+      \vspace{0.25cm}
+      \[
+        X \longrightarrow T_1 \longrightarrow T_2
+          \longrightarrow \cdots \longrightarrow T_n
+      \]
+      \vspace{0.2cm}
+      \[
+        \mutualinfo{X}{T_1}
+        \ge \mutualinfo{X}{T_2}
+        \ge \cdots
+        \ge \mutualinfo{X}{T_n}
+      \]
+      {\color{Muted}\small Later layers cannot recover discarded input information.}
+    \column{0.47\textwidth}
+      {\color{Accent}\large $\mutualinfo{X}{T}$}\par
+      Input information retained by representation $T$\par
+      \vspace{0.45cm}
+      {\color{Teal}\large $\mutualinfo{T}{Y}$}\par
+      Label information available for prediction\par
+      \vspace{0.45cm}
+      Each layer is one point in the information plane. Training first increases label information, then compresses input information.
+  \end{columns}
+  \vspace{0.25cm}
+  \centering
+  {\color{Muted}\small For the paper's balanced binary target, $\mutualinfo{T}{Y}\le H(Y)\approx 1$ bit.}
 \end{frame}
 
 \begin{frame}{The Information Bottleneck Objective}
-    
+  \centering
+  \vspace{0.05cm}
+  \[
+    \boxed{
+      \min_T
+      \left[
+        \underbrace{\mutualinfo{X}{T}}_{\text{complexity}}
+        - \beta\,
+        \underbrace{\mutualinfo{T}{Y}}_{\text{fitness}}
+      \right]
+    }
+  \]
+  \vspace{0.35cm}
+  \begin{columns}[T,onlytextwidth]
+    \column{0.46\textwidth}
+      \centering
+      {\color{Accent}\large Compress}\par
+      \vspace{0.15cm}
+      Discard details of $X$ that do not help predict $Y$.
+    \column{0.46\textwidth}
+      \centering
+      {\color{Teal}\large Predict}\par
+      \vspace{0.15cm}
+      Retain the information in $T$ that remains useful for $Y$.
+  \end{columns}
+  \vspace{0.5cm}
+  $\beta$ controls the value placed on prediction relative to compression.\par
+  \vspace{0.15cm}
+  {\color{Muted}\small Compression alone would produce a constant representation. Varying $\beta$ traces the Information Bottleneck curve.}
 \end{frame}
 
 \begin{frame}{Experimental setup}
@@ -72,41 +169,20 @@ I(T_i;Y) = \text{label information / fitness}
 
 
 \begin{frame}{Main result: two phases of training}
-
-\begin{columns}
-
-\begin{column}{0.60\textwidth}
+\begin{columns}[c,onlytextwidth]
+\begin{column}{0.61\textwidth}
     \centering
-    \includegraphics[width=\textwidth]{Presentation1/figures/figure3.png}
+    \includegraphics[width=\textwidth,height=0.59\textheight,keepaspectratio]{figures/figure3.png}
 \end{column}
+\begin{column}{0.36\textwidth}
+{\color{Accent}\large Phase 1: Fitting}\par
+\vspace{0.15cm}
+$I(T;Y)$ rises quickly while the mean gradient dominates minibatch noise.
+\vspace{0.5cm}
 
-\begin{column}{0.40\textwidth}
-
-\textbf{Phase 1: Fitting}
-\[
-I(T;Y) \uparrow
-\]
-
-\begin{itemize}
-    \item Label information increases
-    \item Fast phase
-\end{itemize}
-
-\vspace{0.3cm}
-
-\textbf{Phase 2: Compression}
-\[
-I(X;T) \downarrow
-\]
-
-\begin{itemize}
-    \item Input information decreases
-    \item Much longer phase
-\end{itemize}
-
-
-
-Transition from large mean gradient, small variance, to larger fluctuations, smaller mean.
+{\color{Teal}\large Phase 2: Compression}\par
+\vspace{0.15cm}
+$I(X;T)$ falls more slowly after gradient fluctuations dominate the mean.
 \end{column}
 \end{columns}
 \end{frame}
@@ -117,25 +193,15 @@ Transition from large mean gradient, small variance, to larger fluctuations, sma
 
 \begin{column}{0.62\textwidth}
     \centering
-    \includegraphics[width=\textwidth]{Presentation1/figures/figure5.png}
+    \includegraphics[width=\textwidth]{figures/figure5.png}
 \end{column}
 
 \begin{column}{0.38\textwidth}
-
 \begin{itemize}
-    \item More hidden layers $\Rightarrow$ faster convergence
-    \item Deeper layers compress faster
-    \item Intermediate representations make later compression easier
+    \item More hidden layers reach good generalization in fewer epochs.
+    \item Top layers compress first during the diffusion phase.
+    \item A compressed predecessor makes the next layer's compression easier.
 \end{itemize}
-
-\vspace{0.4cm}
-
-\[
-\text{depth}
-\rightarrow
-\text{more efficient compression}
-\]
-
 \end{column}
 
 \end{columns}
@@ -143,7 +209,22 @@ Transition from large mean gradient, small variance, to larger fluctuations, sma
 \end{frame}
 
 \begin{frame}{Discussion}
-    Conclusions, Hypothesis and limitations 
+  \begin{columns}[c,onlytextwidth]
+    \column{0.58\textwidth}
+      \centering
+      \includegraphics[width=\textwidth,height=0.58\textheight,keepaspectratio]{figures/figure4.png}
+    \column{0.38\textwidth}
+      {\color{Accent}\large Observation}\par
+      The binned hidden representations first fit the labels, then compress the inputs.
+      \vspace{0.35cm}
+
+      {\color{Teal}\large Hypothesis}\par
+      Once training error is low, minibatch noise drives diffusion across a flat low-error region.
+      \vspace{0.35cm}
+
+      {\color{Muted}\large Limitation}\par
+      The mechanism is inferred from a synthetic task, $\tanh$ networks, and discretized activations.
+  \end{columns}
 \end{frame}
 
 \end{document}
