@@ -70,98 +70,68 @@
 }
 
 \begin{frame}{Problem and intuition}
+  \begin{columns}[T,onlytextwidth]
+    \column{0.46\textwidth}
+      {\color{Accent}\large The problem}\par
+      \vspace{0.18cm}
+      Can we understand the relationship between prediction error and model complexity through the lens of information theory
 
-\begin{figure}
-    \centering
-    \includegraphics[width=0.5\linewidth]{Presentation1/figures/figure1.png}
-    \caption{Caption}
-    \label{fig:placeholder}
-\end{figure}
-    
+    \column{0.46\textwidth}
+      {\color{Teal}\large The paper's proposal}\par
+      \vspace{0.18cm}
+      Track each hidden layer through two questions:
+      \begin{itemize}
+        \item How much input information remains?
+        \item How much label information remains?
+      \end{itemize}
+  \end{columns}
+  \vfill
+  \centering
+  \begin{beamercolorbox}[wd=0.88\textwidth,sep=0.32cm,center]{block body}
+    \textbf{Main claim:} SGD first fits the labels, then compresses the hidden
+    representations, and depth accelerates this process.
+  \end{beamercolorbox}
 \end{frame}
 
 % TODO change H -> T H confuses with entropy
 
 \begin{frame}{Mutual information}
   \begin{columns}[T,onlytextwidth]
-    \column{0.36\textwidth}
+    \column{0.44\textwidth}
       {\color{Accent}\large Definition}\par
-      \vspace{0.12cm}
-      \begin{equation}
-        I(Y;H) = H(T)-H(X\mid T).
-      \end{equation}
-      Mutual information measures how much observing $T$ reduces uncertainty about $Y$.
-    \column{0.60\textwidth}
-      {\color{Teal}\large Distributional and KL-divergence view}\par
-      \vspace{0.12cm}
-      {\small
-      \begin{equation}
-        \begin{aligned}
-          I(X;T)
-          &= \sum_{x,t} p(x,t)
-            \log\frac{p(x,t)}{p(x)p(t)} \\
-          &= D_{\mathrm{KL}}\!\left(
-            p(x,t)\,\middle\|\,p(x)p(t)
-          \right).
-        \end{aligned}
-      \end{equation}}
-      It compares the joint distribution with the product of the marginals. It is zero exactly when $X$ and $T$ are independent.
+      \vspace{0.2cm}
+      \[
+        I(A;B)=H(A)-H(A\mid B)
+      \]
+      Observing $B$ is useful when it reduces uncertainty about $A$.
+
+    \column{0.50\textwidth}
+      {\color{Teal}\large The two quantities we need}\par
+      \vspace{0.22cm}
+      \textbf{$I(X;T)$: input information}\par
+      How much can the representation $T$ tell us about the input $X$?
+      \vspace{0.45cm}
+
+      \textbf{$I(T;Y)$: label information}\par
+      How much can the representation $T$ tell us about the target $Y$?
   \end{columns}
+  \vfill
+  \centering
+  {\color{Muted}\small Mutual information is zero when the variables are independent and increases as they share more information.}
 \end{frame}
 
-\begin{frame}{The information plane}
+\begin{frame}{The Information Bottleneck Method}
   \centering
-  {\small
-    The dependency structure is
-    $Y\!\longleftarrow\!X\!\longrightarrow\!H_1\!\longrightarrow\!\cdots
-    \!\longrightarrow\!H_n\!\longrightarrow\!\hat{Y}$.}
+  {\color{Muted}\small Introduced by Tishby, Pereira, and Bialek in
+  \emph{The Information Bottleneck Method} (1999).}
   \vspace{-0.05cm}
-  \begin{columns}[c,totalwidth=0.94\textwidth]
-    \column{0.46\textwidth}
-      \centering
-      \resizebox{\linewidth}{!}{%
-      \begin{tikzpicture}[x=0.72cm,y=0.72cm,>=Latex]
-        \draw[->,thick,Ink] (0,0) -- (6.1,0)
-          node[below right] {$\mutualinfo{X}{T}$};
-        \draw[->,thick,Ink] (0,0) -- (0,4.6)
-          node[above left] {$\mutualinfo{T}{Y}$};
-        \draw[Accent,very thick]
-          (0.35,0.25) .. controls (1.2,2.1) and (3.0,3.55) .. (5.55,4.0);
-        \node[Accent,above] at (4.15,3.85) {IB curve};
-        \fill[Teal] (4.7,3.82) circle (2.6pt);
-        \node[Teal,below right] at (4.7,3.82) {$T$};
-      \end{tikzpicture}
-      }
-    \column{0.48\textwidth}
-      Each hidden layer is represented by
-      \begin{equation}
-        \left(I(X;T),\,I(T;Y)\right).
-      \end{equation}
-      Moving left means retaining fewer details about the input. Moving up means retaining more information about the target.
-      \vspace{0.25cm}
-      The paper reports a fast upward fitting phase followed by a slower leftward compression phase.
-  \end{columns}
-  \vspace{-0.15cm}
-  {\small
-  \begin{equation}
-    I(X;Y) \ge I(T_1;Y) \ge I(T_2;Y) \ge \cdots \ge I(T_n;Y) \ge I(\hat{Y};Y).
-  \end{equation}
-  \vspace{-0.2cm}
-  \begin{equation}
-    H(X) \ge I(X;T_1) \ge I(X;T_2) \ge \cdots \ge I(X;T_n) \ge I(X;\hat{Y}).
-  \end{equation}}
-\end{frame}
-
-\begin{frame}{The Information Bottleneck Objective}
-  \centering
-  \vspace{0.05cm}
   \[
     \boxed{
-      \min_T
+      \min_{p(t\mid x)}
       \left[
-        \underbrace{\mutualinfo{X}{T}}_{\text{complexity}}
+        \underbrace{\mutualinfo{X}{T}}_{\text{representation complexity}}
         - \beta\,
-        \underbrace{\mutualinfo{T}{Y}}_{\text{fitness}}
+        \underbrace{\mutualinfo{T}{Y}}_{\text{predictive fitness}}
       \right]
     }
   \]
@@ -176,12 +146,56 @@
       \centering
       {\color{Teal}\large Predict}\par
       \vspace{0.15cm}
-      Retain the information in $T$ that remains useful for $Y$.
+      Preserve the information in $T$ that is useful for predicting $Y$.
   \end{columns}
-  \vspace{0.5cm}
-  $\beta$ controls the value placed on prediction relative to compression.\par
-  \vspace{0.15cm}
-  {\color{Muted}\small Compression alone would produce a constant representation. Varying $\beta$ traces the Information Bottleneck curve.}
+  \vspace{0.35cm}
+  $\beta$ controls how strongly predictive fitness is valued relative to compression.\par
+  \vspace{0.12cm}
+  {\color{Muted}\small This is a theoretical representation objective, not the
+  network's cross-entropy loss. Varying $\beta$ traces the optimal IB frontier.}
+\end{frame}
+
+\begin{frame}{The information plane}
+  \centering
+  {\small
+    The network induces the Markov chain
+    $Y\!\longleftarrow\!X\!\longrightarrow\!H_1\!\longrightarrow\!\cdots
+    \!\longrightarrow\!H_n\!\longrightarrow\!\hat{Y}$.}
+  \vspace{0.1cm}
+  \begin{columns}[c,totalwidth=0.94\textwidth]
+    \column{0.46\textwidth}
+      \centering
+      \resizebox{\linewidth}{!}{%
+      \begin{tikzpicture}[x=0.72cm,y=0.72cm,>=Latex]
+        \draw[->,thick,Ink] (0,0) -- (6.1,0)
+          node[below right] {$\mutualinfo{X}{T}$};
+        \draw[->,thick,Ink] (0,0) -- (0,4.6)
+          node[above left] {$\mutualinfo{T}{Y}$};
+        \draw[Accent,very thick]
+          (0.35,0.25) .. controls (1.2,2.1) and (3.0,3.55) .. (5.55,4.0);
+        \node[Accent,above] at (3.9,3.85) {optimal IB frontier};
+        \draw[Teal,very thick,->] (5.25,0.8) -- (5.05,2.95);
+        \draw[Teal,very thick,->] (5.05,2.95) -- (3.15,3.25);
+        \fill[Teal] (5.25,0.8) circle (2.5pt);
+        \fill[Teal] (5.05,2.95) circle (2.5pt);
+        \fill[Teal] (3.15,3.25) circle (2.5pt);
+        \node[Teal,right] at (5.25,1.55) {fit};
+        \node[Teal,below] at (4.05,3.05) {compress};
+      \end{tikzpicture}
+      }
+    \column{0.48\textwidth}
+      Each hidden layer is one point:
+      \[
+        \left(I(X;T),\,I(T;Y)\right).
+      \]
+      \textbf{Upward:} retain more label information.\par
+      \vspace{0.18cm}
+      \textbf{Leftward:} retain fewer input details.\par
+      \vspace{0.3cm}
+      {\small The frontier is an optimum. A trained layer is not guaranteed to lie on it.}
+  \end{columns}
+  \vspace{0.08cm}
+  {\color{Muted}\small By the data-processing inequality, later layers cannot recreate information discarded by earlier processing.}
 \end{frame}
 
 % \begin{frame}{Main claims}
@@ -222,21 +236,29 @@
     \item No explicit regularization
 \end{itemize}
 
-\vspace{0.3cm}
+\vspace{0.16cm}
 
-For each hidden layer $T_i$, the authors compute
-\[
-I(X;T_i)
-\qquad \text{and} \qquad
-I(T_i;Y)
-\]
-by first discretizing the output values for each neuron in the layer - creating a hard many to one problem. Then calculating the joint distributions.
-% \[
-% I(X;T_i) = \text{input information / complexity}
-% \]
-% \[
-% I(T_i;Y) = \text{label information / fitness}
-% \]
+\centering
+\textbf{For each hidden layer $T_i$:}
+
+\vspace{0.12cm}
+
+\begin{columns}[T,onlytextwidth]
+  \column{0.46\textwidth}
+    \centering
+    $I(X;T_i)$\\
+    {\small input information / representation complexity}
+  \column{0.46\textwidth}
+    \centering
+    $I(T_i;Y)$\\
+    {\small label information / predictive fitness}
+\end{columns}
+
+\vspace{0.22cm}
+{\small\color{Muted}
+Each scalar activation is assigned to one of 30 bins. The full binned vector is
+the state $T_i$; frequencies are estimated only for states observed across the
+4096 inputs.}
 
 \end{frame}
 
