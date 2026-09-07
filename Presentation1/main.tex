@@ -88,7 +88,7 @@
       {\color{Accent}\large Definition}\par
       \vspace{0.12cm}
       \begin{equation}
-        I(Y;H) = H(T)-H(X\mid T).
+        I(Y;T) = H(Y)-H(Y\mid T).
       \end{equation}
       Mutual information measures how much observing $T$ reduces uncertainty about $Y$.
     \column{0.60\textwidth}
@@ -113,8 +113,8 @@
   \centering
   {\small
     The dependency structure is
-    $Y\!\longleftarrow\!X\!\longrightarrow\!H_1\!\longrightarrow\!\cdots
-    \!\longrightarrow\!H_n\!\longrightarrow\!\hat{Y}$.}
+    $Y\!\longleftarrow\!X\!\longrightarrow\!T_1\!\longrightarrow\!\cdots
+    \!\longrightarrow\!T_n\!\longrightarrow\!\hat{Y}$.}
   \vspace{-0.05cm}
   \begin{columns}[c,totalwidth=0.94\textwidth]
     \column{0.46\textwidth}
@@ -152,7 +152,7 @@
   \end{equation}}
 \end{frame}
 
-\begin{frame}{The Information Bottleneck Objective}
+\begin{frame}{The Information Bottleneck}
   \centering
   \vspace{0.05cm}
   \[
@@ -200,13 +200,19 @@
 \begin{itemize}
     \item \textbf{Core problem}:
     MI is blind to complexity when the map is deterministic \\ 
+    %MI is invariant to any invertible relabeling of X — this is why a deterministic f is invisible to $I(X;Y)$
     If Y is a deterministic function of X $(y=f(x))$, then $H(Y|X=x)= 0$ $\forall x$ \\ and:
     $$I(X;Y)=H(Y) - H(Y|X) \quad \Rightarrow \quad I(X;Y) = H(Y)$$  
-    \vspace{0.05cm}
-    \item \textbf{Solution:} Tie the noise to geometry \\
+    %%%%
+    \item \textbf{Solution:} \\
     Replace the hard label with a soft, margin-dependent one using a sigmoidal function:
-    $$ p(y=1\mid x) = \psi\big(f(x) - \theta\big), \qquad \psi(u) = \frac{1}{1+\exp(-\gamma u)}$$
-    where $\theta$ is chosen so $p(y=1)\approx 0.5$ and $\gamma$ tuned so $I(X;Y)\approx 0.99$ bits (near-maximal label information).
+    $$ p(y=1\mid x) = \psi\big(w \cdot x), \qquad \psi(u) = \frac{1}{1+\exp(-\gamma u)}$$
+    %where $\theta$ is chosen so $p(y=1)\approx 0.5$ and $\gamma$ tuned so $I(X;Y)\approx 0.99$ bits.
+    \begin{itemize}
+        \item Points near the boundary are genuinely ambiguous
+        \item Points far away are confident
+        \item So $I(X;Y)$ now depends on the margin distribution — i.e., on the rule's geometry.
+    \end{itemize}
 \end{itemize}
 
 \end{frame}
@@ -216,7 +222,7 @@
 \begin{itemize}
     \item Synthetic binary classification problem
     \item 12 binary inputs $\Rightarrow 2^{12} = 4096$ possible input patterns
-    \item Binary target label $Y \in \{0,1\}$ soften with a stochastic rule
+    \item Binary target label $Y \in \{0,1\}$ soften with rule from last slide
     \item Fully connected DNN, trained with SGD and cross-entropy
     \item tanh as hidden activations and sigmoid as output
     \item No explicit regularization
@@ -230,14 +236,11 @@ I(X;T_i)
 \qquad \text{and} \qquad
 I(T_i;Y)
 \]
-by first discretizing the output values for each neuron in the layer - creating a hard many to one problem. Then calculating the joint distributions.
-% \[
-% I(X;T_i) = \text{input information / complexity}
-% \]
-% \[
-% I(T_i;Y) = \text{label information / fitness}
-% \]
-
+by creating a \textbf{hard many-to-one mapping} (a quantizer):
+\begin{itemize}
+    \item Binning: 30 equal-width bins per neuron, over $[−1,1]$. Same trick as the label noise — without it $I(X;T_i)=H(X)=12 \text{bits}$ trivially, at every layer, every epoch.
+\end{itemize}
+ 
 \end{frame}
 
 
@@ -284,12 +287,24 @@ $I(X;T)$ falls slowly and gradient variance is larger.
 \begin{frame}{Discussion}
     Conclusions, Hypothesis and limitations
     \begin{itemize}
-        \item 
         \item What about other DNN architectures which don't shrink in width? Without encoder structure, do we achieve compression?
         \item Does the choice of activation function affect whether compression is observed?
         \item Is compression necessary for generalization, or just correlated with it here?
         \item They measure model complexity based on MI through activation function outputs and hidden states. Is this a good way to measure model complexity?
     \end{itemize}
+\end{frame}
+
+\begin{frame}{Discussion}
+
+\begin{itemize}
+    \item What tools did this paper provide, to analyse the fitness and complexity of a model?
+    \item To what do they claim the generalization capabilities of DNN is owed?
+    \item They claim compression occurs naturally as an inadvertent benefit of noisy gradients in SGD. Is compression necessary for generalization?
+    \item Are their methods scalable?
+    \item They measure model complexity based on MI through activation function outputs and hidden states. Is this a good way to measure model complexity?
+    \item Does the choice of activation function affect whether compression is observed?
+\end{itemize}
+
 \end{frame}
 
 \end{document}
