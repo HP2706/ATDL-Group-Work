@@ -70,8 +70,17 @@
 }
 
 \begin{frame}{Problem and intuition}
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.5\linewidth]{Presentation1/figures/figure1.png}
+    \caption{Caption}
+    \label{fig:placeholder}
+\end{figure}
     
 \end{frame}
+
+% TODO change H -> T H confuses with entropy
 
 \begin{frame}{Mutual information}
   \begin{columns}[T,onlytextwidth]
@@ -79,9 +88,9 @@
       {\color{Accent}\large Definition}\par
       \vspace{0.12cm}
       \begin{equation}
-        I(X;T) = H(X)-H(X\mid T).
+        I(Y;H) = H(T)-H(X\mid T).
       \end{equation}
-      Mutual information measures how much observing $T$ reduces uncertainty about $X$.
+      Mutual information measures how much observing $T$ reduces uncertainty about $Y$.
     \column{0.60\textwidth}
       {\color{Teal}\large Distributional and KL-divergence view}\par
       \vspace{0.12cm}
@@ -135,11 +144,11 @@
   \vspace{-0.15cm}
   {\small
   \begin{equation}
-    I(X;Y) \ge I(H_1;Y) \ge I(H_2;Y) \ge \cdots \ge I(H_n;Y) \ge I(\hat{Y};Y).
+    I(X;Y) \ge I(T_1;Y) \ge I(T_2;Y) \ge \cdots \ge I(T_n;Y) \ge I(\hat{Y};Y).
   \end{equation}
   \vspace{-0.2cm}
   \begin{equation}
-    H(X) \ge I(X;H_1) \ge I(X;H_2) \ge \cdots \ge I(X;H_n) \ge I(X;\hat{Y}).
+    H(X) \ge I(X;T_1) \ge I(X;T_2) \ge \cdots \ge I(X;T_n) \ge I(X;\hat{Y}).
   \end{equation}}
 \end{frame}
 
@@ -175,33 +184,59 @@
   {\color{Muted}\small Compression alone would produce a constant representation. Varying $\beta$ traces the Information Bottleneck curve.}
 \end{frame}
 
+% \begin{frame}{Main claims}
+
+% \begin{itemize}
+%     \item Most of training time is spent compressing, not fitting
+%     \item Compression begins when training error saturates
+%     \item Converged layers sit on (or very near) the theoretical IB bound
+%     \item Adding hidden layers dramatically reduces training time
+%     \item Hidden layers are expected to converge near critical points on the IB curve
+% \end{itemize}
+    
+% \end{frame}
+
+\begin{frame}{The role of noise}
+\begin{itemize}
+    \item \textbf{Core problem}:
+    MI is blind to complexity when the map is deterministic \\ 
+    If Y is a deterministic function of X $(y=f(x))$, then $H(Y|X=x)= 0$ $\forall x$ \\ and:
+    $$I(X;Y)=H(Y) - H(Y|X) \quad \Rightarrow \quad I(X;Y) = H(Y)$$  
+    \vspace{0.05cm}
+    \item \textbf{Solution:} Tie the noise to geometry \\
+    Replace the hard label with a soft, margin-dependent one using a sigmoidal function:
+    $$ p(y=1\mid x) = \psi\big(f(x) - \theta\big), \qquad \psi(u) = \frac{1}{1+\exp(-\gamma u)}$$
+    where $\theta$ is chosen so $p(y=1)\approx 0.5$ and $\gamma$ tuned so $I(X;Y)\approx 0.99$ bits (near-maximal label information).
+\end{itemize}
+
+\end{frame}
+
 \begin{frame}{Experimental setup}
 
 \begin{itemize}
     \item Synthetic binary classification problem
     \item 12 binary inputs $\Rightarrow 2^{12} = 4096$ possible input patterns
-    \item Binary target $Y \in \{0,1\}$ generated probabilistically from $X$
+    \item Binary target label $Y \in \{0,1\}$ soften with a stochastic rule
     \item Fully connected DNN, trained with SGD and cross-entropy
+    \item tanh as hidden activations and sigmoid as output
     \item No explicit regularization
 \end{itemize}
 
 \vspace{0.3cm}
 
 For each hidden layer $T_i$, the authors compute
-
 \[
 I(X;T_i)
 \qquad \text{and} \qquad
 I(T_i;Y)
 \]
-
-\[
-I(X;T_i) = \text{input information / complexity}
-\]
-
-\[
-I(T_i;Y) = \text{label information / fitness}
-\]
+by first discretizing the output values for each neuron in the layer - creating a hard many to one problem. Then calculating the joint distributions.
+% \[
+% I(X;T_i) = \text{input information / complexity}
+% \]
+% \[
+% I(T_i;Y) = \text{label information / fitness}
+% \]
 
 \end{frame}
 
@@ -215,12 +250,12 @@ I(T_i;Y) = \text{label information / fitness}
 \begin{column}{0.36\textwidth}
 {\color{Accent}\large Phase 1: Fitting}\par
 \vspace{0.15cm}
-$I(T;Y)$ rises quickly while the mean gradient dominates minibatch noise.
+$I(T;Y)$ rises quickly and gradient mean is large, but variance is small.
 \vspace{0.5cm}
 
 {\color{Teal}\large Phase 2: Compression}\par
 \vspace{0.15cm}
-$I(X;T)$ falls more slowly after gradient fluctuations dominate the mean.
+$I(X;T)$ falls slowly and gradient variance is larger.
 \end{column}
 \end{columns}
 \end{frame}
@@ -248,6 +283,13 @@ $I(X;T)$ falls more slowly after gradient fluctuations dominate the mean.
 
 \begin{frame}{Discussion}
     Conclusions, Hypothesis and limitations
+    \begin{itemize}
+        \item 
+        \item What about other DNN architectures which don't shrink in width? Without encoder structure, do we achieve compression?
+        \item Does the choice of activation function affect whether compression is observed?
+        \item Is compression necessary for generalization, or just correlated with it here?
+        \item They measure model complexity based on MI through activation function outputs and hidden states. Is this a good way to measure model complexity?
+    \end{itemize}
 \end{frame}
 
 \end{document}
