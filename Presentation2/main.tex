@@ -4,6 +4,10 @@
 \usepackage{lmodern}
 \usepackage{amsmath,amssymb,mathtools}
 \usepackage{graphicx}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta}
+
+\graphicspath{{figures/}}
 
 \definecolor{Ink}{HTML}{162033}
 \definecolor{Muted}{HTML}{657084}
@@ -51,6 +55,16 @@
 \subtitle{}
 \author{}
 \date{}
+
+\newcommand{\makepresentationtitle}{%
+  {\setbeamertemplate{footline}{}
+  \begin{frame}[plain]
+    \vspace{0.8cm}
+    \titlepage
+    \vfill
+    {\color{Accent}\rule{2.2cm}{2pt}}
+  \end{frame}}
+}
 
 \begin{document}
 \end{document}
