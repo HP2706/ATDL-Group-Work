@@ -1,7 +1,7 @@
 # Presentation 2: DINOv3
 
-The slides use the 16:9 Beamer layout, fonts, colors, title page, and footer style from `Presentation1/main.tex`.
+`main.tex` is an empty 16:9 Beamer scaffold with the fonts, colors, title styling, and footer layout from `Presentation1/main.tex`. Add your own title metadata and frames.
 
-Source paper: [DINOv3, arXiv:2508.10104v1](https://arxiv.org/abs/2508.10104) (2025). A PDF copy is also in the course repository at `Readings/Topic 3 - Foundation Models/DINOv3.pdf`. The deck is an initial group draft. Results and method details are cited by section, figure, or table on the relevant slides.
+Source paper: [DINOv3, arXiv:2508.10104v1](https://arxiv.org/abs/2508.10104) (2025). A PDF copy and OCR Markdown are in the course repository under `Readings/Topic 3 - Foundation Models/` and `papers/dinov3/`.
 
-Build from this directory with `latexmk -pdf -interaction=nonstopmode main.tex`. The generated PDF is ignored by Git.
+After adding slides, build from this directory with `latexmk -pdf -interaction=nonstopmode main.tex`. Generated PDFs are ignored by Git.
