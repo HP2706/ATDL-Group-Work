@@ -1,27 +1,533 @@
-% Assignment 2 report scaffold using the supplied ISBI style.
-% Fill in the paper, group, track, results, and contribution details later.
+% Working paper-selection document. Replace with a four-page ISBI report
+% after choosing one paper and completing its experiments.
 \documentclass{article}
 \usepackage{ISBI_template-master/spconf,amsmath,amssymb,graphicx}
-\usepackage{booktabs}
-\usepackage[hidelinks]{hyperref}
+\usepackage{booktabs,longtable,array,enumitem}
+\newcolumntype{P}[1]{>{\raggedright\arraybackslash}p{#1}}
 \setlength{\parindent}{0pt}
+\setlist[itemize]{nosep,leftmargin=1.4em}
+\pagestyle{plain}
 
-\title{Assignment 2: Reproducibility Study}
-\name{Group number and member names}
-\address{Department of Computer Science, University of Copenhagen}
+\title{Assignment 2: Feasible Paper Reproduction Plans}
+\name{Group paper-selection working document}
+\address{Advanced Topics in Deep Learning, University of Copenhagen}
 
 \begin{document}
+\onecolumn
 \maketitle
 
-\begin{abstract}
-\mbox{}
-\end{abstract}
+\section{Assignment and the two tracks}
+The group selects \emph{one} curated paper from Topics 1--4. Each group
+member must reproduce a distinct experiment. Only Topics 1--3, comprising
+18 curated papers, have been published in the local course materials so far.
+This comparison is for paper selection, not the final four-page submission.
 
-\section{Introduction}
-\section{Methods}
-\section{Experiments and Results}
-\section{Discussion}
-\section{Contributions}
+\textbf{Baselines track:} reproduce and evaluate comparison methods reported
+in the selected paper, with relevant ablations or hyperparameter checks. The
+paper's new method need not be retrained for this track. Some theory papers
+have no separate baseline model; their reported control conditions are the
+closest honest fit and are identified below.
 
-% Add the selected track, repository link, references, and concrete content.
+\textbf{Replication track:} reproduce a meaningful subset of the paper's main
+results using released code or a faithful reimplementation, then test a
+targeted ablation. A released-checkpoint evaluation tests reported performance
+but cannot by itself establish that a training recipe caused it. Smaller
+models, datasets, resolutions, or sample counts must be disclosed, together
+with the likely effect on the conclusion.
+
+\section{Cost model and scope}
+Every total below is an \emph{alternative plan for one paper and one track},
+not a total across all 18 papers. The core plans give three distinct
+contributions for a three-person group; a fourth member can take an optional
+evaluation from the same paper. The menus collect additional feasible
+experiment families, not an instruction to run every combination. The
+\$1,000 ceiling applies to the selected plan. No large generative or
+foundation-model pretraining is budgeted; AnyUp's reported five-hour
+feature-upsampler training is an explicit small-scale exception.
+
+GPU-hours count devices: two GPUs for six elapsed hours are 12 GPU-h. For each
+component we estimate runs $\times$ B200 GPUs $\times$ elapsed hours, then
+multiply by Prime Intellect's publicly listed \textbf{B200 rate of
+\$3.49 per GPU-hour}, checked 23 September 2026. The listing shows a
+single-GPU option; market prices and availability can change. The run-hour
+allowances below are retained as planning placeholders from
+the earlier mixed-GPU estimates: no unmeasured B200 speedup is credited.
+They are \emph{not} benchmarked B200 runtimes.
+Shared feature extraction, generation, and scoring appear once per track.
+The totals exclude CPU, RAM, storage, data transfer, human annotation, paid
+model APIs, and engineering time. CPU-heavy cases are marked explicitly.
+Treat every runtime as an \emph{untimed assumption}, except where the paper
+reports a specific throughput; run a 20--100-step or image pilot on the
+intended remote GPU before committing. Reserve up to \textbf{2$\times$ the
+quoted GPU amount} for slower throughput, reruns, and failed setup. Even the
+largest proposed core plan, REPA replication at \$383.90, remains below
+\$1,000 at 2$\times$ (\$767.80). These are GPU rental estimates, not guarantees of an
+exact reproduction.
+
+\section{Overview: one three-person core plan per track}
+Costs in this table are rounded to the nearest dollar. The itemized
+calculations below are the actual comparison basis.
+\begingroup\footnotesize
+\setlength{\tabcolsep}{1.5pt}\renewcommand{\arraystretch}{1.18}
+\begin{longtable}{@{}P{0.34in}P{0.65in}P{1.55in}P{1.38in}P{0.48in}P{1.38in}P{0.48in}@{}}
+\toprule
+Week & Topic & Paper & Baselines core & GPU cost & Replication core & GPU cost \\
+\midrule
+\endfirsthead
+\toprule
+Week & Topic & Paper & Baselines core & GPU cost & Replication core & GPU cost \\
+\midrule
+\endhead
+1--2 & Theory & Opening the Black Box of Deep Neural Networks via Information & Depth, sample fraction, teacher rule & \$17 & Information paths, depth, sample fraction & \$26 \\
+1--2 & Theory & Computing Nonvacuous Generalization Bounds & SGD models, random labels, norm bound & \$15 & Three PAC-Bayes posterior conditions & \$115 \\
+1--2 & Theory & A Bayesian Perspective on Generalization and SGD & Logistic control, batch sweep, regularization & \$11 & Batch, learning-rate, dataset-size sweeps & \$42 \\
+1--2 & Theory & Deep Double Descent & Random features, width/noise, optimizer & \$223 & Model-, epoch-, sample-wise curves & \$154 \\
+1--2 & Theory & Towards Understanding Grokking & Toy addition, permutation, representation & \$8 & Addition, modular transformer, ablation & \$48 \\
+1--2 & Theory & Binarized Neural Networks Converge Toward Algorithmic Simplicity & Width, controls, dataset & \$21 & Width, depth, structured-data controls & \$38 \\
+2--3 & Generative & Representation Alignment for Generation (REPA) & DiT, SiT, matched evaluation & \$244 & SiT control, REPA, alignment ablation & \$384 \\
+2--3 & Generative & Mean Flows for One-step Generative Modeling & Flow baselines and NFE curve & \$216 & MeanFlow, control, loss ablation & \$307 \\
+2--3 & Generative & Diffusion Models for Counterfactual Explanations (DiME) & Guidance and counterfactual baselines & \$112 & Two attributes and guidance ablation & \$126 \\
+2--3 & Generative & DiffAtlas & Segmentation and diffusion baselines & \$140 & Full, few-shot, cross-modality & \$181 \\
+2--3 & Generative & FLUX.1 Kontext & Three public editing baselines & \$63 & Editing categories and multi-turn drift & \$91 \\
+2--3 & Generative & Qwen-Image & Generator and VAE baselines & \$140 & Generation, typography, editing & \$154 \\
+4--5 & Foundation & DINOv3 & DINOv2/SigLIP2 frozen probes & \$70 & DINOv3 frozen transfer probes & \$63 \\
+4--5 & Foundation & V-JEPA 2.1 & V-JEPA 2/DINOv2 probes & \$112 & Video, dense, and depth probes & \$112 \\
+4--5 & Foundation & SAM 3 & Detector, interactive, video baselines & \$63 & Concept prompts, video, counting & \$77 \\
+4--5 & Foundation & AnyUp & Upsampling baselines and probes & \$84 & Train AnyUp and two ablations & \$91 \\
+4--5 & Foundation & Med-SA & SAM/U-Net/medical-SAM baselines & \$154 & Adapter, slice, prompt ablations & \$293 \\
+4--5 & Foundation & Unified View of Parameter-Efficient Transfer Learning & PEFT method comparisons & \$181 & Adapter placement, scaling, MAM & \$168 \\
+\bottomrule
+\end{longtable}
+\endgroup
+
+\section{Topic 1: Deep Learning Theory, weeks 1--2}
+
+\subsection{Opening the Black Box of Deep Neural Networks via Information}
+The paper uses all 4,096 possible 12-bit inputs, a near-balanced stochastic
+spherical-harmonic label rule, a narrow tanh MLP, SGD, 30 activation bins, and
+50 original random runs. A parity or XOR substitute would be a different task.
+The baselines track here means reported control conditions, since there is no
+independent competing model.
+
+\textbf{Baselines core:} (1) Depth versus epochs to generalization, four
+depths $\times$ two seeds $\times$ 0.3 B200-h = 2.4 h; (2) 5\%, 45\%, and 85\%
+training fractions, three $\times$ two $\times$ 0.3 h = 1.8 h; (3) symmetric
+versus nonsymmetric teacher, two additional 0.3 h runs = 0.6 h. Total \textbf{4.8 B200-h $\times$ \$3.49 = \$16.75}. Other feasible checks: 15/30/60-bin
+mutual-information estimates from saved activations (CPU), and test-error
+curves for each depth.
+
+\textbf{Replication core:} (1) Information-plane fit-then-compress trajectories
+at early/middle/late checkpoints, three seeds $\times$ 0.75 h = 2.25 B200-h;
+(2) depth effect, four networks $\times$ 0.75 h = 3 h; (3) sample-fraction
+effect, three $\times$ 0.75 h = 2.25 h. Total \textbf{7.5 B200-h $\times$ \$3.49 = \$26.18}. From the same checkpoints, also compute gradient mean/SD
+and signal-to-noise transition, an IB reference curve, bin sensitivity, and
+layerwise fixed-point tests on CPU. The reported ``compression'' is sensitive
+to discretization; retain the exact binning protocol in comparisons.
+
+\subsection{Computing Nonvacuous Generalization Bounds for Deep (Stochastic) Neural Networks with Many More Parameters than Training Data}
+Use binary MNIST digits 0--4 versus 5--9, the original 55k training split,
+and a data-independent initialization prior. The true-label bound uses a
+diagonal Gaussian posterior around an SGD solution; the original optimizes it
+for 200k steps and uses a large Monte Carlo evaluation. This paper is
+methodologically risky even though its models are small: a bound is only
+meaningful if its prior, data split, KL inversion, and sampling correction are
+valid.
+
+\textbf{Baselines core:} (1) Deterministic SGD test error for three reported
+MLP widths/depths, three $\times$ 0.5 B200-h = 1.5 h; (2) one random-label
+memorization control, 2 h; (3) path-norm/Rademacher-style comparison over
+three regularization settings, three $\times$ 0.3 h = 0.9 h. Total \textbf{4.4 B200-h $\times$ \$3.49 = \$15.36}. Also feasible: analytic VC
+bound and deterministic-versus-stochastic test error (CPU).
+
+\textbf{Replication core:} (1) 600-unit true-label posterior and certified
+bound, 8 B200-h; (2) a wider/deeper posterior, 10 h; (3) random-label posterior
+as a vacuity control, 15 h. Total \textbf{33 B200-h $\times$ \$3.49 = \$115.17}. An optional extra prior/posterior-variance ablation is about 8 h
+or \$27.92. A limited run may use minibatches and 1k--5k independent posterior
+draws, with the appropriate confidence correction, but nonvacuity is not
+guaranteed. Do not tune an allegedly data-independent prior on labels without
+the paper's correction.
+
+\subsection{A Bayesian Perspective on Generalization and SGD}
+The paper has two attainable settings: an 800-example MNIST 0-versus-1
+logistic model for approximate evidence, and an 800-hidden-unit MNIST MLP on
+1,000 examples trained for 10k updates. Compare at fixed update counts rather
+than silently giving large batches more data passes.
+
+\textbf{Baselines core:} (1) True-versus-random-label logistic regression and
+regularization/evidence sweep (CPU); (2) MLP test accuracy across six batch
+sizes, six $\times$ 0.4 B200-h = 2.4 h; (3) L2 regularization at two batch
+sizes, two $\times$ 0.4 h = 0.8 h. Total \textbf{3.2 B200-h $\times$ \$3.49 = \$11.17}, plus CPU. Minibatch-gradient histograms and train/test
+cross-entropy are further cheap checks.
+
+\textbf{Replication core:} (1) Six-batch optimum curve, 2.4 B200-h;
+(2) three-learning-rate by four-batch grid, 4.8 h; (3) three-training-size by
+four-batch grid, 4.8 h. Total \textbf{12 B200-h $\times$ \$3.49 = \$41.88}.
+Momentum-by-batch is another 4.8 h (\$16.75); logistic Laplace-evidence versus
+held-out loss is CPU work. The claimed optimum shifts with effective SGD
+noise scale, approximately $\epsilon N/[B(1-m)]$; preserve the paper's
+learning-rate-dependent step normalization when testing that claim.
+
+\subsection{Deep Double Descent}
+The paper varies CNN/ResNet widths, training epochs, sample count, label
+noise, augmentation, and optimizer. The feasible core uses a 5k--10k CIFAR-10
+subset and five-layer CNN widths chosen around the \emph{observed}
+interpolation threshold. Budget about four B200-h per completed width run, then
+adjust after a pilot. If near-threshold models never reach near-zero training
+error, the central double-descent claim has not been tested.
+
+\textbf{Baselines core:} (1) Random-feature width/sample sweep on
+Fashion-MNIST (CPU); (2) five CNN widths at zero and 15\% fixed label noise,
+ten $\times$ 4 = 40 B200-h; (3) SGD versus Adam at three widths, six $\times$
+4 = 24 h. Total \textbf{64 B200-h $\times$ \$3.49 = \$223.36}; shared control
+runs can lower the bill. Other feasible contrasts: augmentation on/off at
+three widths (24 h, \$83.76), weight decay/early stopping (about 12 h,
+\$41.88), five-model ensembling near interpolation (20 h, \$69.80), and a
+small-transformer translation sweep (roughly 120 B200-h, \$418.80; high
+setup burden). The translation sweep is an alternative project, not an
+addition to every core run under the 2$\times$ reserve.
+
+\textbf{Replication core:} (1) Seven-width model-wise double-descent curve,
+seven $\times$ 4 = 28 B200-h; (2) epoch-wise curves from those saved
+checkpoints (no new GPU run); (3) four sample sizes at one critical width,
+four $\times$ 4 = 16 h. Total \textbf{44 B200-h $\times$ \$3.49 = \$153.56}. Optional tests include augmentation, optimizer, or label-noise
+shifts (about 12 h/\$41.88 each) and a four-width adversarial-robustness
+sweep (about 60 B200-h/\$209.40). These are reduced-scale trends, not the
+original 4,000-epoch or 500k-step grids.
+
+\subsection{Towards Understanding Grokking}
+Keep separate the paper's small commutative addition task, permutation-group
+$S_3$ task, and $p=53$ modular-addition transformer. The first uses unordered
+held-out pairs. This theory paper has reported control conditions rather than
+a conventional external baseline.
+
+\textbf{Baselines core:} (1) Toy addition decoder/embedding learning-rate and
+weight-decay grid, nine tiny runs $\times$ 0.1 B200-h = 0.9 h; (2) $S_3$ phase
+comparison, six $\times$ 0.1 = 0.6 h; (3) representation-quality index versus
+held-out accuracy at three data fractions and three seeds, nine $\times$
+0.1 = 0.9 h. Total \textbf{2.4 B200-h $\times$ \$3.49 = \$8.38}; CPU may be
+preferable. Dropout on/off for the modular transformer is another 3 B200-h or
+\$10.47.
+
+\textbf{Replication core:} (1) Toy addition memorization-to-grokking curves
+at three fractions and three seeds, 1.8 B200-h; (2) $p=53$ modular-transformer
+curves and embedding geometry, three $\times$ 2 = 6 h; (3) weight-decay or
+dropout ablation, three $\times$ 2 = 6 h. Total \textbf{13.8 B200-h $\times$ \$3.49 = \$48.16}. Predicted accuracy from parallelogram structure,
+representation-quality index, and effective-theory grokking time can be
+computed from saved checkpoints on CPU. A small MNIST phase plot is another
+possible, less directly specified evaluation.
+
+\subsection{Binarized Neural Networks Converge Toward Algorithmic Simplicity}
+The paper uses small STE-binarized MLPs, 10-by-10 resized MNIST, BDM from
+4-by-4 sign-weight blocks, matched Shannon entropy, 200 independent subsets
+per original condition, and bootstrapped loss-complexity correlations. We
+propose 20 seeds per condition and must report wider uncertainty. BDM lookup
+is CPU-heavy; the following B200 rental is a billed-instance proxy, not a
+claim that GPU arithmetic dominates.
+
+\textbf{Baselines core:} (1) Three MNIST widths, 20 seeds each, about 3 B200-h;
+(2) shuffled-label and random-input controls, 20 each, 2 h; (3) matched
+Fashion-MNIST comparison, 20 seeds, 1 h. Total \textbf{6 B200-h $\times$ \$3.49 = \$20.94}, plus CPU. Pearson versus Spearman, bootstrap intervals,
+and checkpoint-cadence checks reuse the same outputs.
+
+\textbf{Replication core:} (1) MNIST BDM-minus-entropy width trend, 3 B200-h;
+(2) one- to four-layer depth trend at matched parameter count, 4 h;
+(3) structured MNIST/Fashion/synthetic-signal versus shuffled/random controls,
+4 h. Total \textbf{11 B200-h $\times$ \$3.49 = \$38.39}, plus CPU. UCI HAR
+engineered-versus-raw features add about 2 h (\$6.98). Use the same weight
+partition for BDM and entropy. Pilot CPU throughput before renting any GPU;
+the original largest 200-run configurations took about 15 hours on an M4 Max.
+
+\section{Topic 2: Generative Models, weeks 2--3}
+
+\subsection{Representation Alignment for Generation: Training Diffusion Transformers Is Easier Than You Think (REPA)}
+The central question is whether alignment with a frozen image encoder helps a
+diffusion transformer learn faster. Use one public image dataset/subset at
+about 128 pixels, fixed VAE latents and DINOv2 features, matched small SiT or
+DiT backbones, and identical optimization steps. Feasible evaluations include
+quality versus checkpoint, linear probes or representation similarity,
+2k--5k-sample relative FID, sample precision/recall, alignment-layer and
+loss-weight ablations, encoder choice (DINOv2/CLIP/MAE), and sampler
+steps/classifier-free guidance. With fewer than the paper's 50k samples and
+250 denoising calls per sample, FID is a noisy \emph{relative} measure, not
+comparable numerically with its headline result.
+
+\textbf{Baselines core:} (1) Small DiT without alignment, 30 B200-h;
+(2) matched SiT without alignment, 30 h; (3) checkpoint-quality and
+sampler/guidance comparison on the same fixed samples, 10 h. Total \textbf{70 B200-h $\times$ \$3.49 = \$244.30}. An optional encoder or sampler
+setting uses shared checkpoints and adds roughly 5--15 B200-h.
+
+\textbf{Replication core:} (1) SiT no-REPA control, 30 B200-h; (2) matched
+SiT+REPA, 34 h; (3) one changed alignment depth or target encoder, 34 h;
+shared feature caching, 2k--5k image generation at a shorter fixed sampler,
+and representation probes, 12 h. Total \textbf{110 B200-h $\times$ \$3.49 = \$383.90}. A loss-weight or NT-Xent-versus-cosine ablation is another
+roughly 34 B200-h/\$118.66. The paper reports eight H100s at 5.4 steps/s:
+one 400k-step run is about $(400000/5.4/3600)\times8=165$ \emph{H100}
+GPU-h. If a B200 run took the same GPU-hours, that would be about
+165 $\times$ \$3.49 = \$575.85 before evaluation; a matched pair would exceed
+\$1,000. Actual B200 throughput must be measured. The proposed plan tests
+a reduced-scale trend only.
+
+\subsection{Mean Flows for One-step Generative Modeling}
+Use a compact CIFAR-10 32-pixel U-Net or latent ViT and fixed 50k--100k
+training steps; compare at identical data and model size. Feasible questions
+include flow matching ($r=t$) versus MeanFlow, one/two/four/eight function
+evaluations (NFE), generation latency, nontrivial $r\ne t$ sampling ratio,
+loss exponent, time-pair distribution, conditioning representation, guidance
+strength, and small-width scaling. Use about 10k generated samples for a
+relative FID; it is not the paper's FID-50K.
+
+\textbf{Baselines core:} (1) Matched small flow-matching training, 22 B200-h;
+(2) second time-sampling or hyperparameter baseline, 22 h; (3) evaluate a
+released iCT/ECT/Shortcut baseline if obtainable, 10 h; shared
+one/two/four-NFE sampling and FID, 8 h. Total \textbf{62 B200-h $\times$ \$3.49 = \$216.38}. If those checkpoints are unavailable, use a more complete
+flow-matching NFE curve from the same control instead and report that the
+published comparator could not be reproduced.
+
+\textbf{Replication core:} (1) Flow-matching control, 22 B200-h;
+(2) MeanFlow default, 28 h; (3) loss exponent or $r\ne t$ ratio ablation,
+28 h; shared sampling/FID/latency, 10 h. Total \textbf{88 B200-h $\times$ \$3.49 = \$307.12}. An incorrect-JVP-target or alternate time-conditioning
+ablation adds about 28 B200-h/\$97.72. The paper's B/4 ablation uses 400k ImageNet
+steps, and its timing is on TPU v4-8; neither is a measured GPU runtime for
+this smaller scenario.
+
+\subsection{Diffusion Models for Counterfactual Explanations (DiME)}
+Use CelebA-128, a fixed attribute classifier and diffusion checkpoint, and
+the \emph{same} 100--200 inputs per attribute across methods. Feasible
+evaluations are smile versus young flips; validity/flip rate, identity (FVA),
+minimality (L1/LPIPS/MNAC), realism, five-seed diversity, spurious-correlation
+difference, and guidance-strength/noise-level/step-count ablations. Original
+sampling uses about 1,800 denoiser calls per explanation: 100 examples imply
+180k calls. At an illustrative 0.05 s/call that is 2.5 GPU-h before retries,
+gradients, and metrics, motivating a roughly 10 h slot per condition.
+
+\textbf{Baselines core:} (1) Released DiVE comparison if weights exist,
+8 B200-h; (2) direct classifier-on-noisy-state and naive guidance,
+10 h; (3) early-stopping and unconditional-diffusion controls, 10 h;
+shared scoring/oracles, 4 h. Total \textbf{32 B200-h $\times$ \$3.49 = \$111.68}. Missing DiVE or metric oracle weights require a substitute and
+must be stated.
+
+\textbf{Replication core:} (1) DiME smile counterfactuals, 10 B200-h;
+(2) young counterfactuals, 10 h; (3) one guidance, diversity, or correlation
+ablation, 12 h; shared metrics, 4 h. Total \textbf{36 B200-h $\times$ \$3.49 = \$125.64}. Alternate sampling-step or strength grids add roughly
+5--12 h per setting. FID from only 100--200 counterfactuals is unstable;
+report it as exploratory and foreground validity, identity, and paired
+uncertainty intervals.
+
+\subsection{DiffAtlas: Image-Mask Diffusion}
+Use patient-level splits of accessible MMWHS CT/MRI heart data, five labels,
+Dice and normalized surface distance. Feasible settings include same-domain
+full training, two/four-shot learning, CT-to-MRI or MRI-to-CT zero-shot
+transfer, per-class boundary analysis, atlas/registration versus segmenter
+versus mask-diffusion baselines, and signed-distance or image-replacement
+guidance ablations. A 2D or reduced-resolution model is materially different
+from the paper's volumetric setting and cannot claim its original scores.
+
+\textbf{Baselines core:} (1) nnU-Net-style segmenter, 12 B200-h;
+(2) MedSegDiffv2-style mask diffusion, 24 h; (3) CMMAS registration and label
+propagation on CPU, with shared scoring/inference on GPU for 4 h. Total \textbf{40 B200-h $\times$ \$3.49 = \$139.60}, \emph{plus unpriced remote CPU
+time} for registration. Other feasible checks are per-class Dice/NSD and
+small hyperparameter changes using those trained baselines.
+
+\textbf{Replication core:} (1) DiffAtlas full CT training, 22 B200-h;
+(2) two-shot and four-shot retrains, 12+12 h; (3) CT-to-MRI zero-shot
+inference with Dice/NSD and boundary plots, 6 h. Total \textbf{52 B200-h $\times$ \$3.49 = \$181.48}. MRI-to-CT transfer or a guidance ablation adds
+roughly 6--22 B200-h depending on whether retraining is required. Data
+download, resampling, and registration may take longer than the GPU runs.
+
+\subsection{FLUX.1 Kontext: Flow Matching for In-Context Image Generation and Editing in Latent Space}
+The released Kontext [dev] checkpoint is an image-editing model. The paper's
+text-to-image and some proprietary-system comparisons involve [pro]/[max]
+and cannot be reproduced with [dev] alone. Feasible [dev] evaluations include
+local/global/text editing, character/style references, visual-cue edits,
+three- to six-turn identity drift, fixed-resolution latency, and VAE
+reconstruction (PSNR/SSIM/perceptual distance). Use 50--100 fixed public
+prompts per category, paired seeds, and blinded human scoring when needed.
+
+\textbf{Baselines core:} (1) FLUX.1 Fill-dev for masked local edits,
+6 B200-h; (2) HiDream-E1 for instruction edits, 6 B200-h; (3)
+InstructPix2Pix on the same paired prompts, 3 B200-h; shared automated
+scoring, 3 B200-h. Total \textbf{18 B200-h $\times$ \$3.49 = \$62.82}. These are accessible public baselines, not an
+exact replay of comparisons to proprietary services.
+
+\textbf{Replication core:} (1) Kontext [dev] local and text edits,
+8 B200-h; (2) character/style/visual-cue subset, 8 h; (3) multi-turn drift,
+6 h; VAE reconstruction and scoring, 4 B200-h. Total \textbf{26 B200-h $\times$ \$3.49 = \$90.74}. Further feasible
+checks are latency-versus-steps and reconstruction quality. If KontextBench
+is not obtainable, use a public editing subset and name the benchmark change.
+Paid proprietary APIs and human-review time are not in these GPU totals.
+
+\subsection{Qwen-Image Technical Report}
+The system combines a 20B diffusion backbone with a 7B conditioner. Full
+data collection, pretraining, and reinforcement learning are outside this
+budget. Feasible released-weight evaluations include GenEval/DPG prompt
+composition, English and Chinese short/long text accuracy using one OCR
+protocol, VAE reconstruction, editing by category if the edit checkpoint is
+available, and depth/novel-view tasks only if their specialized checkpoints
+are available. A 12 B200-h slot could mean one B200 for twelve hours or two
+for six elapsed hours if two-card capacity is available; count \emph{both}
+devices. Fix seeds and prompt lists.
+
+\textbf{Baselines core:} (1) FLUX.1-dev and SD3.5-Large on matched English
+composition prompts, 16 B200-h; (2) the same two on multilingual/long-text
+prompts, 16 B200-h; (3) public FLUX/Wan VAE reconstruction, 4 B200-h; shared
+OCR and scoring, 4 B200-h. Total \textbf{40 B200-h $\times$ \$3.49 = \$139.60}.
+Closed comparison-model API charges are omitted, so this does not cover all
+published baselines.
+
+\textbf{Replication core:} (1) Qwen-Image public text-to-image
+composition subset, 12 B200-h; (2) English/Chinese typography with
+short/long prompts, 12 B200-h; (3) English/Chinese editing subset, 12 B200-h
+\emph{only if edit weights exist}; VAE reconstruction, 4 B200-h; shared OCR
+and scoring, 4 B200-h. Total \textbf{44 B200-h $\times$ \$3.49 = \$153.56}. If editing
+weights are unavailable, replace that condition with a second typography
+stratum or an accessible task checkpoint and recalculate the total. A
+generation-versus-edit comparison needs different checkpoints, not just a
+different prompt. A small text benchmark cannot establish the full
+multilingual ranking.
+
+\section{Topic 3: Foundation Models, weeks 4--5}
+
+\subsection{DINOv3}
+The affordable questions concern \emph{frozen} released encoders, not
+seven-billion-image pretraining or the causal effect of Gram anchoring.
+Feasible evaluations include image-classification linear probes on CIFAR-100,
+Pets, or an ImageNet subset; VOC/ADE20k dense segmentation; NYUv2 depth;
+keypoint correspondence; TokenCut object discovery; retrieval; DAVIS mask
+propagation; patch-feature PCA maps; resolution sensitivity; and matched
+ViT-S/B comparisons with DINOv2. Match token count/resolution when patch
+sizes differ, and use identical probe capacity and labeled splits.
+
+\textbf{Baselines core:} (1) DINOv2-B and SigLIP2-B frozen
+classification probes, 4 B200-h; (2) matched VOC segmentation probes,
+8 h; (3) matched NYUv2 depth probes, 6 h; shared extraction and validation,
+2 h. Total \textbf{20 B200-h $\times$ \$3.49 = \$69.80}. Retrieval or
+patch-correspondence evaluation is another roughly 2--6 B200-h with cached
+features.
+
+\textbf{Replication core:} (1) DINOv3-B versus DINOv2-B VOC mIoU,
+7 B200-h; (2) NYUv2 depth RMSE, 5 h; (3) CIFAR-100 classification plus
+256/512-pixel resolution check, 4 h; shared validation, 2 h. Total \textbf{18 B200-h $\times$ \$3.49 = \$62.82}. Keypoint or object-discovery
+checks are optional. This supports transfer claims at ViT-B scale but does
+not test whether Gram anchoring caused the improvement.
+
+\subsection{V-JEPA 2.1}
+The full 135k+12k self-supervised pretraining iterations and VisionMix163M
+are outside the budget. Released distilled ViT-B/L features can support
+reduced Something-Something-v2 or Diving48 action probes, VOC/ADE20k
+segmentation, NYUv2/KITTI depth, DAVIS first-mask propagation,
+last-layer-versus-four-layer probes, clip-length/resolution changes, and PCA
+feature maps. Ego4D anticipation, robot grasping/navigation, and VideoQA
+require substantially more task-specific data and setup than this deadline
+allows.
+
+\textbf{Baselines core:} (1) V-JEPA 2 versus DINOv2 on a fixed reduced
+video-action split, 15 B200-h; (2) matched VOC segmentation probes, 7 h;
+(3) DAVIS17 propagation, 7 h; feature extraction/QA, 3 h. Total \textbf{32 B200-h $\times$ \$3.49 = \$111.68}. A frozen depth comparison adds
+roughly 6--10 B200-h. The image/video tokenizer and clip protocol must be
+held consistent where possible.
+
+\textbf{Replication core:} (1) Released V-JEPA 2.1 distilled-backbone
+action probe, 14 B200-h; (2) VOC dense segmentation, 6 h; (3) NYUv2 depth,
+6 h; last-layer-versus-four-layer or clip-length ablation, 4 h; setup, 2 h.
+Total \textbf{32 B200-h $\times$ \$3.49 = \$111.68}. A reduced 256-pixel,
+single-view video evaluation is modified relative to the paper's larger
+resolution/multiview protocol. Confirm that the selected checkpoint and
+tokenizer are actually released before choosing this paper.
+
+\subsection{SAM 3}
+Feasible released-checkpoint tasks include text-only promptable concept
+segmentation with positive and absent-class prompts on COCO/ODinW subsets;
+image-only and text-plus-image exemplars; positive/negative exemplar curves;
+CountBench counting; SAM 1/2 versus SAM 3 interactive point/box masks; DAVIS
+video object segmentation; a small text-prompt video-concept subset; and
+one-domain 0/1/3/10-shot ODinW fine-tuning. Use box/mask AP or gated F1 only
+when the annotations support it. The SA-Co data engine, full ontology, and
+pretraining are not feasible; substituting COCO cannot reproduce SA-Co/Gold's
+reported aggregate metric.
+
+\textbf{Baselines core:} (1) OWLv2 and GroundingDINO boxes passed to SAM 1
+on the same image/prompt pairs, 6 B200-h; (2) SAM 1 versus SAM 2
+interactive point/box masks, 4 h; (3) SAM 2 DAVIS VOS, 6 h; setup and fixed
+threshold selection, 2 h. Total \textbf{18 B200-h $\times$ \$3.49 = \$62.82}. An absent-class hard-negative analysis can reuse the first set.
+
+\textbf{Replication core:} (1) SAM 3 on matched positive and absent-class
+image/phrase pairs, 5 B200-h; (2) text-only, image-only, and combined
+exemplars on the same positives, 4 h; (3) DAVIS VOS, 8 h; CountBench
+counting, 2 h; setup, 3 h. Total \textbf{22 B200-h $\times$ \$3.49 = \$76.78}. A one-domain 10-shot fine-tune can replace counting/VOS and adds
+about 8--20 B200-h (\$27.92--\$69.80). Check checkpoint terms and benchmark
+availability; preserve prompts, absent-class pairs, and confidence thresholds
+across systems.
+
+\subsection{AnyUp: Universal Feature Upsampling}
+This is one of the few Topic 3 papers with an affordable trainable method:
+the paper reports about five hours on one H100 for 100k ImageNet steps.
+Feasible checks include bilinear, guided-filter, FeatUp, and JAFAR
+comparisons on VOC/COCO/ADE20k; NYUv2 depth and normals; output-resolution
+sweeps; reusing a low-resolution-trained probe after upsampling; transfer
+from DINOv2-S features to DINOv3/SigLIP; feature preservation; runtime and
+peak memory; and attention, feature-path, self-consistency, or basis-filter
+ablations. Align the frozen backbone and probe protocol across methods.
+
+\textbf{Baselines core:} (1) Bilinear/FeatUp/JAFAR on VOC segmentation,
+8 B200-h; (2) NYUv2 depth/normal probes, 8 h; (3) resolution and
+fixed-probe feature-preservation test, 6 h; setup, 2 h. Total \textbf{24 B200-h $\times$ \$3.49 = \$83.76}. Cross-backbone inference or
+runtime/VRAM benchmarking can be added for roughly 2--6 B200-h.
+
+\textbf{Replication core:} (1) One AnyUp 100k-step run, budget 8 B200-h
+versus the paper's approximately five; (2) cross-backbone DINOv2-to-DINOv3
+and SigLIP transfer, 6 B200-h; (3) two shortened 25k-step ablations, one
+without the feature path and one without self-consistency, 3+3 B200-h;
+probe training/QA, 6 B200-h. Total \textbf{26 B200-h $\times$ \$3.49 = \$90.74}. More full-length ablations add about
+8 B200-h/\$27.92 each. The 25k-step ablations test direction rather than
+exact final performance. Verify ImageNet access and NATTEN CUDA compatibility;
+if training on another image collection, declare that distribution change.
+
+\subsection{Medical SAM Adapter (Med-SA)}
+Feasible tests include BTCV organ Dice/HD95 with patient-held-out volumes;
+2D REFUGE2, TNMIX, or ISIC segmentation; random one/three-point versus
+approximate-overlap box prompts; SAM, U-Net/nnU-Net, or released MedSAM
+comparisons; adapter rank, placement, and scale; HyP-Adpt versus additive
+prompt conditioning; SD-Trans versus independent 2D slices; and prompt
+perturbation. The central 3D claim requires volumetric data and SD-Trans:
+a 2D-only test cannot support it. The paper uses SAM ViT-H, 1024-pixel 2D
+or 128-cubed 3D inputs, 40/60 epochs on four A100s. Our smaller ViT-B plan
+is explicitly a modified replication.
+
+\textbf{Baselines core:} (1) Zero-shot SAM and matched prompt sweep on a
+BTCV subset, 10 B200-h; (2) 3D U-Net at 128 cubed, 20 h; (3) released
+medical-SAM baseline, 10 h; common patient-level Dice/HD95, 4 h. Total \textbf{44 B200-h $\times$ \$3.49 = \$153.56}. A 2D-only REFUGE2 fallback
+could cost 40--60 B200-h (\$139.60--\$209.40) but misses the 3D conclusion.
+
+\textbf{Replication core:} (1) Med-SA with ViT-B on 12--20 BTCV training
+volumes, 24 B200-h; (2) independent-slice adapter without SD-Trans, 24 h;
+(3) HyP-Adpt versus additive prompt conditioning, 24 h; shared one/three
+point and two box-overlap settings, Dice/HD95, 6 h; setup/QA, 6 h. Total \textbf{84 B200-h $\times$ \$3.49 = \$293.16}. Adapter-placement or rank
+adds one training condition, roughly 24 B200-h/\$83.76. Keep volume-level splits
+and generate prompts from the correct masks; reductions in backbone size,
+patients, and steps limit comparison with original 17-task claims.
+
+\subsection{Towards a Unified View of Parameter-Efficient Transfer Learning}
+Feasible design-axis tests use SST-2/MNLI classification, XSum summarization,
+or WMT16 English-Romanian translation. Compare full tuning, BitFit, prompt,
+prefix, sequential/parallel adapters, LoRA, and Mix-And-Match (MAM) at matched
+\emph{trainable parameter counts}; examine attention versus FFN insertion,
+parallel-adapter scale, LoRA scale, prefix length, and transfer to a second
+task. Report accuracy/ROUGE/BLEU and tuned parameter fraction. SST-2 alone
+is too easy to support the paper's broader architecture ranking.
+
+\textbf{Baselines core:} (1) RoBERTa-base SST-2 full/BitFit/prefix/adapter/
+LoRA comparison, 8 B200-h; (2) BART-large on a fixed 20k-example XSum
+subset with prefix, sequential/parallel adapter, and LoRA, 30 h; (3)
+matched-parameter rank/bottleneck sweep, 10 h; shared scoring, 4 h. Total \textbf{52 B200-h $\times$ \$3.49 = \$181.48}. Reduced MNLI or an extra
+decoding-setting check is feasible within roughly 10--20 more B200-h.
+
+\textbf{Replication core:} Seven approximately six-hour BART-large XSum
+runs cover three design axes: (1) sequential versus parallel FFN adapter;
+(2) attention versus FFN insertion; (3) LoRA-FFN scale one versus four and
+MAM (prefix length 30, parallel adapter rank 512), with shared controls.
+Scoring/QA adds 6 B200-h. Total \textbf{48 B200-h $\times$ \$3.49 = \$167.52}. A second 10k-example English-Romanian check
+adds roughly 20--50 B200-h (\$69.80--\$174.50). The 20k XSum subset, fewer seeds,
+and shorter training differ from the paper's much larger setup; equalize
+trainable parameters rather than merely setting equal rank values.
+
 \end{document}

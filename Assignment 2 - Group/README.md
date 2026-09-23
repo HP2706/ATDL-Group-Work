@@ -1,8 +1,6 @@
 # Assignment 2: Reproducibility study
 
-[Compare all currently published curated papers, feasible experiments, and GPU costs](paper-reproduction-costs.md).
-
-The blank ISBI report scaffold is [report/main.tex](report/main.tex). From the `report/` directory, build it with `latexmk -pdf main.tex`.
+The [paper-selection and compute comparison](report/main.tex) covers both assignment tracks in LaTeX. From the `report/` directory, build it with `latexmk -pdf main.tex`. After selecting one paper, replace the comparison with the final four-page ISBI report.
 
 Deadline: October 11, 2026 at 23:59 Europe/Copenhagen.
 
