@@ -1,0 +1,167 @@
+\documentclass[aspectratio=169,11pt]{beamer}
+
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{amsmath,amssymb,mathtools}
+\usepackage{graphicx}
+\usepackage{booktabs}
+
+\definecolor{Ink}{HTML}{162033}
+\definecolor{Muted}{HTML}{657084}
+\definecolor{Accent}{HTML}{2364AA}
+\definecolor{Teal}{HTML}{148F88}
+\definecolor{Paper}{HTML}{F7F8FA}
+
+\setbeamercolor{normal text}{fg=Ink,bg=Paper}
+\setbeamercolor{structure}{fg=Accent}
+\setbeamercolor{frametitle}{fg=Ink,bg=Paper}
+\setbeamercolor{title}{fg=Ink}
+\setbeamercolor{subtitle}{fg=Accent}
+\setbeamercolor{author}{fg=Muted}
+\setbeamercolor{date}{fg=Muted}
+\setbeamercolor{alerted text}{fg=Accent}
+
+\setbeamerfont{title}{size=\fontsize{30}{34}\selectfont,series=\bfseries}
+\setbeamerfont{subtitle}{size=\fontsize{16}{19}\selectfont}
+\setbeamerfont{frametitle}{size=\fontsize{20}{24}\selectfont,series=\bfseries}
+
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{headline}{}
+\setbeamertemplate{footline}{%
+  \leavevmode\hbox{%
+    \begin{beamercolorbox}[wd=.88\paperwidth,ht=2.8ex,dp=1.2ex,leftskip=.055\paperwidth]{author in head/foot}%
+      \color{Muted}\scriptsize Sim\'eoni et al., 2025
+    \end{beamercolorbox}%
+    \begin{beamercolorbox}[wd=.12\paperwidth,ht=2.8ex,dp=1.2ex,center]{author in head/foot}%
+      \color{Muted}\scriptsize\insertframenumber
+    \end{beamercolorbox}%
+  }
+}
+
+\setbeamertemplate{frametitle}{%
+  \vspace{0.35cm}
+  \hspace{0.2cm}\insertframetitle\par
+  \vspace{-0.15cm}
+  \hspace{0.2cm}{\color{Accent}\rule{1.15cm}{1.5pt}}
+}
+
+\setbeamertemplate{itemize item}{\color{Accent}\small$\bullet$}
+\setbeamersize{text margin left=0.8cm,text margin right=0.8cm}
+
+\title{DINOv3}
+\subtitle{Scalable self-supervised vision features}
+\author{Sim\'eoni et al.}
+\date{}
+
+\begin{document}
+
+{\setbeamertemplate{footline}{}
+\begin{frame}[plain]
+  \vspace{0.8cm}
+  \titlepage
+  \vfill
+  {\color{Accent}\rule{2.2cm}{2pt}}
+\end{frame}
+}
+
+\begin{frame}{The problem: global quality versus dense features}
+  \begin{columns}[T,onlytextwidth]
+    \column{0.46\textwidth}
+      {\color{Accent}\large What scaling improves}\par
+      \vspace{0.18cm}
+      Longer self-supervised training improves image-level classification features.
+    \column{0.46\textwidth}
+      {\color{Teal}\large What scaling can damage}\par
+      \vspace{0.18cm}
+      Patch features become less spatially consistent, hurting segmentation and other dense tasks.
+  \end{columns}
+  \vfill
+  \centering
+  {\color{Muted}DINOv3 asks whether one frozen visual encoder can retain both strengths at scale.}
+\end{frame}
+
+\begin{frame}{Three parts of DINOv3}
+  \begin{enumerate}
+    \item \textbf{Scale pretraining:} curate unlabeled images and train a 7B-parameter Vision Transformer.
+    \vspace{0.32cm}
+    \item \textbf{Repair dense features:} use Gram anchoring to preserve patch-to-patch similarities during extended training.
+    \vspace{0.32cm}
+    \item \textbf{Make the model usable:} adapt to high resolution, distill smaller backbones, and add text alignment.
+  \end{enumerate}
+  \vfill
+  {\color{Muted}\small Paper sections 3--5.}
+\end{frame}
+
+\begin{frame}{Why patch features degrade}
+  \begin{itemize}
+    \item The paper tracks ImageNet-1k linear classification and PASCAL VOC linear segmentation through training.
+    \vspace{0.2cm}
+    \item Classification keeps improving, while segmentation starts falling after about 200k iterations.
+    \vspace{0.2cm}
+    \item Patch cosine-similarity maps become noisy: unrelated locations gain high similarity.
+  \end{itemize}
+  \vfill
+  {\color{Muted}\small The evidence is a correlation between degraded patch structure and dense-task performance, not a proof of a single cause. See paper Figures 5--6.}
+\end{frame}
+
+\begin{frame}{Gram anchoring}
+  Let $X_S,X_G\in\mathbb{R}^{P\times d}$ contain normalized patch features from the student and an earlier Gram teacher. The loss matches their pairwise patch similarities:
+  \[
+    \mathcal{L}_{\mathrm{Gram}}
+    =\left\|X_SX_S^{\mathsf T}-X_GX_G^{\mathsf T}\right\|_F^2.
+  \]
+  \vspace{0.15cm}
+  \begin{itemize}
+    \item The teacher supplies an earlier, more spatially consistent similarity pattern.
+    \item Matching relations lets individual feature vectors change.
+    \item The refinement phase adds this loss to the existing DINOv3 training objective.
+  \end{itemize}
+  \vfill
+  {\color{Muted}\small Paper section 4.2, equations 2--3.}
+\end{frame}
+
+\begin{frame}{What the refinement changes}
+  \begin{columns}[T,onlytextwidth]
+    \column{0.46\textwidth}
+      {\color{Accent}\large Dense tasks}\par
+      \vspace{0.16cm}
+      Segmentation improves quickly after Gram anchoring begins. A higher-resolution Gram teacher gives a further gain on ADE20k.
+    \column{0.46\textwidth}
+      {\color{Teal}\large Global tasks}\par
+      \vspace{0.16cm}
+      ObjectNet performance continues improving; the paper reports only mild effects on other global benchmarks.
+  \end{columns}
+  \vfill
+  {\color{Muted}\small Paper Figures 8--10. These are within-training comparisons, not an isolated test of every pipeline change.}
+\end{frame}
+
+\begin{frame}{Frozen dense-feature results}
+  \centering
+  {\small Linear probes on frozen backbones, from paper Table 3}\par
+  \vspace{0.25cm}
+  \begin{tabular}{lrrrr}
+    \toprule
+    Backbone & ADE20k $\uparrow$ & Cityscapes $\uparrow$ & VOC $\uparrow$ & NYUv2 $\downarrow$ \\
+    \midrule
+    DINOv2 ViT-g & 49.5 & 75.6 & 83.1 & 0.372 \\
+    AM-RADIOv2.5 ViT-g & 53.0 & 78.4 & 85.4 & 0.340 \\
+    \textbf{DINOv3 ViT-7B} & \textbf{55.9} & \textbf{81.1} & \textbf{86.6} & \textbf{0.309} \\
+    \bottomrule
+  \end{tabular}
+  \vfill
+  {\color{Muted}\small Segmentation: mIoU (higher is better). Depth: RMSE (lower is better). Backbone sizes differ.}
+\end{frame}
+
+\begin{frame}{Interpretation and discussion}
+  \begin{itemize}
+    \item DINOv3 shows that a frozen self-supervised backbone can support strong dense prediction with lightweight heads.
+    \vspace{0.18cm}
+    \item Gram anchoring directly targets patch relationships; the reported ablations support its role in restoring dense features.
+    \vspace{0.18cm}
+    \item Model scale, curated data, refinement, and post-training all contribute. Cross-model benchmark wins do not isolate each contribution.
+  \end{itemize}
+  \vfill
+  {\color{Accent}Question for discussion:} How much of the gain comes from Gram anchoring at a matched model and data budget?
+\end{frame}
+
+\end{document}
