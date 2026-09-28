@@ -1,64 +1,9 @@
-\documentclass[aspectratio=169,11pt]{beamer}
-
-\usepackage[T1]{fontenc}
-\usepackage{lmodern}
-\usepackage{amsmath,amssymb,mathtools}
-\usepackage{graphicx}
-\usepackage{tikz}
-\usetikzlibrary{arrows.meta}
-
-\graphicspath{{../../papers/opening-the-black-box-via-information/}}
-
-\definecolor{Ink}{HTML}{162033}
-\definecolor{Muted}{HTML}{657084}
-\definecolor{Accent}{HTML}{2364AA}
-\definecolor{Teal}{HTML}{148F88}
-\definecolor{Paper}{HTML}{F7F8FA}
-
-\setbeamercolor{normal text}{fg=Ink,bg=Paper}
-\setbeamercolor{structure}{fg=Accent}
-\setbeamercolor{frametitle}{fg=Ink,bg=Paper}
-\setbeamercolor{title}{fg=Ink}
-\setbeamercolor{subtitle}{fg=Accent}
-\setbeamercolor{author}{fg=Muted}
-\setbeamercolor{date}{fg=Muted}
-\setbeamercolor{alerted text}{fg=Accent}
-
-\setbeamerfont{title}{size=\fontsize{30}{34}\selectfont,series=\bfseries}
-\setbeamerfont{subtitle}{size=\fontsize{16}{19}\selectfont}
-\setbeamerfont{frametitle}{size=\fontsize{20}{24}\selectfont,series=\bfseries}
-
-\setbeamertemplate{navigation symbols}{}
-\setbeamertemplate{headline}{}
-\setbeamertemplate{footline}{%
-  \leavevmode\hbox{%
-    \begin{beamercolorbox}[wd=.88\paperwidth,ht=2.8ex,dp=1.2ex,leftskip=.055\paperwidth]{author in head/foot}%
-      \color{Muted}\scriptsize Shwartz-Ziv and Tishby, 2017
-    \end{beamercolorbox}%
-    \begin{beamercolorbox}[wd=.12\paperwidth,ht=2.8ex,dp=1.2ex,center]{author in head/foot}%
-      \color{Muted}\scriptsize\insertframenumber
-    \end{beamercolorbox}%
-  }
-}
-
-\setbeamertemplate{frametitle}{%
-  \vspace{0.35cm}
-  \hspace{0.2cm}\insertframetitle\par
-  \vspace{-0.15cm}
-  \hspace{0.2cm}{\color{Accent}\rule{1.15cm}{1.5pt}}
-}
-
-\setbeamertemplate{itemize item}{\color{Accent}\small$\bullet$}
-\setbeamersize{text margin left=0.8cm,text margin right=0.8cm}
-
-\newcommand{\mutualinfo}[2]{I\!\left(#1;#2\right)}
 
 \title{Opening the Black Box of\\Deep Neural Networks via Information}
 \subtitle{Section 2: Information Theory of Deep Learning}
 \author{Ravid Shwartz-Ziv \and Naftali Tishby}
 \date{}
 
-\begin{document}
 
 {\setbeamertemplate{footline}{}
 \begin{frame}[plain]
@@ -296,8 +241,8 @@ $I(X;T)$ falls slowly and gradient variance is larger.
 
 \begin{column}{0.38\textwidth}
 \begin{itemize}
-    \item More hidden layers reach good generalization in fewer epochs.
-    \item Top layers compress first during the diffusion phase.
+    \item Increasing depth substantially reduces the number of epochs needed to reach high $I(T;Y)$.
+    \item During compression, deeper layers converge before the layers closer to the input.
     \item A compressed predecessor makes the next layer's compression easier.
 \end{itemize}
 \end{column}
@@ -306,48 +251,30 @@ $I(X;T)$ falls slowly and gradient variance is larger.
 
 \end{frame}
 
-%\begin{frame}{Discussion}
-%    Conclusions, Hypothesis and limitations
-%    \begin{itemize}
-%        \item What about other DNN architectures which don't shrink in width? Without encoder structure, do we achieve compression?
-%        \item Does the choice of activation function affect whether compression is observed?
-%        \item Is compression necessary for generalization, or just correlated with it here?
-%        \item They measure model complexity based on MI through activation function outputs and hidden states. Is this a good way to measure model complexity?
-%    \end{itemize}
-%\end{frame}
-
-\begin{frame}{Discussion: Efforts to explain DNNs}
+\begin{frame}{Discussion: Compression $\Rightarrow$ Generalization?}
 
 \begin{itemize}
     \item What tools did this paper provide, to analyze the fitness and complexity of a model?
+   % Tool: measure everything in bits. Per-hidden layer two numbers i.e. dots on a plane. (bits about label and input).
+   % Information Bottleneck as reference curve, theoretical bound, and gap to optimal.
+   % Invariant to weights. Two phases: fitting then compression.
+   % Candidate complexity I(X; T) -- representation/activations not weights
+    \item[-]
+    \item[-] 
     \item[-]
     \item[-] 
     \item[-] 
-    \item[-] 
-    \item[-] 
 \end{itemize}
 
 \end{frame}
 
-\begin{frame}{Discussion: Efforts to explain DNNs}
+\begin{frame}{Discussion: Compression $\Rightarrow$ Generalization?}
 
 \begin{itemize}
     \item What tools did this paper provide, to analyze the fitness and complexity of a model?
     \item To what do they claim the generalization capabilities of DNN is owed?
-    \item[-] 
-    \item[-] 
-    \item[-] 
-    \item[-] 
-\end{itemize}
-
-\end{frame}
-
-\begin{frame}{Discussion: Efforts to explain DNNs}
-
-\begin{itemize}
-    \item What tools did this paper provide, to analyze the fitness and complexity of a model?
-    \item To what do they claim the generalization capabilities of DNN is owed?
-    \item They claim compression occurs naturally as an inadvertent benefit of noisy gradients in SGD. Is compression necessary for generalization?
+    % They believe that compression occurs with SGD and this is responsible for absence of overfitting in DL. 
+    % They say it generates highly efficient internal representation through compression by diffusion.
     \item[-] 
     \item[-] 
     \item[-] 
@@ -355,43 +282,54 @@ $I(X;T)$ falls slowly and gradient variance is larger.
 
 \end{frame}
 
-\begin{frame}{Discussion: Efforts to explain DNNs}
+\begin{frame}{Discussion: Compression $\Rightarrow$ Generalization?}
 
 \begin{itemize}
     \item What tools did this paper provide, to analyze the fitness and complexity of a model?
     \item To what do they claim the generalization capabilities of DNN is owed?
-    \item They claim compression occurs naturally as an inadvertent benefit of noisy gradients in SGD. Is compression necessary for generalization?
+    \item SGD noise $\rightarrow$ diffusion $\rightarrow$ minimizes $I(X;\;T_i)$ $\rightarrow$ fewer bits about input $\rightarrow$ generalization.
+    Is compression generalization?
+    % They give a lot of methods and thought into the two phases and the curious role of SGD. They sort of let it be implicit that DNNs generalize, and that compression is the key. Popular school of thought: compression is learning. But what evidence do they provide that compression is learning?
+    \item[-] 
+    \item[-] 
+\end{itemize}
+
+\end{frame}
+
+\begin{frame}{Discussion: Compression $\Rightarrow$ Generalization?}
+
+\begin{itemize}
+    \item What tools did this paper provide, to analyze the fitness and complexity of a model?
+    \item To what do they claim the generalization capabilities of DNN is owed?
+    \item SGD noise $\rightarrow$ diffusion $\rightarrow$ minimizes $I(X;\;T_i)$ $\rightarrow$ fewer bits about input $\rightarrow$ generalization.
     \item Are their methods scalable?
-    \item[-] 
+    % Compression-is-learning is a whole school. But what evidence HERE? They show compression happens and that label info survives -- never that the compression caused the generalization.
+    % No test error plotted anywhere. Compression is potentially just correlated.
     \item[-] 
 \end{itemize}
 
 \end{frame}
 
-\begin{frame}{Discussion: Efforts to explain DNNs}
+\begin{frame}{Discussion: Compression $\Rightarrow$ Generalization?}
 
 \begin{itemize}
     \item What tools did this paper provide, to analyze the fitness and complexity of a model?
     \item To what do they claim the generalization capabilities of DNN is owed?
-    \item They claim compression occurs naturally as an inadvertent benefit of noisy gradients in SGD. Is compression necessary for generalization?
+    \item SGD noise $\rightarrow$ diffusion $\rightarrow$ minimizes $I(X;\;T_i)$ $\rightarrow$ fewer bits about input $\rightarrow$ generalization.
     \item Are their methods scalable?
-    \item They measure model complexity based on MI through activation function outputs and hidden states. Is this a good way to measure model complexity?
-    \item[-]
+    \item Complexity is measured as MI over binned activations. Does that measure the network, or the binning? (Saxe et al. '18)
 \end{itemize}
 
 \end{frame}
 
-\begin{frame}{Discussion: Efforts to explain DNNs}
+\begin{frame}{Discussion: Compression $\Rightarrow$ Generalization?}
 
 \begin{itemize}
     \item What tools did this paper provide, to analyze the fitness and complexity of a model?
     \item To what do they claim the generalization capabilities of DNN is owed?
-    \item They claim compression occurs naturally as an inadvertent benefit of noisy gradients in SGD. Is compression necessary for generalization?
+    \item SGD noise $\rightarrow$ diffusion $\rightarrow$ minimizes $I(X;\;T_i)$ $\rightarrow$ fewer bits about input $\rightarrow$ generalization.
     \item Are their methods scalable?
-    \item They measure model complexity based on MI through activation function outputs and hidden states. Is this a good way to measure model complexity?
-    \item Does the choice of activation function affect whether compression is observed?
+    \item Complexity is measured as MI over binned activations. Does that measure the network, or the binning? (Saxe et al. '18)
+    % Their I(X;T) can only move because tanh outputs get chopped into 30 bins -- the net is deterministic and X is discrete, so information-theoretically the layer keeps all 12 bits forever. "Compression" = inputs saturating toward +-1 and collapsing into shared bins. Saxe's three blows: (1) swap tanh for ReLU and compression largely disappears -- generalization unaffected; (2) full-batch GD, no minibatch noise, still compresses -- kills the diffusion mechanism; (3) they construct cases where compression and generalization move independently. So the phenomenon is a property of double-saturating nonlinearities plus a discretization choice, not of learning. Note the irony: paper's own S2.4 argues MI is meaningless for deterministic nets and you need noise -- then runs deterministic nets and lets the binning stand in for the noise ###CLAUDE GENERATED ###
 \end{itemize}
-
 \end{frame}
-
-\end{document}

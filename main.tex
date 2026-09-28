@@ -1,0 +1,83 @@
+\documentclass[aspectratio=169,11pt]{beamer}
+
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{amsmath,amssymb,mathtools}
+\usepackage{graphicx}
+\usepackage{tikz}
+\usepackage{booktabs}
+\usepackage{array}
+\usetikzlibrary{arrows.meta}
+
+% --- colours ---
+\definecolor{accent}{HTML}{2F5D8A}
+\definecolor{shown}{HTML}{2E7D32}
+\definecolor{hypo}{HTML}{E08E0B}
+\definecolor{limit}{HTML}{C62828}
+\setbeamercolor{frametitle}{fg=accent}
+\setbeamercolor{structure}{fg=accent}
+
+% coloured box: \cbox[min height]{colour}{title}{body}
+\newcommand{\cbox}[4][0pt]{%
+  \begin{tikzpicture}
+    \node[draw=#2, line width=0.9pt, rounded corners=3pt, fill=#2!6,
+          text width=\linewidth-14pt, inner sep=6pt, align=left,
+          minimum height=#1] (b)
+          {{\color{#2}\textbf{#3}}\\[3pt]\footnotesize #4};
+  \end{tikzpicture}}
+
+\graphicspath{{../../papers/opening-the-black-box-via-information/}}
+
+\definecolor{Ink}{HTML}{162033}
+\definecolor{Muted}{HTML}{657084}
+\definecolor{Accent}{HTML}{2364AA}
+\definecolor{Teal}{HTML}{148F88}
+\definecolor{Paper}{HTML}{F7F8FA}
+
+\setbeamercolor{normal text}{fg=Ink,bg=Paper}
+\setbeamercolor{structure}{fg=Accent}
+\setbeamercolor{frametitle}{fg=Ink,bg=Paper}
+\setbeamercolor{title}{fg=Ink}
+\setbeamercolor{subtitle}{fg=Accent}
+\setbeamercolor{author}{fg=Muted}
+\setbeamercolor{date}{fg=Muted}
+\setbeamercolor{alerted text}{fg=Accent}
+
+\setbeamerfont{title}{size=\fontsize{30}{34}\selectfont,series=\bfseries}
+\setbeamerfont{subtitle}{size=\fontsize{16}{19}\selectfont}
+\setbeamerfont{frametitle}{size=\fontsize{20}{24}\selectfont,series=\bfseries}
+
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{headline}{}
+\setbeamertemplate{footline}{%
+  \leavevmode\hbox{%
+    \begin{beamercolorbox}[wd=.88\paperwidth,ht=2.8ex,dp=1.2ex,leftskip=.055\paperwidth]{author in head/foot}%
+      \color{Muted}\scriptsize DINOv3 - Oriane Siméoni et al.
+    \end{beamercolorbox}%
+    \begin{beamercolorbox}[wd=.12\paperwidth,ht=2.8ex,dp=1.2ex,center]{author in head/foot}%
+      \color{Muted}\scriptsize\insertframenumber
+    \end{beamercolorbox}%
+  }
+}
+
+\setbeamertemplate{frametitle}{%
+  \vspace{0.35cm}
+  \hspace{0.2cm}\insertframetitle\par
+  \vspace{-0.15cm}
+  \hspace{0.2cm}{\color{Accent}\rule{1.15cm}{1.5pt}}
+}
+
+\setbeamertemplate{itemize item}{\color{Accent}\small$\bullet$}
+\setbeamersize{text margin left=0.8cm,text margin right=0.8cm}
+
+\newcommand{\mutualinfo}[2]{I\!\left(#1;#2\right)}
+
+\begin{document}
+
+
+%\input{Presentation1/fst_presentation}
+\input{Presentation2/snd_presentation}
+
+
+
+\end{document}
