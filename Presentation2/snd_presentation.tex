@@ -86,6 +86,127 @@ Position encoding & Learned & RoPE \\
 % Part 3
 %------------------------------------------
 
+% Native crop diagrams: compiled with the presentation.
+\definecolor{Blue}{HTML}{2364AA}
+\definecolor{Purple}{HTML}{7255A5}
+\tikzset{dino flow/.style={-{Stealth[length=2mm]},draw=Muted,line width=.8pt},
+dino box/.style={font=\fontsize{8}{10}\selectfont,rounded corners=3pt,align=center,inner sep=7pt},
+dino label/.style={align=center,font=\fontsize{8}{10}\selectfont},
+dino note/.style={align=center,font=\fontsize{7}{9}\selectfont,text=Muted}}
+% Exact spatial grids; these are schematic feature maps, not measured embeddings.
+\newcommand{\dinoFeatureGrid}[5]{%
+  \begin{scope}[shift={(#1,#2)}]
+    \fill[#5!14] (0,0) rectangle (#3,#3);
+    \pgfmathsetmacro{\step}{#3/#4}
+    \draw[step=\step cm,#5!55,line width=.2pt] (0,0) grid (#3,#3);
+    \draw[#5,line width=.6pt] (0,0) rectangle (#3,#3);
+  \end{scope}}
+\newcommand{\dinoPatchPhoto}[5]{%
+  \node[inner sep=0,anchor=south west] at (#1,#2) {\includegraphics[width=#3cm]{Presentation2/figures/dino-crops/#5}};
+  \pgfmathsetmacro{\step}{#3/#4}
+  \begin{scope}[shift={(#1,#2)}]
+    \draw[step=\step cm,white,opacity=.65,line width=.2pt] (0,0) grid (#3,#3);
+  \end{scope}}
+
+\begin{frame}{Multi-crop training}
+  \centering
+  \resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[x=1cm,y=1cm,text=Ink,font=\fontsize{8}{10}\selectfont,
+  token/.style={draw=Blue!50,fill=Blue!10,minimum width=.55cm,minimum height=.42cm,inner sep=2pt,font=\fontsize{7}{8}\selectfont},
+  teachertoken/.style={token,draw=Teal!50,fill=Teal!12},
+  head/.style={rounded corners=2pt,fill=Purple!10,minimum width=1cm,minimum height=.5cm,font=\fontsize{7}{8}\selectfont}]
+\path[use as bounding box] (0,0) rectangle (18,7.6);
+\node[anchor=west,font=\bfseries] at (.1,7.3) {1\quad Crop into patches};
+\node[anchor=west,font=\bfseries] at (4.1,7.3) {2\quad Student and teacher};
+\node[anchor=west,font=\bfseries] at (11,7.3) {3\quad Match head predictions};
+% One crop of each scale, with exact 16 x 16 and 7 x 7 grids.
+\node[dino label,anchor=west,text=Blue] at (.2,6.75) {2 global crops};
+\dinoPatchPhoto{.2}{4.45}{2}{16}{global-a.png}
+\node at (2.6,5.4) {$\cdots$};
+\node[dino note,anchor=west] at (.2,4.12) {$256\times256$ px $\to$ 256 patches};
+\node[dino label,anchor=west,text=Purple] at (.2,3.55) {8 local crops};
+\dinoPatchPhoto{.2}{2.35}{.875}{7}{local-a.png}
+\node at (1.45,2.75) {$\cdots$};
+\node[dino note,anchor=west] at (.2,2.03) {$112\times112$ px $\to$ 49 patches};
+% Enlarged example of a single actual image patch, cropped in LaTeX.
+\begin{scope}
+  \clip (.3,.95) rectangle (.95,1.6);
+  \node[anchor=south west,inner sep=0] at (-2.95,-6.2) {\includegraphics[width=10.4cm]{Presentation2/figures/dino-crops/global-a.png}};
+\end{scope}
+\draw[Blue,line width=.6pt] (.3,.95) rectangle (.95,1.6);
+\node[dino note,anchor=west,text width=2.65cm,align=left,font=\fontsize{6.5}{8}\selectfont] at (1.1,1.27) {$16\times16$ pixels\\projected to one token};
+% Both models receive the same global crop for the patch objective.
+\node[dino label,text=Blue,anchor=west] at (4.15,6.75) {Student: global + local views};
+\dinoPatchPhoto{4.2}{4.7}{1.6}{16}{global-a.png}
+% Masked token positions (not black pixels fed to the encoder).
+\foreach \a/\b in {3/10,4/10,3/11,4/11,8/6,9/6,8/7,9/7,11/2,12/2,11/3,12/3,5/4,6/4,5/5,6/5} {
+ \fill[Ink!70] ({4.2+.1*\a},{4.7+.1*\b}) rectangle ++(.1,.1);
+}
+\draw[Purple,line width=1pt] (4.5,5.7) rectangle ++(.1,.1);
+\node[fill=Paper,inner sep=1pt,text=Purple,font=\fontsize{6}{7}\selectfont] at (4.37,5.76) {$i$};
+\node[dino note,text width=2.5cm] at (5,4.25) {Gray squares:\\{[MASK]} tokens};
+\node[dino box,fill=Blue!10,minimum width=1.35cm] (student) at (7,5.5) {\textbf{Student}\\ViT};
+\node[dino note] at (7,6.4) {+ CLS token};
+\draw[dino flow] (7,6.16) -- (student.north);
+\draw[dino flow] (5.95,5.5) -- (student.west);
+\node[token] (sc) at (8.7,5.85) {CLS};
+\node[token] (sp) at (8.7,5.18) {$i$};
+\node[token] at (9.4,5.18) {$j$};
+\node at (10,5.18) {$\cdots$};
+\draw[dino flow] (student.east) -- (8.25,5.5);
+\node[dino note,text width=2.4cm] at (9.05,4.48) {One CLS summary +\\one output per patch};
+\node[dino label,text=Teal,anchor=west] at (4.15,3.55) {EMA teacher: global views only};
+\dinoPatchPhoto{4.2}{1.5}{1.6}{16}{global-a.png}
+\draw[Purple,line width=1pt] (4.5,2.5) rectangle ++(.1,.1);
+\node[fill=Paper,inner sep=1pt,text=Purple,font=\fontsize{6}{7}\selectfont] at (4.37,2.56) {$i$};
+\node[dino note] at (5,1.12) {All patches visible};
+\node[dino box,fill=Teal!10,minimum width=1.35cm] (teacher) at (7,2.3) {\textbf{Teacher}\\ViT};
+\node[dino note] at (7,3.2) {+ CLS token};
+\draw[dino flow] (7,2.96) -- (teacher.north);
+\draw[dino flow] (5.95,2.3) -- (teacher.west);
+\node[teachertoken] at (8.7,2.65) {CLS};
+\node[teachertoken] at (8.7,1.98) {$i$};
+\node[teachertoken] at (9.4,1.98) {$j$};
+\node at (10,1.98) {$\cdots$};
+\draw[dino flow] (teacher.east) -- (8.25,2.3);
+\node[dino note] at (8.95,1.25) {Targets: stop gradient};
+% The EMA teacher is labelled above; omit the update arrow to keep token paths clear.
+% Prediction bars are deliberately schematic, not measured model outputs.
+\node[anchor=west,font=\bfseries,text=Blue] at (11,6.72) {DINO: match whole-image summaries};
+\node[token] (dc1) at (11.45,6.02) {CLS};
+\node[teachertoken] (dc2) at (11.45,5.05) {CLS};
+\node[head] (dh1) at (13.1,6.02) {CLS head};
+\node[head] (dh2) at (13.1,5.05) {CLS head};
+\draw[dino flow] (dc1) -- (dh1);
+\draw[dino flow] (dc2) -- (dh2);
+\draw[dino flow] (dh1.east) -- (14.3,6.02);
+\draw[dino flow] (dh2.east) -- (14.3,5.05);
+\foreach \x/\h in {0/.18,.28/.46,.56/.25,.84/.11,1.12/.32} {
+ \fill[Blue!80] ({14.5+\x},5.8) rectangle ++(.18,\h);
+ \fill[Teal!85] ({14.5+\x},4.83) rectangle ++(.18,\h);
+}
+\draw[dino flow,<->] (16.15,5.05) -- node[dino note,right] {agree} (16.15,6.02);
+\node[dino note,anchor=west,text width=6.2cm,align=left] at (11,4.37) {Student and teacher CLS from \textbf{different crops}.\\CLS is an added token, not an image patch.};
+\node[anchor=west,font=\bfseries,text=Purple] at (11,3.55) {iBOT: predict the hidden patch};
+\node[token] (ip1) at (11.45,2.85) {$i$};
+\node[teachertoken] (ip2) at (11.45,1.88) {$i$};
+\node[head] (ih1) at (13.1,2.85) {Patch head};
+\node[head] (ih2) at (13.1,1.88) {Patch head};
+\draw[dino flow] (ip1) -- (ih1);
+\draw[dino flow] (ip2) -- (ih2);
+\draw[dino flow] (ih1.east) -- (14.3,2.85);
+\draw[dino flow] (ih2.east) -- (14.3,1.88);
+\foreach \x/\h in {0/.4,.28/.16,.56/.1,.84/.33,1.12/.21} {
+ \fill[Blue!80] ({14.5+\x},2.63) rectangle ++(.18,\h);
+ \fill[Teal!85] ({14.5+\x},1.66) rectangle ++(.18,\h);
+}
+\draw[dino flow,<->] (16.15,1.88) -- node[dino note,right] {agree} (16.15,2.85);
+\node[dino note,anchor=west,text width=6.2cm,align=left] at (11,1.12) {\textbf{Same global crop, same position $i$}:\\masked for the student, visible to the teacher.};
+\node[dino note,anchor=west,font=\fontsize{6.5}{8}\selectfont] at (.1,.25) {DINOv3 pretraining. Blue: student; teal: teacher. Bars: schematic prototype probabilities, not pixel reconstruction. Other augmentations and losses omitted.};
+\end{tikzpicture}%
+  }
+\end{frame}
+
 \begin{frame}{Pretraining losses}
   \begin{minipage}{\linewidth}
   \scriptsize
@@ -136,6 +257,50 @@ Position encoding & Learned & RoPE \\
   {\scriptsize Fig. 6: similarity to the red reference patch becomes scattered over training.}
 \end{frame}
 
+\begin{frame}{High-resolution Gram anchoring}
+  \centering
+  \resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[x=1cm,y=1cm,text=Ink,font=\fontsize{8}{10}\selectfont]
+\path[use as bounding box] (0,-.6) rectangle (18,7.65);
+\node[dino label,font=\fontsize{9}{11}\selectfont\bfseries] at (1.35,7.35) {Same crop};
+\node[dino label,font=\fontsize{9}{11}\selectfont\bfseries] at (4.55,7.35) {Encode patches};
+\node[dino label,font=\fontsize{9}{11}\selectfont\bfseries] at (9.55,7.35) {Align spatial feature grids};
+\node[dino label,font=\fontsize{9}{11}\selectfont\bfseries] at (15.6,7.35) {Compare relationships};
+\dinoPatchPhoto{.35}{4.55}{2}{16}{global-a.png}
+\node[dino label,text=Blue] at (1.35,6.85) {$256\times256$ px};
+\node[dino note] at (1.35,4.18) {$16\times16=256$ patches};
+\dinoPatchPhoto{.35}{1.5}{2}{32}{global-a-hires.png}
+\node[dino label,text=Teal] at (1.35,3.82) {$512\times512$ px};
+\node[dino note] at (1.35,1.12) {$32\times32=1024$ patches};
+\node[dino box,fill=Blue!10,text width=2.25cm,minimum height=1cm] (s) at (4.55,5.55) {\textbf{Student ViT}\\trainable};
+\node[dino box,fill=Teal!10,text width=2.25cm,minimum height=1cm] (t) at (4.55,2.5) {\textbf{Gram teacher}\\stored checkpoint\\\fontsize{7}{9}\selectfont stop gradient};
+\draw[dino flow] (2.5,5.55) -- (s.west);
+\draw[dino flow] (2.5,2.5) -- (t.west);
+\dinoFeatureGrid{7.2}{4.8}{1.5}{16}{Blue}
+\node[dino note] at (7.95,4.35) {$16\times16\times d_S$};
+\draw[dino flow] (s.east) -- (7.05,5.55);
+\dinoFeatureGrid{6.95}{1.5}{2}{32}{Teal}
+\node[dino note] at (7.95,1.12) {$32\times32\times d_G$};
+\draw[dino flow] (t.east) -- (6.8,2.5);
+\dinoFeatureGrid{10.55}{1.75}{1.5}{16}{Teal}
+\node[dino note] at (11.3,1.12) {$16\times16\times d_G$};
+\draw[dino flow] (9.05,2.5) -- node[dino note,above,text width=1.6cm] {bicubic\\$2\times$ downsample} (10.45,2.5);
+\node[dino note,text width=3cm] at (10.65,6.15) {Flatten spatial grid;\\$L_2$-normalize each feature};
+\draw[dino flow] (8.85,5.55) -- (13.65,5.55);
+\draw[dino flow] (12.2,2.5) -- (13.65,2.5);
+\node[dino note,text width=2.4cm] at (12.9,3.55) {Flatten;\\$L_2$-normalize};
+\node[dino box,fill=Blue!9,minimum width=3.35cm,minimum height=1.25cm] (gs) at (15.5,5.55) {$G_S=X_SX_S^\top$\\\textbf{$256\times256$}\\\fontsize{7}{9}\selectfont patch-pair cosine similarities};
+\node[dino box,fill=Teal!9,minimum width=3.35cm,minimum height=1.25cm] (gt) at (15.5,2.5) {$G_G=X_GX_G^\top$\\\textbf{$256\times256$}\\\fontsize{7}{9}\selectfont smoother similarity target};
+\node[dino box,fill=Purple!9] (loss) at (15.5,4.02) {$\mathcal L_{\mathrm{Gram}}=\lVert G_S-G_G\rVert_F^2$};
+\draw[dino flow] (gs.south) -- (loss.north);
+\draw[dino flow] (gt.north) -- (loss.south);
+\node[dino note,text width=3.8cm] at (4.6,1.0) {Fixed between periodic\\checkpoint refreshes.};
+\node[dino box,fill=Paper,text width=17cm,font=\fontsize{8}{10}\selectfont] at (9,.25) {\textbf{4$\times$ as many input patch tokens $\rightarrow$ 256 aligned features $\rightarrow$ a $256\times256$ Gram matrix.}\\Downsample the \emph{feature map}, before forming the Gram matrix. The field of view stays the same.};
+\node[dino note,anchor=west,font=\fontsize{6.5}{8}\selectfont] at (.1,-.4) {DINOv3 \S4.2--4.3. Grid colors are schematic, not measured embeddings. Photographs displayed at equal physical size to emphasize alignment.};
+\end{tikzpicture}%
+  }
+\end{frame}
+
 \begin{frame}{Gram anchoring restores patch relationships}
   \small
   \begin{center}
@@ -143,9 +308,9 @@ Position encoding & Learned & RoPE \\
       \mathcal L_{\mathrm{Gram}}=
       \left\|X_SX_S^{\top}-X_GX_G^{\top}\right\|_F^2$
   \end{center}
-  $X_S$ and $X_G$ are normalized student and earlier-teacher patch features.
-  The new term preserves \textbf{patch-to-patch cosine similarities} while the
-  original losses continue to train the student.
+  $X_S$: current student on a 256px crop. $X_G$: a stored 200k teacher on
+  the \emph{same crop} at 512px; its $32\!\times\!32$ patch map is downsampled
+  to the student's $16\!\times\!16$ grid before matching cosine similarities.
 
   \vspace{0.08cm}
   \centering

@@ -1,0 +1,8 @@
+# Copy to .atdl-launch.local.toml and fill in the resources available to you.
+backend = "ucloud" # or "direct" on a Linux GPU host
+
+[ucloud]
+project_id = "your-ucloud-project-id"
+gpu_template_job = "your-gpu-template-job-id"
+cpu_template_job = "your-cpu-template-job-id"
+ssh_key = "~/.ssh/id_ed25519"

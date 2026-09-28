@@ -1,6 +1,12 @@
 # Assignment 2: Reproducibility study
 
-The [paper-selection and compute comparison](report/main.tex) covers both assignment tracks in LaTeX. From the `report/` directory, build it with `latexmk -pdf main.tex`. After selecting one paper, replace the comparison with the final four-page ISBI report.
+Selected paper: **Deep Double Descent**, replication track. The [experiment inventory and compute audit](report/main.tex) enumerates all 29 figures in the local journal version, including translation experiments, verified run grids, conditional GPU-hour calculations, and unresolved timing/configuration evidence. Build it from `report/` with `latexmk -pdf main.tex`; the [compiled audit](report/main.pdf) is a planning document, not the final four-page submission.
+
+For a compact figure-by-figure table, code availability, and setup status, see [the experiment map](EXPERIMENTS.md).
+
+The authors' public result snapshot is converted to [a Parquet dataset for Hugging Face Datasets](their-results/hf_dataset/README.md), with the original files pinned in [the source manifest](their-results/manifest.json). Plots of that published data are in [their_plots](their_plots/README.md); the coverage table identifies figures the release cannot reconstruct. Our measurements belong in [our-results-folder](our-results-folder/README.md). Use the [plotting CLI](our-plots/README.md) to render the authors' curve and heatmap layouts without notebooks.
+
+The earlier [paper-selection cost comparison](report/paper-selection-cost-report.tex) is preserved separately, with its [original PDF](report/paper-selection-cost-report.pdf). Its runtime allowances are historical, unbenchmarked estimates. Public data snapshots and the verification record are in [report/evidence/](report/evidence/).
 
 Deadline: October 11, 2026 at 23:59 Europe/Copenhagen.
 

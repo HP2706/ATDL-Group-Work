@@ -27,3 +27,15 @@ build/
 
 /recordings
 .pdf-layout-review
+
+# Reproduction datasets, run outputs, and Python caches
+Assignment 2 - Group/code/data/
+Assignment 2 - Group/code/runs/
+#TODO remove this
+Assignment 2 - Group/ 
+__pycache__/
+*.pyc
+*.mp3
+
+# Machine-specific experiment launch settings
+.atdl-launch.local.toml

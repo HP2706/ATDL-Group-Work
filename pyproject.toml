@@ -1,0 +1,24 @@
+[project]
+name = "atdl-group-work"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "chz",
+    "datasets>=5.0.1",
+    "fire>=0.7.1",
+    "huggingface-hub>=0.30",
+    "ipykernel",
+    "ipywidgets",
+    "matplotlib>=3.11.2",
+    "numpy>=2.5.3",
+    "pandas>=3.0.6",
+    "pyarrow>=25.0.1",
+    "pydantic>=2.13.5",
+    "torch>=2.14.0",
+    "torchvision",
+    "tqdm",
+    "transformers>=5.17.0",
+    "wandb>=0.30.0",
+]
