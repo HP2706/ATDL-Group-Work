@@ -5,9 +5,28 @@
 \usepackage{amsmath,amssymb,mathtools}
 \usepackage{graphicx}
 \usepackage{tikz}
+\usepackage{booktabs}
+\usepackage{array}
 \usetikzlibrary{arrows.meta}
 
-\graphicspath{{figures/}}
+% --- colours ---
+\definecolor{accent}{HTML}{2F5D8A}
+\definecolor{shown}{HTML}{2E7D32}
+\definecolor{hypo}{HTML}{E08E0B}
+\definecolor{limit}{HTML}{C62828}
+\setbeamercolor{frametitle}{fg=accent}
+\setbeamercolor{structure}{fg=accent}
+
+% coloured box: \cbox[min height]{colour}{title}{body}
+\newcommand{\cbox}[4][0pt]{%
+  \begin{tikzpicture}
+    \node[draw=#2, line width=0.9pt, rounded corners=3pt, fill=#2!6,
+          text width=\linewidth-14pt, inner sep=6pt, align=left,
+          minimum height=#1] (b)
+          {{\color{#2}\textbf{#3}}\\[3pt]\footnotesize #4};
+  \end{tikzpicture}}
+
+\graphicspath{{../}}
 
 \definecolor{Ink}{HTML}{162033}
 \definecolor{Muted}{HTML}{657084}
@@ -33,7 +52,7 @@
 \setbeamertemplate{footline}{%
   \leavevmode\hbox{%
     \begin{beamercolorbox}[wd=.88\paperwidth,ht=2.8ex,dp=1.2ex,leftskip=.055\paperwidth]{author in head/foot}%
-      \color{Muted}\scriptsize\insertshorttitle
+      \color{Muted}\scriptsize DINOv3 - Oriane Siméoni et al.
     \end{beamercolorbox}%
     \begin{beamercolorbox}[wd=.12\paperwidth,ht=2.8ex,dp=1.2ex,center]{author in head/foot}%
       \color{Muted}\scriptsize\insertframenumber
@@ -51,21 +70,420 @@
 \setbeamertemplate{itemize item}{\color{Accent}\small$\bullet$}
 \setbeamersize{text margin left=0.8cm,text margin right=0.8cm}
 
-\title{DINOv3}
-\subtitle{}
-\author{}
-\date{}
-
-\newcommand{\makepresentationtitle}{%
-  {\setbeamertemplate{footline}{}
-  \begin{frame}[plain]
-    \vspace{0.8cm}
-    \titlepage
-    \vfill
-    {\color{Accent}\rule{2.2cm}{2pt}}
-  \end{frame}}
-}
+\newcommand{\mutualinfo}[2]{I\!\left(#1;#2\right)}
 
 \begin{document}
-\makepresentationtitle
+
+\title{DINOv3}
+%\subtitle{Section 2: Information Theory of Deep Learning}
+\author{Oriane Siméoni et al.}
+\date{\today}
+
+
+{\setbeamertemplate{footline}{}
+\begin{frame}[plain]
+  \vspace{0.8cm}
+  \titlepage
+  \vfill
+  {\color{Accent}\rule{2.2cm}{2pt}}
+\end{frame}
+}
+
+
+% Background, Motivation and DINOv2
+\begin{frame}{Ideas Julian Part}
+\begin{itemize}
+    \item Motivate importance of good feature representation for any downstream task
+    \item Draw a timeline DINO -> DINOv2 -> Fan et al 2025
+    \item Talk about (Fan et al., 2025) and why scaling from 1B to 7B failed before DINOv3
+\end{itemize}
+\end{frame}
+
+% DATA CURATION
+\begin{frame}{Data Curation}
+    17B public Instagram images.\\
+    $\rightarrow$ DINOv2 embeddings\\
+    $\rightarrow$ two routes of curation:
+
+    \begin{itemize}
+        \item \textbf{Clustering:} Hierarchical k-means + balanced sampling $\rightarrow$ LVD-1689M.
+        \item \textbf{Retrieval:} Find images similar to seed datasets.
+        \item \textbf{Additional datasets:} ImageNet1k, ImageNet22k, Mapillary.
+    \end{itemize}
+
+
+\end{frame}
+
+\begin{frame}{Model Scaling / Architecture}
+%\usepackage{booktabs}
+\begin{itemize}
+    \item Scaled mostly width, not depth.
+    \item Go from learned positional embeddings to RoPE.
+\end{itemize}
+\begin{table}[h]
+\centering
+\begin{tabular}{lcc}
+\hline
+ & \textbf{DINOv2} & \textbf{DINOv3} \\
+\hline
+Parameters & 1.1B & 6.7B \\
+Blocks & 40 & 40 \\
+Embedding dim. & 1536 & 4096 \\
+Attention heads & 24 & 32 \\
+Patch size & 14 & 16 \\
+Position encoding & Learned & RoPE \\
+\hline
+\end{tabular}
+\end{table}
+\end{frame}
+
+\begin{frame}{Training at scale}
+
+\begin{itemize}
+    \item 1M iterations of initial pre-training
+    \item First 100k iterations is warmup
+    \begin{itemize}
+        \item learning rate increases linearly to $4\times10^{-4}$
+        \item teacher temperature is also warmed up linearly
+    \end{itemize}
+    \item After warmup:
+    \begin{itemize}
+        \item constant learning rate
+        \item constant teacher temperature
+    \end{itemize}
+    \item Replaces the cosine schedules used in DINOv2
+    \item Global performance improves with longer training, while dense performance degrades after about 200k iterations
+    \item Gram anchoring is introduced after 1M iterations to improve dense performance
+\end{itemize}
+\end{frame}
+
+
+%------------------------------------------
+% Part 3
+%------------------------------------------
+
+
+\begin{frame}{Pretraining losses}
+  \begin{minipage}{\linewidth}
+  \scriptsize
+  \textbf{Prototype:} one learned row of the head's final weight matrix,
+  not a class token or label. The DINO head scores the CLS summary against these rows;
+  iBOT has a separate head for patches. $p_t(c)$ is the teacher's weight for vector $c$.\\
+  \textbf{Collapse control:} Sinkhorn balances prototype use across a batch;
+  KoLeo spreads CLS features. $p_t$ is the balanced target, $p_s$ the student prediction.
+  \end{minipage}
+  \vspace{-0.12cm}
+  \footnotesize
+  \begin{align*}
+    \mathcal L_{\mathrm{DINO}}
+      &= -\sum_c p^{\mathrm{CLS}}_{t}(c)\log p^{\mathrm{CLS}}_{s}(c)
+      &&\text{match CLS prototype distributions across crops},\\[-2pt]
+    \mathcal L_{\mathrm{iBOT}}
+      &= -\frac{1}{|M|}\sum_{i\in M}\sum_c p_{t,i}(c)\log p_{s,i}(c)
+      &&\text{match prototype distributions for masked patches }(M),\\[-2pt]
+    \mathcal L_{\mathrm{DKoLeo}}
+      &= -\frac{1}{B}\sum_{b=1}^{B}\log\!\left(\min_{j\ne b}
+          \|z_b-z_j\|_2\right)
+      &&\text{spread normalized CLS features }(z).
+  \end{align*}
+  \vspace{-0.16cm}
+  \begin{center}
+    \normalsize $\displaystyle
+      \mathcal L_{\mathrm{Pre}}=\mathcal L_{\mathrm{DINO}}
+      +\mathcal L_{\mathrm{iBOT}}+0.1\mathcal L_{\mathrm{DKoLeo}}$
+  \end{center}
+\end{frame}
+
+\begin{frame}{Longer training hurts local features}
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.64\textwidth}
+      \small\textbf{The discrepancy}\par\vspace{0.1cm}
+      ImageNet classification keeps improving, while patch-based VOC
+      segmentation peaks at about 200k iterations and then declines.
+    \end{column}
+    \begin{column}{0.34\textwidth}
+      \centering
+      \includegraphics[width=\linewidth,trim=745 0 0 270,clip]{Presentation2/figures/dinov3-figure5.jpg}\par
+      {\scriptsize Fig. 5c: ViT-7B}
+    \end{column}
+  \end{columns}
+  \vspace{0.12cm}
+  \centering
+  \includegraphics[height=2.40cm]{Presentation2/figures/dinov3-figure6.jpg}\par
+  {\scriptsize Fig. 6: similarity to the red reference patch becomes scattered over training.}
+\end{frame}
+
+\begin{frame}{Gram anchoring restores patch relationships}
+  \small
+  \begin{center}
+    $\displaystyle
+      \mathcal L_{\mathrm{Gram}}=
+      \left\|X_SX_S^{\top}-X_GX_G^{\top}\right\|_F^2$
+  \end{center}
+  $X_S$ and $X_G$ are normalized student and earlier-teacher patch features.
+  The new term preserves \textbf{patch-to-patch cosine similarities} while the
+  original losses continue to train the student.
+
+  \vspace{0.08cm}
+  \centering
+  \includegraphics[width=0.68\linewidth,trim=0 0 0 280,clip]{Presentation2/figures/dinov3-figure10.jpg}\par
+  {\scriptsize Fig. 10: before (top) and after (bottom) high-resolution Gram refinement.}
+
+  \vspace{0.07cm}
+  {\footnotesize \textbf{Ablation (Fig. 9b):} ADE20k 50.3 $\to$ 55.7 mIoU;
+  NYU depth 0.307 $\to$ 0.281 RMSE; ImageNet linear 88.2 $\to$ 88.0.}
+\end{frame}
+
+
+%------------------------------------------
+% Part 4
+%------------------------------------------
+\begin{frame}{Post-training}
+    \begin{enumerate}
+        \item \textbf{Higher Resolution Adaptation} - Gram is essential\\
+        10k additional iteration with mixed resolution sampling \\ Global crops from \{512, 768\} and local crops from \{112, 168, 224, 336\} \vspace{5px}
+        \item \textbf{Model Distillation with shared teacher inference} \\
+        7B frozen teacher → ViT-S, ..., H+, ConvNeXt
+        \vspace{5px}
+        \item \textbf{Aligning DINOv3 with Text using LiT approach} \\
+        Frozen vision transformer - train text encoder contrastively on [CLS ; mean-pooled patches]
+    \end{enumerate}
+    \begin{figure}
+        \centering
+        \includegraphics[width=0.8\linewidth]{Presentation2/figures/res-adaptiation.png}
+        %\caption{Caption}
+        %\label{fig:placeholder}
+    \end{figure}
+\end{frame}
+% ------
+\begin{frame}{Evaluation methods}
+    Backbone is \textbf{frozen} throughout - only linear/k-NN probes or task decoders are trained
+    \vspace{5px}
+    \begin{table}
+        \centering
+        \footnotesize
+        \begin{tabular}{>{\raggedright\arraybackslash}p{0.28\linewidth} l >{\raggedright\arraybackslash}p{0.52\linewidth}}
+            \toprule[1.5pt]
+            \textbf{Family} & \textbf{Covered} & \textbf{How DINOv3 evaluates it} \\
+            \midrule[1.5pt]
+            Representation geometry & Partial & PCA→RGB and patch cosine-similarity maps (no UMAP / t-SNE) \\
+            \midrule
+            Transferability \& robustness & Full & ImageNet-R/Sketch/A, ObjectNet, ImageNet-C, COCO-O, satellite \\
+            \midrule
+            Downstream performance &
+            Full & Linear probes (cls., seg., depth), k-NN, tracking, task decoders \\
+            \midrule
+            Diversity / collapse & Partial & Prevented by KoLeo + Sinkhorn; only CLS--patch similarity inspected (no RankMe / eff.\ rank) \\
+            \midrule
+            Representation similarity & None & No CKA / RSA / SVCCA \\
+            \bottomrule[1.5pt]
+        \end{tabular}
+    \end{table}
+    \vspace{5px}
+    \textbf{2 full, 2 partial, 1 missing} - the evaluation is almost entirely task-based
+\end{frame}
+% ------
+\begin{frame}{Key Results}
+    \begin{table}
+        \centering
+        \footnotesize
+        \begin{tabular}{>{\raggedright\arraybackslash}p{0.24\linewidth} >{\raggedright\arraybackslash}p{0.40\linewidth} >{\raggedright\arraybackslash}p{0.30\linewidth}}
+            \toprule[1.5pt]
+            \textbf{Family} & \textbf{Result (frozen 7B)} & \textbf{Interpretation} \\
+            \midrule[1.5pt]
+            Downstream - dense & ADE20k linear 55.9 mIoU (+6.4 vs DINOv2) & Patch features are linearly semantic \\
+            \midrule
+            Downstream - global &  ImageNet linear 88.4 (PE: 89.3) &  SSL $\approx$ image--text pre-training \\
+            \midrule
+            Downstream - systems &  COCO 66.1 mAP, ADE20k 63.0 mIoU &  One backbone, many tasks \\
+            \midrule
+            Transfer \& robustness &  ObjectNet 79.0 (+12.6 vs DINOv2), best on ImageNet-C &  Robust beyond ImageNet \\
+            \midrule
+            Transfer - domain &  Satellite canopy height MAE 2.42 → 2.02 &  Recipe is domain-agnostic \\
+            \midrule
+            Geometry &  Clean PCA maps up to 4096 px &  Qualitative only \\
+            \bottomrule[1.5pt]
+        \end{tabular}
+    \end{table}
+    \vspace{5px}
+    \textbf{Takeaway:} big win on dense tasks, parity on global tasks - weak on OCR (Logo-2K+ 86.0 vs 93.2 for PE)
+\end{frame}
+% ------
+\begin{frame}{Critique and conclusion}
+  \begin{columns}[T]
+    \begin{column}{0.32\textwidth}
+      \cbox{shown}{Shown}{%
+        \begin{itemize}\setlength{\itemsep}{2pt}\setlength{\leftmargini}{8pt}
+          \item Dense quality degrades while global keeps improving
+          \item Dense quality restored almost "for free" globally with Gram
+          \item ViT-H+ $\approx$ 7B teacher
+          \item Recipe transfers to satellite
+        \end{itemize}}
+    \end{column}
+    \begin{column}{0.32\textwidth}
+      \cbox{hypo}{Hypothesised}{%
+        \begin{itemize}\setlength{\itemsep}{2pt}\setlength{\leftmargini}{8pt}
+          \item Global loss dominates $\rightarrow$ patches align with CLS
+          \item Early checkpoints hold better local structure
+          \item SSL keeps scaling like LLMs
+          \item Students don't degrade
+        \end{itemize}}
+    \end{column}
+    \begin{column}{0.32\textwidth}
+      \cbox{limit}{Limitations}{%
+        \begin{itemize}\setlength{\itemsep}{2pt}\setlength{\leftmargini}{8pt}
+          \item Private data, curated with DINOv2
+          \item Single-run ablations, short schedules
+          \item OCR / zero-shot gap
+          \item $\approx$2,600\,tCO$_2$eq project
+        \end{itemize}}
+    \end{column}
+  \end{columns}
+  \vfill
+  \begin{center}
+    \textbf{Main open question:} are the gains from Gram anchoring,\\
+    or from 6$\times$ scale + private data?
+  \end{center}
+\end{frame}
+% ------
+
+% ----------------
+% Extra slides
+% ----------------
+\begin{frame}{Questions}
+\begin{figure}
+    \centering
+    \IfFileExists{figures/questions.jpg}{\includegraphics[width=0.45\linewidth]{figures/questions.jpg}}{\fbox{Questions figure pending}}
+\end{figure}
+\end{frame}
+%-------
+\begin{frame}{Distillation approach}
+\begin{figure}
+    \centering
+    \IfFileExists{figures/distillation.png}{\includegraphics[width=0.8\linewidth]{figures/distillation.png}}{\fbox{Distillation figure pending}}
+\end{figure}
+\end{frame}
+%-------
+\begin{frame}{Qualitative Analysis}
+    \begin{figure}
+        \centering
+        \IfFileExists{figures/qualitative.png}{\includegraphics[width=0.8\linewidth]{figures/qualitative.png}}{\fbox{Qualitative figure pending}}
+    \end{figure}
+\end{frame}
+%-------
+\begin{frame}{Evaluation of Dense Features}
+    Frozen 7B patch features - linear heads or training-free methods
+    \vspace{5px}
+    \begin{table}
+        \centering
+        \footnotesize
+        \setlength{\tabcolsep}{4pt}
+        \begin{tabular}{>{\raggedright\arraybackslash}p{0.30\linewidth} >{\raggedright\arraybackslash}p{0.24\linewidth} l >{\raggedright\arraybackslash}p{0.22\linewidth}}
+            \toprule[1.5pt]
+            \textbf{Task (protocol)} & \textbf{Best baseline} & \textbf{DINOv3} & \textbf{Note} \\
+            \midrule[1.5pt]
+            ADE20k mIoU (linear) & 53.0 (AM-RADIO) & \textbf{55.9} & +6.4 vs DINOv2 \\
+            \midrule
+            NYUv2 RMSE $\downarrow$ (linear) & 0.340 (AM-RADIO) & \textbf{0.309} & Geometry is linear \\
+            \midrule
+            NAVI 3D matching (k-NN) & 60.1 (DINOv2) & \textbf{64.4} & WSL models weak \\
+            \midrule
+            Object discovery (VOC07) & 61.1 (DINO v1) & \textbf{66.1} & DINOv2 failed here \\
+            \midrule
+            DAVIS tracking, J\&F & 81.4 (AM-RADIO) & \textbf{83.3} & Scales with res. \\
+            \midrule
+            SSv2 video (attentive) & \textbf{73.8} (V-JEPA 2) & 70.1 & Motion needs video \\
+            \bottomrule[1.5pt]
+        \end{tabular}
+    \end{table}
+    \vspace{5px}
+    \textbf{Takeaway:} largest gains on training-free tasks - the patch similarities Gram anchoring regularises - without mask labels
+\end{frame}
+%-------
+\begin{frame}{Evaluation of Global Image Descriptors}
+    Frozen 7B CLS token - linear probes and cosine retrieval
+    \vspace{5px}
+    \begin{table}
+        \centering
+        \footnotesize
+        \setlength{\tabcolsep}{4pt}
+        \begin{tabular}{>{\raggedright\arraybackslash}p{0.30\linewidth} >{\raggedright\arraybackslash}p{0.24\linewidth} l >{\raggedright\arraybackslash}p{0.22\linewidth}}
+            \toprule[1.5pt]
+            \textbf{Benchmark} & \textbf{Best baseline} & \textbf{DINOv3} & \textbf{Note} \\
+            \midrule[1.5pt]
+            ImageNet-1k (linear) & \textbf{89.3} (PE) & 88.4 & +1.1 vs DINOv2 \\
+            \midrule
+            ImageNet-R / Sketch & \textbf{92.2 / 71.9} (PE) & 91.1 / 71.3 & +10 / +6 vs DINOv2 \\
+            \midrule
+            ObjectNet / ImageNet-C $\downarrow$ & 80.2 / 22.7 (PE) & 79.0 / \textbf{19.6} & Best on corruptions \\
+            \midrule
+            iNaturalist 2021 & 87.0 (PE) & \textbf{89.8} & Fine-grained win \\
+            \midrule
+            Met / AmsterTime & 44.6 / 48.9 (DINOv2) & \textbf{55.4 / 56.5} & WSL far behind \\
+            \midrule
+            Logo-2K+ (OCR) & \textbf{93.2} (PE) & 86.0 & No text signal \\
+            \bottomrule[1.5pt]
+        \end{tabular}
+    \end{table}
+    \vspace{5px}
+    \textbf{Takeaway:} first SSL model on par with image--text models on classification; wins retrieval and fine-grained, loses on text
+\end{frame}
+%-------
+\begin{frame}{OOD evaluation - Earth Observation}
+    Same recipe on SAT-493M (493M satellite images) - frozen, RGB only
+    \vspace{5px}
+    \begin{table}
+        \centering
+        \footnotesize
+        \setlength{\tabcolsep}{4pt}
+        \begin{tabular}{>{\raggedright\arraybackslash}p{0.32\linewidth} >{\raggedright\arraybackslash}p{0.28\linewidth} l l}
+            \toprule[1.5pt]
+            \textbf{Task} & \textbf{Previous SotA} & \textbf{Sat 7B} & \textbf{Web 7B} \\
+            \midrule[1.5pt]
+            Canopy height MAE $\downarrow$ & 2.42 (Tolan et al.) & \textbf{2.02} & 2.17 \\
+            \midrule
+            GEO-Bench classif. & 79.9 (DOFA) & 81.1 & \textbf{81.6} \\
+            \midrule
+            GEO-Bench seg. & 72.9 (Tolan et al.) & 75.0 & \textbf{75.9} \\
+            \midrule
+            LoveDA seg., mIoU & 54.4 (BillionFM) & 55.3 & \textbf{56.2} \\
+            \midrule
+            DIOR detection, mAP & 79.5 (SkySense V2) & 76.6 & \textbf{80.5} \\
+            \midrule
+            iSAID seg., mIoU & \textbf{71.9} (SkySense V2) & 64.8 & 71.4 \\
+            \bottomrule[1.5pt]
+        \end{tabular}
+    \end{table}
+    \vspace{5px}
+    \textbf{Takeaway:} satellite model wins \emph{metric} tasks, web model wins \emph{semantic} tasks - domain-specific pre-training is task-dependent
+\end{frame}
+%-------
+\begin{frame}{Evaluation of Distilled models}
+    7B frozen teacher → smaller students; linear probes
+    \vspace{5px}
+    \begin{table}
+        \centering
+        \footnotesize
+        \setlength{\tabcolsep}{4pt}
+        \begin{tabular}{l l c c c c c}
+            \toprule[1.5pt]
+            \textbf{Model} & \textbf{Params} & \textbf{IN-ReaL} & \textbf{ObjNet} & \textbf{ADE20k} & \textbf{NYU $\downarrow$} & \textbf{DAVIS} \\
+            \midrule[1.5pt]
+            PE-core ViT-L & 0.3B & 90.1 & 74.9 & 39.7 & 0.650 & 48.2 \\
+            SigLIP 2 ViT-L & 0.3B & 90.1 & \textbf{75.0} & 43.6 & 0.484 & 66.3 \\
+            DINOv2 ViT-L & 0.3B & 89.7 & 64.7 & 48.8 & 0.394 & 73.4 \\
+            \textbf{DINOv3 ViT-L} & 0.3B & \textbf{90.2} & 74.8 & \textbf{54.9} & \textbf{0.352} & \textbf{79.9} \\
+            \midrule
+            DINOv3 ViT-H+ & 0.84B & 90.3 & 78.6 & 54.8 & 0.352 & 79.3 \\
+            DINOv3 ViT-7B & 6.7B & 90.4 & 79.0 & 55.9 & 0.309 & 79.7 \\
+            \bottomrule[1.5pt]
+        \end{tabular}
+    \end{table}
+    \vspace{5px}
+    \textbf{ConvNeXt:} CNX-T 42.7 vs 24.8 ADE20k mIoU (supervised) - ViT → CNN works\\
+    \vspace{5px}
+    \textbf{Takeaway:} dense gains at every size, no global cost; ViT-H+ $\approx$ 7B
+\end{frame}
+%-------
+
 \end{document}
