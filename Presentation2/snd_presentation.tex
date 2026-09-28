@@ -18,8 +18,7 @@
 \begin{frame}{Ideas Julian Part}
 \begin{itemize}
     \item Motivate importance of good feature representation for any downstream task
-    \item Cover SL, WSL and SSL approaches to said goal
-    \item Introduce DINOv2, it's great attention to proper data curation and results
+    \item Draw a timeline DINO -> DINOv2 -> Fan et al 2025
     \item Talk about (Fan et al., 2025) and why scaling from 1B to 7B failed before DINOv3
 \end{itemize}
 \end{frame}
@@ -115,16 +114,21 @@ Position encoding & Learned & RoPE \\
     \begin{table}
         \centering
         \footnotesize
-        \begin{tabular}{>{\raggedright\arraybackslash}p{0.26\linewidth} l >{\raggedright\arraybackslash}p{0.52\linewidth}}
-            \toprule
+        \begin{tabular}{>{\raggedright\arraybackslash}p{0.28\linewidth} l >{\raggedright\arraybackslash}p{0.52\linewidth}}
+            \toprule[1.5pt]
             \textbf{Family} & \textbf{Covered} & \textbf{How DINOv3 evaluates it} \\
-            \midrule
+            \midrule[1.5pt]
             Representation geometry & Partial & PCA→RGB and patch cosine-similarity maps (no UMAP / t-SNE) \\
-            Transferability \& robustness & Full & ImageNet-R/Sketch/A, ObjectNet, ImageNet-C, COCO-O, satellite \\
-            Downstream performance & Full & Linear probes (cls., seg., depth), k-NN, tracking, task decoders \\
-            Representation similarity & None & No CKA / RSA / SVCCA \\
+            \midrule
+            Transferability \& robustness & Full & ImageNet-R/Sketch/A, ObjectNet, ImageNet-C, COCO-O, satellite \\ 
+            \midrule
+            Downstream performance & 
+            Full & Linear probes (cls., seg., depth), k-NN, tracking, task decoders \\ 
+            \midrule
             Diversity / collapse & Partial & Prevented by KoLeo + Sinkhorn; only CLS--patch similarity inspected (no RankMe / eff.\ rank) \\
-            \bottomrule
+            \midrule
+            Representation similarity & None & No CKA / RSA / SVCCA \\
+            \bottomrule[1.5pt]
         \end{tabular}
     \end{table}
     \vspace{5px}
@@ -135,17 +139,22 @@ Position encoding & Learned & RoPE \\
     \begin{table}
         \centering
         \footnotesize
-        \begin{tabular}{>{\raggedright\arraybackslash}p{0.24\linewidth} >{\raggedright\arraybackslash}p{0.36\linewidth} >{\raggedright\arraybackslash}p{0.28\linewidth}}
-            \toprule
+        \begin{tabular}{>{\raggedright\arraybackslash}p{0.24\linewidth} >{\raggedright\arraybackslash}p{0.40\linewidth} >{\raggedright\arraybackslash}p{0.30\linewidth}}
+            \toprule[1.5pt]
             \textbf{Family} & \textbf{Result (frozen 7B)} & \textbf{Interpretation} \\
-            \midrule
+            \midrule[1.5pt]
             Downstream - dense & ADE20k linear 55.9 mIoU (+6.4 vs DINOv2) & Patch features are linearly semantic \\
-            Downstream - global & ImageNet linear 88.4 (PE: 89.3) & SSL $\approx$ image--text pre-training \\
-            Downstream - systems & COCO 66.1 mAP, ADE20k 63.0 mIoU & One backbone, many tasks \\
-            Transfer \& robustness & ObjectNet 79.0 (+12.6 vs DINOv2), best on ImageNet-C & Robust beyond ImageNet \\
-            Transfer - domain & Satellite canopy height MAE 2.42 → 2.02 & Recipe is domain-agnostic \\
-            Geometry & Clean PCA maps up to 4096 px & Qualitative only \\
-            \bottomrule
+            \midrule
+            Downstream - global &  ImageNet linear 88.4 (PE: 89.3) &  SSL $\approx$ image--text pre-training \\ 
+            \midrule
+            Downstream - systems &  COCO 66.1 mAP, ADE20k 63.0 mIoU &  One backbone, many tasks \\ 
+            \midrule
+            Transfer \& robustness &  ObjectNet 79.0 (+12.6 vs DINOv2), best on ImageNet-C &  Robust beyond ImageNet \\ 
+            \midrule
+            Transfer - domain &  Satellite canopy height MAE 2.42 → 2.02 &  Recipe is domain-agnostic \\ 
+            \midrule
+            Geometry &  Clean PCA maps up to 4096 px &  Qualitative only \\
+            \bottomrule[1.5pt]
         \end{tabular}
     \end{table}
     \vspace{5px}
@@ -158,7 +167,7 @@ Position encoding & Learned & RoPE \\
       \cbox{shown}{Shown}{%
         \begin{itemize}\setlength{\itemsep}{2pt}\setlength{\leftmargini}{8pt}
           \item Dense quality degrades while global keeps improving
-          \item Gram: +5.4 mIoU at $-$0.2 IN1k
+          \item Dense quality restored almost "for free" globally with Gram
           \item ViT-H+ $\approx$ 7B teacher
           \item Recipe transfers to satellite
         \end{itemize}}
@@ -178,7 +187,7 @@ Position encoding & Learned & RoPE \\
           \item Private data, curated with DINOv2
           \item Single-run ablations, short schedules
           \item OCR / zero-shot gap
-          \item $\approx$2,600\,tCO$_2$e project
+          \item $\approx$2,600\,tCO$_2$eq project
         \end{itemize}}
     \end{column}
   \end{columns}
@@ -194,26 +203,137 @@ Position encoding & Learned & RoPE \\
 % Extra slides
 % ----------------
 \begin{frame}{Questions}
-
+\begin{figure}
+    \centering
+    \includegraphics[width=0.45\linewidth]{Presentation2/figures/questions.jpg}
+\end{figure}
 \end{frame}
 %-------
 \begin{frame}{Distillation approach}
-    
+\begin{figure}
+    \centering
+    \includegraphics[width=0.8\linewidth]{Presentation2/figures/distillation.png}
+\end{figure}
+\end{frame}
+%-------
+\begin{frame}{Qualitative Analysis}
+    \begin{figure}
+        \centering
+        \includegraphics[width=0.8\linewidth]{Presentation2/figures/qualitative.png}
+    \end{figure}
 \end{frame}
 %-------
 \begin{frame}{Evaluation of Dense Features}
-    
+    Frozen 7B patch features - linear heads or training-free methods
+    \vspace{5px}
+    \begin{table}
+        \centering
+        \footnotesize
+        \setlength{\tabcolsep}{4pt}
+        \begin{tabular}{>{\raggedright\arraybackslash}p{0.30\linewidth} >{\raggedright\arraybackslash}p{0.24\linewidth} l >{\raggedright\arraybackslash}p{0.22\linewidth}}
+            \toprule[1.5pt]
+            \textbf{Task (protocol)} & \textbf{Best baseline} & \textbf{DINOv3} & \textbf{Note} \\
+            \midrule[1.5pt]
+            ADE20k mIoU (linear) & 53.0 (AM-RADIO) & \textbf{55.9} & +6.4 vs DINOv2 \\
+            \midrule
+            NYUv2 RMSE $\downarrow$ (linear) & 0.340 (AM-RADIO) & \textbf{0.309} & Geometry is linear \\
+            \midrule
+            NAVI 3D matching (k-NN) & 60.1 (DINOv2) & \textbf{64.4} & WSL models weak \\
+            \midrule
+            Object discovery (VOC07) & 61.1 (DINO v1) & \textbf{66.1} & DINOv2 failed here \\
+            \midrule
+            DAVIS tracking, J\&F & 81.4 (AM-RADIO) & \textbf{83.3} & Scales with res. \\
+            \midrule
+            SSv2 video (attentive) & \textbf{73.8} (V-JEPA 2) & 70.1 & Motion needs video \\
+            \bottomrule[1.5pt]
+        \end{tabular}
+    \end{table}
+    \vspace{5px}
+    \textbf{Takeaway:} largest gains on training-free tasks - the patch similarities Gram anchoring regularises - without mask labels
 \end{frame}
 %-------
 \begin{frame}{Evaluation of Global Image Descriptors}
-    
+    Frozen 7B CLS token - linear probes and cosine retrieval
+    \vspace{5px}
+    \begin{table}
+        \centering
+        \footnotesize
+        \setlength{\tabcolsep}{4pt}
+        \begin{tabular}{>{\raggedright\arraybackslash}p{0.30\linewidth} >{\raggedright\arraybackslash}p{0.24\linewidth} l >{\raggedright\arraybackslash}p{0.22\linewidth}}
+            \toprule[1.5pt]
+            \textbf{Benchmark} & \textbf{Best baseline} & \textbf{DINOv3} & \textbf{Note} \\
+            \midrule[1.5pt]
+            ImageNet-1k (linear) & \textbf{89.3} (PE) & 88.4 & +1.1 vs DINOv2 \\
+            \midrule
+            ImageNet-R / Sketch & \textbf{92.2 / 71.9} (PE) & 91.1 / 71.3 & +10 / +6 vs DINOv2 \\
+            \midrule
+            ObjectNet / ImageNet-C $\downarrow$ & 80.2 / 22.7 (PE) & 79.0 / \textbf{19.6} & Best on corruptions \\
+            \midrule
+            iNaturalist 2021 & 87.0 (PE) & \textbf{89.8} & Fine-grained win \\
+            \midrule
+            Met / AmsterTime & 44.6 / 48.9 (DINOv2) & \textbf{55.4 / 56.5} & WSL far behind \\
+            \midrule
+            Logo-2K+ (OCR) & \textbf{93.2} (PE) & 86.0 & No text signal \\
+            \bottomrule[1.5pt]
+        \end{tabular}
+    \end{table}
+    \vspace{5px}
+    \textbf{Takeaway:} first SSL model on par with image--text models on classification; wins retrieval and fine-grained, loses on text
 \end{frame}
 %-------
 \begin{frame}{OOD evaluation - Earth Observation}
-    
+    Same recipe on SAT-493M (493M satellite images) - frozen, RGB only
+    \vspace{5px}
+    \begin{table}
+        \centering
+        \footnotesize
+        \setlength{\tabcolsep}{4pt}
+        \begin{tabular}{>{\raggedright\arraybackslash}p{0.32\linewidth} >{\raggedright\arraybackslash}p{0.28\linewidth} l l}
+            \toprule[1.5pt]
+            \textbf{Task} & \textbf{Previous SotA} & \textbf{Sat 7B} & \textbf{Web 7B} \\
+            \midrule[1.5pt]
+            Canopy height MAE $\downarrow$ & 2.42 (Tolan et al.) & \textbf{2.02} & 2.17 \\
+            \midrule
+            GEO-Bench classif. & 79.9 (DOFA) & 81.1 & \textbf{81.6} \\
+            \midrule
+            GEO-Bench seg. & 72.9 (Tolan et al.) & 75.0 & \textbf{75.9} \\
+            \midrule
+            LoveDA seg., mIoU & 54.4 (BillionFM) & 55.3 & \textbf{56.2} \\
+            \midrule
+            DIOR detection, mAP & 79.5 (SkySense V2) & 76.6 & \textbf{80.5} \\
+            \midrule
+            iSAID seg., mIoU & \textbf{71.9} (SkySense V2) & 64.8 & 71.4 \\
+            \bottomrule[1.5pt]
+        \end{tabular}
+    \end{table}
+    \vspace{5px}
+    \textbf{Takeaway:} satellite model wins \emph{metric} tasks, web model wins \emph{semantic} tasks - domain-specific pre-training is task-dependent
 \end{frame}
 %-------
 \begin{frame}{Evaluation of Distilled models}
-    
+    7B frozen teacher → smaller students; linear probes
+    \vspace{5px}
+    \begin{table}
+        \centering
+        \footnotesize
+        \setlength{\tabcolsep}{4pt}
+        \begin{tabular}{l l c c c c c}
+            \toprule[1.5pt]
+            \textbf{Model} & \textbf{Params} & \textbf{IN-ReaL} & \textbf{ObjNet} & \textbf{ADE20k} & \textbf{NYU $\downarrow$} & \textbf{DAVIS} \\
+            \midrule[1.5pt]
+            PE-core ViT-L & 0.3B & 90.1 & 74.9 & 39.7 & 0.650 & 48.2 \\
+            SigLIP 2 ViT-L & 0.3B & 90.1 & \textbf{75.0} & 43.6 & 0.484 & 66.3 \\
+            DINOv2 ViT-L & 0.3B & 89.7 & 64.7 & 48.8 & 0.394 & 73.4 \\
+            \textbf{DINOv3 ViT-L} & 0.3B & \textbf{90.2} & 74.8 & \textbf{54.9} & \textbf{0.352} & \textbf{79.9} \\
+            \midrule
+            DINOv3 ViT-H+ & 0.84B & 90.3 & 78.6 & 54.8 & 0.352 & 79.3 \\
+            DINOv3 ViT-7B & 6.7B & 90.4 & 79.0 & 55.9 & 0.309 & 79.7 \\
+            \bottomrule[1.5pt]
+        \end{tabular}
+    \end{table}
+    \vspace{5px}
+    \textbf{ConvNeXt:} CNX-T 42.7 vs 24.8 ADE20k mIoU (supervised) - ViT → CNN works\\
+    \vspace{5px}
+    \textbf{Takeaway:} dense gains at every size, no global cost; ViT-H+ $\approx$ 7B
 \end{frame}
 %-------
