@@ -1,0 +1,4 @@
+# Raw source pickles are retained locally and in the Sprite; the Parquet dataset is versioned.
+dd/
+*.download
+__pycache__/

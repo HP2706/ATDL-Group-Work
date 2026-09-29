@@ -3,22 +3,31 @@
 \usepackage{booktabs,longtable,array,enumitem}
 \usepackage[hidelinks]{hyperref}
 \newcolumntype{P}[1]{>{\raggedright\arraybackslash}p{#1}}
+\newcommand{\resultplot}[3]{%
+  \begin{figure}[p]
+  \centering
+  \includegraphics[width=0.96\textwidth,height=0.75\textheight,keepaspectratio]{../plots/#1/#2.png}
+  \caption{#3}
+  \end{figure}%
+}
 \setlength{\parindent}{0pt}
 \setlength{\parskip}{5pt}
 \setlist[itemize]{nosep,leftmargin=1.4em}
 \pagestyle{plain}
 \title{Deep Double Descent: Complete Experiment Inventory and Compute Audit}
 \name{Assignment 2: selected paper, replication track}
-\address{Advanced Topics in Deep Learning, University of Copenhagen\\Audit date: 25 September 2026}
+\address{Advanced Topics in Deep Learning, University of Copenhagen\\Initial audit: 25 September 2026; result update: 29 September 2026}
 \begin{document}
 \onecolumn
 \maketitle
 
 \section{Decision and correction of the earlier estimate}
 We have selected \emph{Deep Double Descent: Where Bigger Models and More Data Hurt}.
-This document inventories every numbered figure in the locally stored, 32-page
-2021 journal version, including its appendices. It is a planning audit, not the
-final four-page assignment submission. Figure numbers refer to that version;
+This document began as an inventory of every numbered figure in the locally
+stored, 32-page 2021 journal version, including its appendices. The original
+compute audit is followed by an update showing the completed reduced vision
+experiments. It is not the final four-page assignment submission. Figure
+numbers refer to the journal version;
 they should not be silently transferred to another arXiv or ICLR revision.
 The previous comparison of 18 candidate papers is preserved unchanged as
 \href{paper-selection-cost-report.pdf}{\texttt{paper-selection-cost-report.pdf}},
@@ -32,9 +41,10 @@ central part of the evidence for model-wise and sample-wise double descent,
 not a minor optional add-on. No earlier runtime should be treated as measured.
 
 \textbf{An exact GPU-hour bill is not established by the available evidence.}
-We verified paper protocols, public result-table counts, and selected released
-width/sample grids. We did not run training or a GPU timing pilot, and the
-inspected sources do not supply hardware-specific wall times. Accordingly,
+The initial audit verified paper protocols, public result-table counts, and
+selected released width/sample grids. It preceded our training and GPU timing
+pilots, and the inspected sources did not supply hardware-specific wall times.
+Accordingly,
 this report provides exact conditional arithmetic where possible, explicit
 unknowns elsewhere, and sensitivity calculations rather than fabricated
 benchmark numbers. There is no verified all-figures total or guaranteed
@@ -70,11 +80,11 @@ proves available width coordinates, not that every width has every condition
 and seed, or that every run completed. Missing configuration and timing
 information is not replaced by a plausible-looking number.
 
-\textbf{Not verified:} original GPU model/count; elapsed times; complete
+\textbf{Not verified in the initial audit:} original GPU model/count; elapsed times; complete
 training logs and configuration manifests; every result-array shape;
 translation batch/token budget, vocabulary and exact split hashes; universal
 seed counts; mixed-precision compatibility; B200 throughput; present rental
-availability. No paid compute was launched for this document audit.
+availability. No paid compute was launched for that initial document audit.
 
 \section{Tasks, modalities, and common protocol}
 \textbf{Image classification:} CIFAR-10 and CIFAR-100 with five-layer CNNs
@@ -376,9 +386,11 @@ can remove the phenomenon being tested. Pilot results must determine the
 choice rather than retroactively justifying an attractive price.
 
 \section{What is required to turn this into a measured quote}
-The missing step is a small remote timing pilot on the actual rentable GPU,
-after an executable training path has been verified. No ML training or
-benchmark should run on the local Mac. A pilot should cover a small,
+At the time of the initial audit, the missing step was a small remote timing
+pilot on the actual rentable GPU, after an executable training path had been
+verified. A100 and B200 pilots were completed subsequently; their reports are
+in \texttt{../our-results-folder/pilots/}. No ML training or benchmark should
+run on the local Mac. A pilot should cover a small,
 near-interpolation and large width for each chosen architecture and dataset;
 translation needs both language pairs if both are included. Fix vocabulary,
 sequence lengths, tokens per update, gradient accumulation, numerical
@@ -401,4 +413,53 @@ interruption costs separately; re-price the chosen provider allocation.
 Until that ledger and the missing source configurations are resolved,
 \emph{the protocols and counts above are auditable, but an exact final
 GPU-hour cost remains unverified}.
+
+\clearpage
+\section{Completed reduced vision results}
+After the initial audit, our group completed 229 single-seed vision cells.
+The Adam runs end at epoch 400 and the SGD CNN runs end at 50,000 optimizer
+steps. The authors generally used denser width grids, 4,000 Adam epochs,
+500,000 CIFAR-10 SGD updates, or one million clean CIFAR-100 SGD updates.
+The figures below therefore document partial reproductions of the numbered
+paper figures. They do not establish a full replication of any numbered
+figure. Our training time is recorded as epochs or optimizer steps; the
+authors' released arrays often supply only a measurement index. For CNN
+panels near 50,000 steps, the authors' step scale uses an unverified
+256-step-per-measurement estimate. Our single-seed results have no inferred
+error bars. The data and remaining gaps are detailed in
+\texttt{../EXPERIMENTS.md}.
+
+\subsection{Our measurements beside the released measurements}
+Each image pairs our results with a plot reconstructed from the authors'
+released numeric data. The image labels identify the source of each panel;
+matching visual layout does not imply equal training horizons.
+
+\resultplot{comparison}{figure_01}{Figure 1 adaptation: CIFAR-10 ResNet18 at 10\% label noise. Our ten widths and 400 epochs cover one seed; the paper uses 15\% noise, more widths, five trials, and 4,000 epochs.}
+\resultplot{comparison}{figure_02}{Figure 2 adaptation: train and test error heatmaps at 10\% noise. The published measurement positions and our recorded epochs are displayed separately.}
+\resultplot{comparison}{figure_04}{Figure 4 adaptation: CIFAR-10 and CIFAR-100 ResNet18 noise curves. Our 0/10/20\% noise cells end at epoch 400; the published CIFAR-10 set also includes 5/15\% noise.}
+\resultplot{comparison}{figure_05}{Figure 5 subset: augmented and unaugmented CIFAR-10 CNN curves. Our runs end at 50,000 SGD steps; the authors' step mapping near that horizon is estimated.}
+\resultplot{comparison}{figure_06}{Figure 6 subset: clean, unaugmented CIFAR-10 CNN with SGD and Adam. The published endpoints are from full recorded histories; ours stop at 50,000 steps or 400 epochs.}
+\resultplot{comparison}{figure_07}{Figure 7 subset: clean CIFAR-100 CNN. The published five-trial mean and spread are shown beside our one-seed 50,000-step result at eleven widths.}
+\resultplot{comparison}{figure_09}{Figure 9 adaptation: 20\%-noise CIFAR-10 ResNet18 trajectories and width-by-time heatmap. Our run ends at epoch 400.}
+\resultplot{comparison}{figure_10}{Figure 10 subset: width-128 CIFAR-10 CNN histories at three noise levels. Our curves use recorded steps; the published step coordinate is inferred.}
+\resultplot{comparison}{figure_11a}{Figure 11(a) subset: CIFAR-10 CNN sample-size curves. The 20\%-noise comparison uses three sample sizes and eleven widths; our 10\%-noise results appear separately because matching published subset data were unavailable.}
+\resultplot{comparison}{figure_12}{Figure 12 subset: 20\%-noise CIFAR-10 CNN heatmaps and sample-size slices at three sample sizes and eleven widths, with a common color scale.}
+
+\clearpage
+\subsection{Our measurements alone}
+The following panels use the same plot definitions and our same measured
+cells as the paired images above. They make our observed curves readable
+without the additional published panels. The experimental limits stated
+above apply to every image in this subsection.
+
+\resultplot{ours}{figure_01}{Our Figure 1 adaptation: 10\%-noise CIFAR-10 ResNet18 endpoints and training-time curves through epoch 400.}
+\resultplot{ours}{figure_02}{Our Figure 2 adaptation: 10\%-noise CIFAR-10 ResNet18 test and train heatmaps through epoch 400.}
+\resultplot{ours}{figure_04}{Our Figure 4 adaptation: CIFAR-10 and CIFAR-100 ResNet18 curves at 0/10/20\% noise.}
+\resultplot{ours}{figure_05}{Our Figure 5 subset: augmented and unaugmented CIFAR-10 CNN curves through 50,000 SGD steps.}
+\resultplot{ours}{figure_06}{Our Figure 6 subset: clean, unaugmented CIFAR-10 CNN endpoints for SGD and Adam.}
+\resultplot{ours}{figure_07}{Our Figure 7 subset: one-seed clean CIFAR-100 CNN endpoints after 50,000 SGD steps.}
+\resultplot{ours}{figure_09}{Our Figure 9 adaptation: 20\%-noise CIFAR-10 ResNet18 trajectories and width-by-epoch heatmap.}
+\resultplot{ours}{figure_10}{Our Figure 10 subset: width-128 CIFAR-10 CNN test and train histories through 50,000 steps.}
+\resultplot{ours}{figure_11a}{Our Figure 11(a) subset: three CIFAR-10 CNN sample sizes at 10\% and 20\% noise.}
+\resultplot{ours}{figure_12}{Our Figure 12 subset: 20\%-noise CIFAR-10 CNN sample-size heatmap and slices, using the same color scale as the paired comparison.}
 \end{document}

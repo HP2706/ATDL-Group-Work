@@ -4,7 +4,7 @@ Selected paper: **Deep Double Descent**, replication track. The [experiment inve
 
 For a compact figure-by-figure table, code availability, and setup status, see [the experiment map](EXPERIMENTS.md).
 
-The authors' public result snapshot is converted to [a Parquet dataset for Hugging Face Datasets](their-results/hf_dataset/README.md), with the original files pinned in [the source manifest](their-results/manifest.json). Plots of that published data are in [their_plots](their_plots/README.md); the coverage table identifies figures the release cannot reconstruct. Our measurements belong in [our-results-folder](our-results-folder/README.md). Use the [plotting CLI](our-plots/README.md) to render the authors' curve and heatmap layouts without notebooks.
+The authors' public result snapshot is converted to [a Parquet dataset for Hugging Face Datasets](their-results/hf_dataset/README.md), with the original files pinned in [the source manifest](their-results/manifest.json). Curated images are organized in [plots](plots/README.md): paired comparisons, our measurements alone, and reconstructions from the authors' measurements alone. The [published plot coverage table](their_plots/README.md) identifies figures the release cannot reconstruct. Our measurements belong in [our-results-folder](our-results-folder/README.md). Use the [plotting CLI](our-plots/README.md) to render the authors' curve and heatmap layouts without notebooks.
 
 The earlier [paper-selection cost comparison](report/paper-selection-cost-report.tex) is preserved separately, with its [original PDF](report/paper-selection-cost-report.pdf). Its runtime allowances are historical, unbenchmarked estimates. Public data snapshots and the verification record are in [report/evidence/](report/evidence/).
 

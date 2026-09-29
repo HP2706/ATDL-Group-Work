@@ -31,8 +31,9 @@ build/
 # Reproduction datasets, run outputs, and Python caches
 Assignment 2 - Group/code/data/
 Assignment 2 - Group/code/runs/
-#TODO remove this
-Assignment 2 - Group/ 
+Assignment 2 - Group/their-results/dd/
+Assignment 2 - Group/our-results-folder/pilots/**/data/
+Assignment 2 - Group/our-results-folder/pilots/**/pilot-results/
 __pycache__/
 *.pyc
 *.mp3

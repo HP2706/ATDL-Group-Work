@@ -1,0 +1,32 @@
+[
+  {
+    "file": "dd-translation-model-french.csv",
+    "rows": 62,
+    "unique_coordinates": 62
+  },
+  {
+    "file": "dd-translation-samples-aug26-small.csv",
+    "rows": 59,
+    "unique_coordinates": 59
+  },
+  {
+    "file": "dd-translation-samples-aug27-size80.csv",
+    "rows": 59,
+    "unique_coordinates": 59
+  },
+  {
+    "file": "df18k.csv",
+    "rows": 27,
+    "unique_coordinates": 25
+  },
+  {
+    "file": "df4k.csv",
+    "rows": 25,
+    "unique_coordinates": 25
+  },
+  {
+    "file": "nlp-model-dd.csv",
+    "rows": 64,
+    "unique_coordinates": 64
+  }
+]

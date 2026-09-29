@@ -1,0 +1,450 @@
+{
+  "bucket": "hml-public",
+  "source_commit": "0d653296f870e6bf7ee82dc71b4f7b49d53fa85d",
+  "objects": [
+    {
+      "name": "dd/adv-mcnn-25k-p0/Mlist",
+      "size": 233926,
+      "md5_hash": "WEVvTFs3qAfsfMxixf759A==",
+      "generation": "1572922834365302"
+    },
+    {
+      "name": "dd/adv-mcnn-25k-p0/ks",
+      "size": 892,
+      "md5_hash": "4VdnCXTI9ZGyEBYxbIdpMQ==",
+      "generation": "1572922834421253"
+    },
+    {
+      "name": "dd/cifar10-mcnn-noaug-adam/Mlist",
+      "size": 24954487,
+      "md5_hash": "PU0by0g9jDr1j4rHdnv0qw==",
+      "generation": "1572922834352720"
+    },
+    {
+      "name": "dd/cifar10-mcnn-noaug-adam/ks",
+      "size": 1530,
+      "md5_hash": "1QVjYFFzbdurziYYwyjk+g==",
+      "generation": "1572922834432505"
+    },
+    {
+      "name": "dd/cifar10-mcnn-noaug-sgd/Mlist",
+      "size": 12181207,
+      "md5_hash": "5qHKyxhK8FqH4CQycKS30g==",
+      "generation": "1572922834386461"
+    },
+    {
+      "name": "dd/cifar10-mcnn-noaug-sgd/ks",
+      "size": 1530,
+      "md5_hash": "1QVjYFFzbdurziYYwyjk+g==",
+      "generation": "1572922834441272"
+    },
+    {
+      "name": "dd/cifar10-mcnn-p0-adam-augvar/ks",
+      "size": 1530,
+      "md5_hash": "1QVjYFFzbdurziYYwyjk+g==",
+      "generation": "1572922834446643"
+    },
+    {
+      "name": "dd/cifar10-mcnn-p0-sgd-adam/Mlist",
+      "size": 8120866,
+      "md5_hash": "jm2ysoWQp7v2zX4L4h2Efw==",
+      "generation": "1572922834436061"
+    },
+    {
+      "name": "dd/cifar10-mcnn-p0-sgd-adam/ks",
+      "size": 1530,
+      "md5_hash": "1QVjYFFzbdurziYYwyjk+g==",
+      "generation": "1572922834431382"
+    },
+    {
+      "name": "dd/cifar10-mcnn-p10-decays/ks",
+      "size": 1420,
+      "md5_hash": "ZvmXZXXLpkb6M+mnxJ789A==",
+      "generation": "1572922834495107"
+    },
+    {
+      "name": "dd/cifar10-mcnn-p10-sgd/Mlist",
+      "size": 10368343,
+      "md5_hash": "JAyuCkNXwVPOTPaCRzLPYQ==",
+      "generation": "1572922834450786"
+    },
+    {
+      "name": "dd/cifar10-mcnn-p10-sgd/ks",
+      "size": 1772,
+      "md5_hash": "5VwI0XhOiZ4QEC/AjVOkzA==",
+      "generation": "1572922834480226"
+    },
+    {
+      "name": "dd/cifar10-mcnn-p20-sgd-rep2/Mlist",
+      "size": 5616727,
+      "md5_hash": "Rmd/HHB5dW1pHNuEPET3dw==",
+      "generation": "1572922834472489"
+    },
+    {
+      "name": "dd/cifar10-mcnn-p20-sgd-rep2/ks",
+      "size": 1420,
+      "md5_hash": "ZvmXZXXLpkb6M+mnxJ789A==",
+      "generation": "1572922834456315"
+    },
+    {
+      "name": "dd/cifar10-mcnn-p20-sgd-rep3/Mlist",
+      "size": 5616727,
+      "md5_hash": "vgrlYdbUEq/0VVQzArwHOg==",
+      "generation": "1572922834634690"
+    },
+    {
+      "name": "dd/cifar10-mcnn-p20-sgd-rep3/ks",
+      "size": 1420,
+      "md5_hash": "ZvmXZXXLpkb6M+mnxJ789A==",
+      "generation": "1572922834495006"
+    },
+    {
+      "name": "dd/cifar10-mcnn-p20-sgd-rep4/Mlist",
+      "size": 5616727,
+      "md5_hash": "Ayof4jQXGOo0w+R7OJShtA==",
+      "generation": "1572922836513611"
+    },
+    {
+      "name": "dd/cifar10-mcnn-p20-sgd-rep4/ks",
+      "size": 1420,
+      "md5_hash": "ZvmXZXXLpkb6M+mnxJ789A==",
+      "generation": "1572922834843620"
+    },
+    {
+      "name": "dd/cifar10-mcnn-p20-sgd-rep5/Mlist",
+      "size": 5616727,
+      "md5_hash": "QoAkGI/Dzplld0o+6Lc3EA==",
+      "generation": "1572922834535253"
+    },
+    {
+      "name": "dd/cifar10-mcnn-p20-sgd-rep5/ks",
+      "size": 1420,
+      "md5_hash": "ZvmXZXXLpkb6M+mnxJ789A==",
+      "generation": "1572922834647873"
+    },
+    {
+      "name": "dd/cifar10-mcnn-p20-sgd/Mlist",
+      "size": 11244247,
+      "md5_hash": "6laMYzIE6JHAMZ2wqAxuag==",
+      "generation": "1572922834507376"
+    },
+    {
+      "name": "dd/cifar10-mcnn-p20-sgd/ks",
+      "size": 1420,
+      "md5_hash": "ZvmXZXXLpkb6M+mnxJ789A==",
+      "generation": "1572922834524539"
+    },
+    {
+      "name": "dd/cifar10-resnet18k-50k-adam-all/Mlist",
+      "size": 40951055,
+      "md5_hash": "Q1O6m+JmYQ/akUhLTZ6X4w==",
+      "generation": "1572922834439075"
+    },
+    {
+      "name": "dd/cifar10-resnet18k-50k-adam-all/ks",
+      "size": 1508,
+      "md5_hash": "pe6sQLfEdtdoWYeiAnFSAA==",
+      "generation": "1572922834523531"
+    },
+    {
+      "name": "dd/cifar10-resnet18k-50k-adam/Mlist",
+      "size": 24570583,
+      "md5_hash": "PiKe6tnipS3/UPwPZFFjUg==",
+      "generation": "1572922834592776"
+    },
+    {
+      "name": "dd/cifar10-resnet18k-50k-adam/ks",
+      "size": 1508,
+      "md5_hash": "pe6sQLfEdtdoWYeiAnFSAA==",
+      "generation": "1572922834480257"
+    },
+    {
+      "name": "dd/cifar10-resnet18k-p15-adam-reps/Mlist",
+      "size": 40950849,
+      "md5_hash": "yPccaVfh6VJu5DtjLEzKcw==",
+      "generation": "1572922834501891"
+    },
+    {
+      "name": "dd/cifar10-resnet18k-p15-adam-reps/ks",
+      "size": 1508,
+      "md5_hash": "pe6sQLfEdtdoWYeiAnFSAA==",
+      "generation": "1572922834600020"
+    },
+    {
+      "name": "dd/cifar10-resnet18k-p20-decay/Mlist",
+      "size": 16380450,
+      "md5_hash": "V+PO4IpruLYucEUm2WYBPA==",
+      "generation": "1572922834791369"
+    },
+    {
+      "name": "dd/cifar10-resnet18k-p20-decay/ks",
+      "size": 1508,
+      "md5_hash": "pe6sQLfEdtdoWYeiAnFSAA==",
+      "generation": "1572922834626266"
+    },
+    {
+      "name": "dd/cifar100-resnet18k-50k-adam/Mlist",
+      "size": 24570583,
+      "md5_hash": "w66cIdMm9nXlzzKhjXtewQ==",
+      "generation": "1572922834518583"
+    },
+    {
+      "name": "dd/cifar100-resnet18k-50k-adam/ks",
+      "size": 1508,
+      "md5_hash": "pe6sQLfEdtdoWYeiAnFSAA==",
+      "generation": "1572922834510604"
+    },
+    {
+      "name": "dd/dd_grid_p20/Ms",
+      "size": 11806064,
+      "md5_hash": "LHflMQXMBkrAcmSpVgrgaQ==",
+      "generation": "1572922834618939"
+    },
+    {
+      "name": "dd/dd_grid_p20/ks",
+      "size": 1024,
+      "md5_hash": "V56DQGXmLrkU/htWctu60A==",
+      "generation": "1572922834544534"
+    },
+    {
+      "name": "dd/dd_grid_p20/nparams",
+      "size": 494,
+      "md5_hash": "nUHo108vxwmInwAiIwIgZg==",
+      "generation": "1572922834564827"
+    },
+    {
+      "name": "dd/dd_grid_p20/ns",
+      "size": 298,
+      "md5_hash": "2xBQPcwBFrsQPN4eeUw9kg==",
+      "generation": "1572922834602148"
+    },
+    {
+      "name": "dd/nlp-model-dd/dd-translation-model-french.csv",
+      "size": 4959,
+      "md5_hash": "4ozkt8swZWCgGFhemyBO0w==",
+      "generation": "1573074072981361"
+    },
+    {
+      "name": "dd/nlp-model-dd/nlp-model-dd.csv",
+      "size": 5127,
+      "md5_hash": "UdPoZxtHRuqqbl0e5rUysQ==",
+      "generation": "1573074073527505"
+    },
+    {
+      "name": "dd/nlp-sample-dd/dd-translation-samples-aug26-small.csv",
+      "size": 5158,
+      "md5_hash": "hpvrTkyK+yaK48cdyLPODA==",
+      "generation": "1573074850451473"
+    },
+    {
+      "name": "dd/nlp-sample-dd/dd-translation-samples-aug27-size80.csv",
+      "size": 5194,
+      "md5_hash": "O+eFaCC9Z0n3GtY94rYMYw==",
+      "generation": "1573074850928182"
+    },
+    {
+      "name": "dd/nlp-small-datasets/df18k.csv",
+      "size": 2240,
+      "md5_hash": "+VXsrji6JJwnv6Rv37tNhg==",
+      "generation": "1574292145179691"
+    },
+    {
+      "name": "dd/nlp-small-datasets/df4k.csv",
+      "size": 2023,
+      "md5_hash": "yTFogiifLkHf5pOJwAwu8Q==",
+      "generation": "1574292134350900"
+    },
+    {
+      "name": "dd/pct-cf10-res18-50k-p05-adam/Mlist",
+      "size": 8190316,
+      "md5_hash": "5pQMl8+e42W2YtfHUsM5zw==",
+      "generation": "1572922834568024"
+    },
+    {
+      "name": "dd/pct-cf10-res18-50k-p05-adam/ks",
+      "size": 1508,
+      "md5_hash": "pe6sQLfEdtdoWYeiAnFSAA==",
+      "generation": "1572922834523359"
+    },
+    {
+      "name": "dd/pct-cifar10-mcnn-50000-p0-sgd-big/Mlist",
+      "size": 3685740,
+      "md5_hash": "KFVULFU2tKm+kKWS5Qq5qA==",
+      "generation": "1572922834564970"
+    },
+    {
+      "name": "dd/pct-cifar10-mcnn-50000-p0-sgd-big/ks",
+      "size": 1398,
+      "md5_hash": "d/uXIcbbqJG392BySuN1nw==",
+      "generation": "1572922834552911"
+    },
+    {
+      "name": "dd/pct-cifar10-mcnn-50000-p20-sgd-big/Mlist",
+      "size": 3748204,
+      "md5_hash": "WLMf1AZJfNfb5KUEcPG7dA==",
+      "generation": "1572922834515655"
+    },
+    {
+      "name": "dd/pct-cifar10-mcnn-50000-p20-sgd-big/ks",
+      "size": 1420,
+      "md5_hash": "ZvmXZXXLpkb6M+mnxJ789A==",
+      "generation": "1572922834562248"
+    },
+    {
+      "name": "dd/pct-cifar10-mcnn-mdd-50k-p10-sgd-aug-fast/Mlist",
+      "size": 3548652,
+      "md5_hash": "WCOdflDnBl39uMa4BEOY2g==",
+      "generation": "1572922834601250"
+    },
+    {
+      "name": "dd/pct-cifar10-mcnn-mdd-50k-p10-sgd-aug-fast/ks",
+      "size": 1772,
+      "md5_hash": "5VwI0XhOiZ4QEC/AjVOkzA==",
+      "generation": "1572922834641313"
+    },
+    {
+      "name": "dd/pct-cifar10-mcnn-p0-adam-aug/Mlist",
+      "size": 8190316,
+      "md5_hash": "jV9gnvcNe4FP/cy1EZokNw==",
+      "generation": "1572922834583606"
+    },
+    {
+      "name": "dd/pct-cifar10-mcnn-p0-adam-aug/ks",
+      "size": 1508,
+      "md5_hash": "vQn1qziaVGOSXhk2T6/6DQ==",
+      "generation": "1572922834624425"
+    },
+    {
+      "name": "dd/pct-cifar10-mcnn-p10-sgd-aug-decay-big/Mlist",
+      "size": 1872364,
+      "md5_hash": "55lMZD5ztUaHws+Wk+4HMg==",
+      "generation": "1572922834475896"
+    },
+    {
+      "name": "dd/pct-cifar10-mcnn-p10-sgd-aug-decay-big/ks",
+      "size": 1420,
+      "md5_hash": "ZvmXZXXLpkb6M+mnxJ789A==",
+      "generation": "1572922834593854"
+    },
+    {
+      "name": "dd/pct-cifar10-mcnn-p10-sgd-aug-decay5-big/Mlist",
+      "size": 1872364,
+      "md5_hash": "rM2kgumjMeZMNtPs8C0GKg==",
+      "generation": "1572922834651089"
+    },
+    {
+      "name": "dd/pct-cifar10-mcnn-p10-sgd-aug-decay5-big/ks",
+      "size": 1420,
+      "md5_hash": "ZvmXZXXLpkb6M+mnxJ789A==",
+      "generation": "1572922834618743"
+    },
+    {
+      "name": "dd/pct-cifar10-mcnn-p20-sgd-noaug/Mlist",
+      "size": 95336,
+      "md5_hash": "anROvi7jZAkjSuT1AuKfaA==",
+      "generation": "1572922834609523"
+    },
+    {
+      "name": "dd/pct-cifar10-mcnn-p20-sgd-noaug/ks",
+      "size": 1266,
+      "md5_hash": "J56HYIyvT7oiTlCoqLk/hA==",
+      "generation": "1572922834619317"
+    },
+    {
+      "name": "dd/pct-cifar10-resnet18-50k-p15-adam-rep2/Mlist",
+      "size": 8190316,
+      "md5_hash": "lJe/VlJMb8eY5NRhiKbKxA==",
+      "generation": "1572922835011078"
+    },
+    {
+      "name": "dd/pct-cifar10-resnet18-50k-p15-adam-rep2/ks",
+      "size": 1508,
+      "md5_hash": "pe6sQLfEdtdoWYeiAnFSAA==",
+      "generation": "1572922834609919"
+    },
+    {
+      "name": "dd/pct-cifar10-resnet18-50k-p15-adam/Mlist",
+      "size": 8190316,
+      "md5_hash": "qQaTHM30tGo5L//7ziSnDw==",
+      "generation": "1572922834667284"
+    },
+    {
+      "name": "dd/pct-cifar10-resnet18-50k-p15-adam/ks",
+      "size": 1508,
+      "md5_hash": "pe6sQLfEdtdoWYeiAnFSAA==",
+      "generation": "1572922834593163"
+    },
+    {
+      "name": "dd/pct-cifar10-resnet18-50k-p20-adam-decay/Mlist",
+      "size": 8190316,
+      "md5_hash": "YL9n/mPcnf92QaHxNS8NJQ==",
+      "generation": "1572922834593282"
+    },
+    {
+      "name": "dd/pct-cifar10-resnet18-50k-p20-adam-decay/ks",
+      "size": 1508,
+      "md5_hash": "pe6sQLfEdtdoWYeiAnFSAA==",
+      "generation": "1572922834607149"
+    },
+    {
+      "name": "dd/pct-cifar100-mcnn-p0-sgd-noaug-reps/Mlist",
+      "size": 14910529,
+      "md5_hash": "FPWYFpswAFmxI7blfxtkBQ==",
+      "generation": "1572922834643278"
+    },
+    {
+      "name": "dd/pct-cifar100-mcnn-p0-sgd-noaug-reps/ks",
+      "size": 1508,
+      "md5_hash": "pe6sQLfEdtdoWYeiAnFSAA==",
+      "generation": "1572922834625792"
+    },
+    {
+      "name": "dd/pct-cifar100-mcnn-p0-sgd-noaug/Mlist",
+      "size": 3998060,
+      "md5_hash": "IeRV1OAwAD97AtrLP5QYAw==",
+      "generation": "1572922834601919"
+    },
+    {
+      "name": "dd/pct-cifar100-mcnn-p0-sgd-noaug/ks",
+      "size": 1508,
+      "md5_hash": "pe6sQLfEdtdoWYeiAnFSAA==",
+      "generation": "1572922834746731"
+    },
+    {
+      "name": "dd/pct-mse-resnet-p0-adam-aug/Mlist",
+      "size": 8190316,
+      "md5_hash": "s1ao6Warlqa9YNM/kE87kg==",
+      "generation": "1572922834687113"
+    },
+    {
+      "name": "dd/pct-mse-resnet-p0-adam-aug/ks",
+      "size": 1508,
+      "md5_hash": "pe6sQLfEdtdoWYeiAnFSAA==",
+      "generation": "1572922834739459"
+    },
+    {
+      "name": "dd/pct-mse-resnet-p0-adam-noaug/Mlist",
+      "size": 8190316,
+      "md5_hash": "6FNsecY/cBLyMKbdTIIZgA==",
+      "generation": "1572922834754056"
+    },
+    {
+      "name": "dd/pct-mse-resnet-p0-adam-noaug/ks",
+      "size": 1508,
+      "md5_hash": "pe6sQLfEdtdoWYeiAnFSAA==",
+      "generation": "1572922834755128"
+    },
+    {
+      "name": "dd/pct-mse-resnet-p10-adam/Mlist",
+      "size": 8190316,
+      "md5_hash": "3GCgBAOS44gacz7eIj+wzg==",
+      "generation": "1572922834711674"
+    },
+    {
+      "name": "dd/pct-mse-resnet-p10-adam/ks",
+      "size": 1508,
+      "md5_hash": "pe6sQLfEdtdoWYeiAnFSAA==",
+      "generation": "1572922834807136"
+    }
+  ]
+}

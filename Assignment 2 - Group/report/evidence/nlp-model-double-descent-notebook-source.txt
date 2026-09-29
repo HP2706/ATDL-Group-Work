@@ -1,0 +1,20 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import wandb
+import pandas as pd
+df = pd.read_csv('nlp-model-dd.csv')
+fr = pd.read_csv('dd-translation-model-french.csv')
+fig = plt.figure(figsize=(20,8))
+
+
+plt.plot(df['n'],  df['test_loss'], 'o-',label='En-De')
+plt.plot(fr['n'],  fr['test_loss'], 'o-',label='Fr-En')
+
+ax = plt.gca()
+
+plt.ylabel('Cross-Entropy Test Loss')
+plt.xlabel('Embedding Dimension')
+plt.legend(fontsize=20, ncol=3) 
+
+plt.title('Double Descent of Transformers', pad=12)
+

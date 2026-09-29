@@ -1,0 +1,22 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import wandb
+import pandas as pd
+## data is located at https://console.cloud.google.com/storage/browser/hml-public/dd/nlp-small-datasets/?authuser=2&organizationId=658616372004&project=ml-theory
+df18k = pd.read_csv('df18k.csv')
+df4k = pd.read_csv('df4k.csv')
+df4k
+fig = plt.figure(figsize=(20,8))
+
+
+plt.plot(df4k['n'],  df4k['test_loss'], 'o-',label='d=64')
+plt.plot(df18k['n'],  df18k['test_loss'], 'o-',label='d=80')
+
+ax = plt.gca()
+
+plt.ylabel('Cross-Entropy Test Loss')
+plt.xlabel('Embedding Dimension')
+plt.legend(fontsize=20, ncol=3) 
+
+plt.title('Double Descent of Transformers', pad=12)
+
