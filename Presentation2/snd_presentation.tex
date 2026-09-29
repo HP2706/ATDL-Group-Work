@@ -1,8 +1,6 @@
 \title{DINOv3}
-%\subtitle{Section 2: Information Theory of Deep Learning}
 \author{Oriane Siméoni et al.}
 \date{\today}
-
 
 {\setbeamertemplate{footline}{}
 \begin{frame}[plain]
@@ -13,14 +11,229 @@
 \end{frame}
 }
 
+% --- Overview ---
+% Items for parts 2-4 are placeholders: edit freely.
+\newcommand{\overviewpart}[4]{%
+  % #1 number, #2 title, #3 presenter, #4 items
+  {\color{Accent}\fontsize{22}{24}\selectfont\textbf{#1}}\\[2pt]
+  {\color{Accent}\rule{0.9cm}{1.2pt}}\\[4pt]
+  {\small\textbf{#2}}\\[1pt]
+  {\scriptsize\color{Muted}#3}\\[4pt]
+  {\footnotesize
+  \begin{itemize}\setlength{\itemsep}{2pt}
+    #4
+  \end{itemize}}}
 
-% Background, Motivation and DINOv2
-\begin{frame}{Ideas Julian Part}
-\begin{itemize}
-    \item Motivate importance of good feature representation for any downstream task
-    \item Draw a timeline DINO -> DINOv2 -> Fan et al 2025
-    \item Talk about (Fan et al., 2025) and why scaling from 1B to 7B failed before DINOv3
-\end{itemize}
+\begin{frame}{Overview}
+\vspace{0.3cm}
+\begin{columns}[T,onlytextwidth]
+  \begin{column}{0.235\textwidth}
+    \overviewpart{1}{Background \& motivation}{Julian}{
+      \item Why good features matter
+      \item DINO $\to$ DINOv3
+      \item Why not just scale DINOv2?}
+  \end{column}
+  \begin{column}{0.235\textwidth}
+    \overviewpart{2}{Data \& architecture}{Harald}{
+      \item Curating LVD-1689M
+      \item ViT-7B: RoPE, patch size 16
+      \item Constant schedules}
+  \end{column}
+  \begin{column}{0.235\textwidth}
+    \overviewpart{3}{Training \& losses}{Hans peter}{
+      \item DINO + iBOT objective
+      \item Gram anchoring
+      \item High-resolution Gram teacher}
+  \end{column}
+  \begin{column}{0.235\textwidth}
+    \overviewpart{4}{Post-training \& evaluation}{Mathias}{
+      \item Resolution scaling
+      \item Distilling a model family
+      \item Results \& critique}
+  \end{column}
+\end{columns}
+\end{frame}
+
+% ===================== Julian: background & motivation =====================
+
+% --- Motivation 1: the tasks ---
+\begin{frame}{What do we want to solve?}
+\begin{columns}[c,onlytextwidth]
+\begin{column}{0.38\textwidth}
+  {\color{hypo}\textbf{Global}} {\color{Muted}-- one answer per image}
+  \begin{itemize}
+    \item Classification
+  \end{itemize}
+  \vspace{8pt}
+  {\color{Accent}\textbf{Dense}} {\color{Muted}-- one answer per patch}
+  \begin{itemize}
+    \item Semantic segmentation
+    \item Depth estimation
+    \item Object detection
+  \end{itemize}
+\end{column}
+\begin{column}{0.60\textwidth}
+\centering
+\begin{tikzpicture}[font=\footnotesize, >=Stealth]
+  % input image as a grid of patches
+  \foreach \i in {0,...,3}
+    \foreach \j in {0,...,3}
+      \draw[Muted, fill=white] (\i*0.3, \j*0.3) rectangle ++(0.3, 0.3);
+  \node[Muted] at (0.6, -0.3) {image};
+
+  % frozen encoder
+  \node[draw=Ink, fill=Ink!6, rounded corners=3pt, line width=0.8pt,
+        minimum width=1.5cm, minimum height=1.5cm, align=center]
+        (enc) at (2.65, 0.6) {Encoder\\[-1pt]{\scriptsize\color{Muted}frozen}};
+  \draw[->, Muted] (1.35, 0.6) -- (enc.west);
+
+  % outputs: CLS token (global) and patch tokens (dense)
+  \fill[hypo] (4.05, 1.35) rectangle ++(0.3, 0.3);
+  \node[hypo] at (4.2, 1.95) {CLS};
+  \foreach \i in {0,...,2}
+    \foreach \j in {0,...,2}
+      \draw[Accent, fill=Accent!15] (3.9 + \i*0.2, -0.45 + \j*0.2) rectangle ++(0.2, 0.2);
+  \node[Accent] at (4.2, -0.75) {patches};
+  \draw[->, Muted] (enc.east) -- (4.0, 1.5);
+  \draw[->, Muted] (enc.east) -- (3.85, -0.15);
+
+  % light task heads
+  \draw[->, hypo]   (4.45, 1.5)   -- (5.2, 1.5)  node[right, Ink] {classification};
+  \draw[->, Accent] (4.6, -0.05)  -- (5.2, 0.45) node[right, Ink] {segmentation};
+  \draw[->, Accent] (4.6, -0.15)  -- (5.2, -0.15) node[right, Ink] {depth};
+  \draw[->, Accent] (4.6, -0.25)  -- (5.2, -0.75) node[right, Ink] {detection};
+  \node[Muted, font=\scriptsize] at (5.95, 2.1) {light heads};
+\end{tikzpicture}
+\end{column}
+\end{columns}
+\vfill
+\centering
+{\color{Accent}\textbf{All of these need good features}}
+$\;\Rightarrow\;$ one general encoder, reused frozen across tasks
+\vspace{0.4cm}
+\end{frame}
+
+% --- Motivation 2: what "good" means ---
+\begin{frame}{What makes a feature representation good?}
+\centering
+\begin{tikzpicture}[font=\footnotesize, >=Stealth, scale=0.85]
+  % ---- left: raw input space (x1, x2) ----
+  \draw[->, Muted] (-1.9, 0) -- (1.9, 0) node[right] {$x_1$};
+  \draw[->, Muted] (0, -1.9) -- (0, 1.9) node[above] {$x_2$};
+  \pgfmathsetseed{3}
+  \foreach \k in {1,...,40} {
+    \pgfmathsetmacro{\rad}{0.6*rnd}
+    \pgfmathsetmacro{\ang}{360*rnd}
+    \fill[Teal] (\ang:\rad) circle (1.6pt);
+  }
+  \foreach \k in {1,...,60} {
+    \pgfmathsetmacro{\rad}{1.4 + 0.15*rand}
+    \pgfmathsetmacro{\ang}{360*rnd}
+    \fill[limit] (\ang:\rad) circle (1.6pt);
+  }
+  \node[Muted] at (0, -2.3) {not linearly separable};
+
+  % ---- transformation ----
+  \onslide<2->{
+    \draw[->, line width=1pt, Ink] (2.3, 0) -- (4.1, 0)
+      node[midway, above] {\normalsize$\varphi$}
+      node[midway, below, Muted] {$(x_1, x_2) \mapsto (r, \theta)$};
+  }
+
+  % ---- right: feature space (r, theta), same points ----
+  \onslide<2->{
+    \begin{scope}[shift={(4.7, -1.7)}]
+      \draw[->, Muted] (0, 0) -- (3.2, 0) node[right] {$r$};
+      \draw[->, Muted] (0, 0) -- (0, 3.4) node[above] {$\theta$};
+      \pgfmathsetseed{3}
+      \foreach \k in {1,...,40} {
+        \pgfmathsetmacro{\rad}{0.6*rnd}
+        \pgfmathsetmacro{\ang}{360*rnd}
+        \fill[Teal] (1.8*\rad, \ang/360*3.1) circle (1.6pt);
+      }
+      \foreach \k in {1,...,60} {
+        \pgfmathsetmacro{\rad}{1.4 + 0.15*rand}
+        \pgfmathsetmacro{\ang}{360*rnd}
+        \fill[limit] (1.8*\rad, \ang/360*3.1) circle (1.6pt);
+      }
+      \draw[dashed, Ink, line width=0.8pt] (1.8, -0.1) -- (1.8, 3.3);
+      \node[Muted] at (1.6, -0.6) {linearly separable};
+    \end{scope}
+  }
+\end{tikzpicture}
+
+\vspace{6pt}
+\onslide<3->{
+  {\color{Accent}\large\textbf{How do we \emph{learn} an encoding $\varphi$ where meaningful\\
+  properties become linearly separable -- for any image, without labels?}}
+}
+\end{frame}
+
+% --- Background: timeline ---
+\begin{frame}{From DINO to DINOv3}
+\vfill
+\centering
+\begin{tikzpicture}[>=Stealth,
+    yr/.style   = {anchor=south, font=\scriptsize, text=Muted},
+    name/.style = {anchor=south, font=\normalsize\bfseries, text=Ink},
+    desc/.style = {anchor=north, text width=2.6cm, align=center, font=\scriptsize, text=Ink}]
+  \draw[->, Muted, line width=1pt] (-0.5, 0) -- (14.0, 0);
+
+  % DINO
+  \onslide<1->{
+    \fill[Ink] (0.9, 0) circle (3pt);
+    \node[yr]   at (0.9, 0.15) {2021};
+    \node[name] at (0.9, 0.5)  {DINO};
+    \node[desc] at (0.9, -0.25) {{\color{Muted}Caron et al.}\\[2pt]
+      Self-distillation, no labels: a student matches an EMA teacher across crops\\[3pt]
+      {\color{hypo}\textbf{global}}};
+  }
+  % iBOT
+  \onslide<2->{
+    \fill[Ink] (3.8, 0) circle (3pt);
+    \node[yr]   at (3.8, 0.15) {2022};
+    \node[name] at (3.8, 0.5)  {iBOT};
+    \node[desc] at (3.8, -0.25) {{\color{Muted}Zhou et al.}\\[2pt]
+      Adds masked patch prediction: a patch-level loss\\[3pt]
+      {\color{Accent}\textbf{+ dense}}};
+  }
+  % DINOv2
+  \onslide<3->{
+    \fill[Ink] (6.7, 0) circle (3pt);
+    \node[yr]   at (6.7, 0.15) {2023};
+    \node[name] at (6.7, 0.5)  {DINOv2};
+    \node[desc] at (6.7, -0.25) {{\color{Muted}Oquab et al.}\\[2pt]
+      DINO + iBOT at scale: ViT-g (1.1B), curated LVD-142M. First SSL to rival CLIP\\[3pt]
+      {\color{hypo}\textbf{global}} + {\color{Accent}\textbf{dense}}};
+  }
+  % Web-DINO
+  \onslide<4->{
+    \fill[Ink] (9.6, 0) circle (3pt);
+    \node[yr]   at (9.6, 0.15) {2025};
+    \node[name] at (9.6, 0.5)  {Web-DINO};
+    \node[desc] at (9.6, -0.25) {{\color{Muted}Fan et al.}\\[2pt]
+      DINOv2 recipe scaled to 7B on 2B uncurated web images\\[3pt]
+      {\color{hypo}\textbf{global $\uparrow$}} \;
+      {\color{limit}\textbf{dense $\downarrow$}}};
+  }
+  % DINOv3
+  \onslide<5->{
+    \fill[Accent] (12.5, 0) circle (3pt);
+    \draw[Accent, line width=1.2pt] (12.5, 0) circle (5.5pt);
+    \node[yr]   at (12.5, 0.2) {2025};
+    \node[name, text=Accent] at (12.5, 0.55) {DINOv3};
+    \node[desc] at (12.5, -0.3) {{\color{Muted}Siméoni et al.}\\[2pt]
+      7B, curated LVD-1689M, Gram anchoring\\[3pt]
+      {\color{hypo}\textbf{global $\uparrow$}} \;
+      {\color{Accent}\textbf{dense $\uparrow$}}};
+  }
+\end{tikzpicture}
+\vfill
+\onslide<5->{
+  {\color{Accent}\textbf{Why not just scale DINOv2?}}
+  {\color{Muted}What breaks, and what does DINOv3 do about it?}
+}
+\vspace{0.4cm}
 \end{frame}
 
 % DATA CURATION
