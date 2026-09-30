@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Reduced Figure 6: clean CIFAR-10 CNNs without augmentation, SGD versus Adam.
-# Run `bash code/scripts/figure_6.sh plan=true` to print both grids locally.
+# Run `bash code/scripts/figure_6.sh plan=true` to print the clean Adam grid locally.
 # Run `bash code/scripts/figure_6.sh` with the configured launch backend.
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -24,11 +24,6 @@ arguments=(
   noise_rates=0.0
   batch_size=128
   runs_per_gpu=4
-  #variants.sgd.schedule=inverse_sqrt
-  #variants.sgd.learning_rate=0.1
-  #variants.sgd.momentum=0.0
-  #variants.sgd.max_steps=50000
-  #variants.sgd.measure_every_steps=1250
   variants.adam.schedule=constant
   variants.adam.learning_rate=0.0001
   variants.adam.epochs=400

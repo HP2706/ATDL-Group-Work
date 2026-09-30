@@ -35,4 +35,4 @@ arguments=(
   wandb_entity=hprjdk
 )
 
-exec "$python_bin" "$script_dir/../launch.py" submit "$script_dir/cifar10_cnn_no_data_aug.sh" 10 "${arguments[@]}" "$@"
+exec "$python_bin" "$script_dir/../launch.py" submit "$script_dir/cifar10_cnn_sgd_no_data_aug.sh" 10 "${arguments[@]}" "$@"

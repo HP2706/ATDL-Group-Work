@@ -183,8 +183,6 @@ def save_predictions(
 def train(
     config: VisionConfig,
     resume: str | None = None,
-    progress_position: int = 0,
-    checkpoint_callback: Callable[[], None] | None = None,
     progress_callback: Callable[[int], None] | None = None,
 ) -> Path:
     seed_everything(config.seed)
@@ -256,8 +254,6 @@ def train(
         unit="batch",
         mininterval=5.0,
         dynamic_ncols=True,
-        position=progress_position,
-        leave=progress_position == 0,
     )
     while (config.max_steps is None or step < config.max_steps) and (config.epochs is None or epoch < config.epochs):
         epoch_started = time.perf_counter()
@@ -307,8 +303,6 @@ def train(
             if step % config.checkpoint_every == 0 or (config.max_steps is not None and step == config.max_steps):
                 save_checkpoint(run_dir, model, optimizer, step, next_epoch, next_offset)
                 state_path.write_text(json.dumps({"best_train_loss": best_train_loss, "stale_steps": stale_steps, "drop_count": drop_count}))
-                if checkpoint_callback is not None:
-                    checkpoint_callback()
             if stop.requested:
                 if step % config.eval_every != 0:
                     record_evaluation(run_dir, {"step": step, "epoch": next_epoch, "train": evaluate(model, train_eval_set, config.batch_size, device), "test": evaluate(model, test_set, config.batch_size, device)}, wandb_run)
@@ -316,8 +310,6 @@ def train(
                 state_path.write_text(json.dumps({"best_train_loss": best_train_loss, "stale_steps": stale_steps, "drop_count": drop_count}))
                 result_path = export_vision(run_dir, Path(config.results_dir))
                 publish_result(result_path, wandb_run)
-                if checkpoint_callback is not None:
-                    checkpoint_callback()
                 progress.close()
                 return run_dir
         completed_updates = step - epoch_start_step
@@ -340,8 +332,6 @@ def train(
     result_path = export_vision(run_dir, Path(config.results_dir))
     publish_result(result_path, wandb_run)
     (run_dir / "completed.json").write_text(json.dumps({"step": step, "epoch": epoch}) + "\n")
-    if checkpoint_callback is not None:
-        checkpoint_callback()
     progress.close()
     return run_dir
 
@@ -352,8 +342,6 @@ def run(**kwargs: object) -> str:
     config = VisionConfig.model_validate(kwargs)
     if progress_fd is None:
         return str(train(config, str(resume) if resume is not None else None))
-
-    import os
 
     descriptor = int(progress_fd)
 

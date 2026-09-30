@@ -37,7 +37,7 @@ For UCloud, the launcher starts a ten-minute CPU staging job from the configured
 
 `code/scripts/cifar10_resnet.sh` defines the reduced ResNet18/CIFAR-10 sweep: widths `{2,3,4,6,8,12,16,24,32,64}` × noise `{0,10,20}%`, one seed, augmentation, Adam at constant LR `1e-4`, batch size 128, and 400 epochs. `code/scripts/cifar100_resnet.sh` uses the same grid on CIFAR-100. The chz-based Python sweep derives steps per epoch from the selected dataset and sample count, resumes incomplete conditions, runs four conditions per visible GPU, and displays one global progress bar in optimizer steps. Measurements and resumable checkpoints are saved every ten epochs. W&B receives metrics; comparison-compatible Parquet and checkpoints stay under persistent `/work` storage.
 
-`code/scripts/figure_6.sh` currently defines the Adam arm of the reduced clean, non-augmented CIFAR-10 CNN comparison: 11 widths at 400 epochs. The separate `cifar10_cnn_no_data_aug.sh` supplies the matching clean SGD arm at 50,000 steps.
+`code/scripts/figure_6.sh` currently defines the Adam arm of the reduced clean, non-augmented CIFAR-10 CNN comparison: 11 widths at 400 epochs. The separate `cifar10_cnn_sgd_no_data_aug.sh` supplies the matching clean SGD arm at 50,000 steps.
 
 `code/scripts/figure_11a.sh` adds augmented CIFAR-10 CNN runs at 12,500 and 25,000 training samples, 10% and 20% label noise, and widths `{1,2,3,4,6,8,12,16,24,32,64}`. These 44 conditions use SGD for 50,000 steps and one seed, matching the reduced horizon of our completed 50,000-sample sweep. This is a sparse, single-seed subset of the paper's Figure 11(a).
 
@@ -66,17 +66,6 @@ bash code/scripts/cifar10_cnn_sgd.sh submit_plan=true
 ```
 
 The CNN script creates a timestamped `RUN_ROOT`. To resume after interruption, set `RUN_ROOT` to that exact previous directory. The run files and Parquet results stay under `/work`; W&B receives only metrics. The 50,000-step runs are a shorter comparison, not completed 500,000-step paper reproductions. Extending them to 500,000 steps would require a deliberate change to the strict saved-config resume check.
-
-### Modal A100 timing pilot
-
-`modal_vision_pilot.py` is a thin Modal launcher around the same `VisionConfig` and `train()` path. It ran two epochs at widths 1, 30, and 64, all three noise rates, both image models, and both CIFAR datasets on an A100. It stores CIFAR data, checkpoints, predictions, and timing logs in the `atdl-double-descent-vision-pilot` Modal Volume. The `checkpoint_callback` commits completed checkpoints to that Volume so interrupted runs can resume. A repeated launch with the **same run name** skips completed conditions.
-
-```bash
-MODAL_PROFILE=mleagent /opt/miniconda3/envs/ML/bin/modal run modal_vision_pilot.py \
-  --run-name vision-pilot-2026-09-26-18-41-30 --max-new-conditions 36
-```
-
-The completed run's [report](../our-results-folder/pilots/vision-pilot-2026-09-26-18-41-30/REPORT.md), JSON summary, and 36 Parquet endpoints were copied into `our-results-folder/pilots/`. The pilot endpoints are local-only and excluded from Git. These are short timing runs; the 4,000-epoch and 500,000/1,000,000-update grids have **not** been launched.
 
 ### CIFAR setup
 
