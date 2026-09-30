@@ -185,6 +185,36 @@ dino note/.style={align=center,font=\fontsize{7}{9}\selectfont,text=Muted}}
     \draw[step=\step cm,white,opacity=.65,line width=.2pt] (0,0) grid (#3,#3);
   \end{scope}}
 
+\begin{frame}{Pretraining losses}
+  \begin{minipage}{\linewidth}
+  \scriptsize
+  \textbf{Prototype:} one learned row of the head's final weight matrix. The DINO head scores the CLS summary against these rows;
+  iBOT has a separate head for patches. $p_t(c)$ is the teacher's weight for vector $c$.\\
+  \textbf{Collapse control:} Sinkhorn balances prototype use across a batch;
+  KoLeo spreads CLS features. $p_t$ is the balanced target, $p_s$ the student prediction.
+  \end{minipage}
+  \vspace{-0.12cm}
+  \footnotesize
+  \begin{align*}
+    \mathcal L_{\mathrm{DINO}}
+      &= -\sum_c p^{\mathrm{CLS}}_{t}(c)\log p^{\mathrm{CLS}}_{s}(c)
+      &&\text{match CLS prototype distributions across crops},\\[-2pt]
+    \mathcal L_{\mathrm{iBOT}}
+      &= -\frac{1}{|M|}\sum_{i\in M}\sum_c p_{t,i}(c)\log p_{s,i}(c)
+      &&\text{match prototype distributions for masked patches }(M),\\[-2pt]
+    \mathcal L_{\mathrm{DKoLeo}}
+      &= -\frac{1}{B}\sum_{b=1}^{B}\log\!\left(\min_{j\ne b}
+          \|z_b-z_j\|_2\right)
+      &&\text{spread normalized CLS features }(z).
+  \end{align*}
+  \vspace{-0.16cm}
+  \begin{center}
+    \normalsize $\displaystyle
+      \mathcal L_{\mathrm{Pre}}=\mathcal L_{\mathrm{DINO}}
+      +\mathcal L_{\mathrm{iBOT}}+0.1\mathcal L_{\mathrm{DKoLeo}}$
+  \end{center}
+\end{frame}
+
 \begin{frame}{Longer training hurts local features}
   \begin{columns}[T,onlytextwidth]
     \begin{column}{0.64\textwidth}

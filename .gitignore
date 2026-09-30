@@ -40,3 +40,4 @@ __pycache__/
 
 # Machine-specific experiment launch settings
 .atdl-launch.local.toml
+AGENTS.md
