@@ -297,7 +297,7 @@ def figure_4(paper: pd.DataFrame, ours: pd.DataFrame, paper_cifar100: pd.DataFra
                 for noise in NOISE:
                     values = frame.loc[frame["epoch"].eq(400) & frame["label_noise"].eq(noise)].set_index("model_width").loc[list(WIDTHS)]
                     ax.plot(WIDTHS, values[metric], color=CNN_COLORS[noise], lw=2.2,
-                            marker="o" if source == "Ours" else None, markersize=4)
+                            marker=None)
                 ax.set(title=f"{source}: {dataset}, {'test' if metric_index == 0 else 'train'} error",
                        ylabel="Error fraction", xlabel="ResNet18 width",
                        ylim=(0, 0.55 if dataset_index == 0 else 0.85), xlim=(2,64))
@@ -365,7 +365,7 @@ def figure_5_cnn(paper: pd.DataFrame, ours: pd.DataFrame,
                     if tuple(endpoints["model_width"]) != SUBSET_WIDTHS:
                         raise ValueError("Figure 5 needs the same eleven widths for both sources")
                     ax.plot(endpoints["model_width"], endpoints[metric], color=CNN_COLORS[noise], lw=2.2,
-                            marker="o" if source == "Ours" else None, markersize=4)
+                            marker=None)
                 ax.set(title=f"{source}: {setting}\n{'Test' if metric_index == 0 else 'Train'} error",
                        ylabel="Error fraction", xlabel="CNN width", xlim=(1,64), ylim=(0,0.85))
                 ax.set_xticks((1,16,32,48,64))
