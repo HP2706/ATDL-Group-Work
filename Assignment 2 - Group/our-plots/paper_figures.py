@@ -13,6 +13,7 @@ import pandas as pd
 import pyarrow.parquet as pq
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
+from matplotlib.lines import Line2D
 from matplotlib.ticker import FixedLocator, NullLocator, StrMethodFormatter
 from vision import load_colormap, noisy_test_error, rescale_viridis
 
@@ -273,26 +274,42 @@ def plot_noise_curves(ax: Axes, frame: pd.DataFrame, metric: str) -> None:
         ax.legend(frameon=False, fontsize=8, loc="upper right")
 
 
+def comparison_legend(fig: Figure, ours_only: bool = False) -> None:
+    handles = [Line2D([], [], color=CNN_COLORS[noise], lw=2.5, label=f"{noise:.0%} label noise")
+               for noise in NOISE]
+    if not ours_only:
+        handles.append(Line2D([], [], color="black", lw=2.5, label="Authors"))
+    handles.append(Line2D([], [], color="black", lw=2.5, linestyle="--", marker="o", label="Ours"))
+    fig.legend(handles=handles, loc="outside lower center", ncol=5,
+               frameon=False, fontsize=13, handlelength=2.5)
+
+
 def figure_4(paper: pd.DataFrame, ours: pd.DataFrame, paper_cifar100: pd.DataFrame,
              ours_cifar100: pd.DataFrame, ours_only: bool = False) -> Figure:
-    """Ours above authors, two dataset columns with separate test/train panels."""
-    row_names = ("Ours",) if ours_only else ("Ours", "Authors")
-    fig = plt.figure(figsize=(18, 4 * len(row_names)), layout="constrained")
-    grid = fig.add_gridspec(len(row_names), 2)
-    for row, name in enumerate(row_names):
-        for column, dataset in enumerate(("CIFAR-100", "CIFAR-10")):
-            pair = grid[row, column].subgridspec(1, 2, wspace=0.18)
-            test_ax = fig.add_subplot(pair[0, 0])
-            train_ax = fig.add_subplot(pair[0, 1], sharex=test_ax, sharey=test_ax)
-            frame = (ours_cifar100 if column == 0 else ours) if row == 0 else (paper_cifar100 if column == 0 else paper)
-            plot_noise_curves(test_ax, frame, "test_error")
-            plot_noise_curves(train_ax, frame, "train_error")
-            test_ax.set_title(f"{name} · {dataset} · Test")
-            train_ax.set_title(f"{name} · {dataset} · Train")
-            test_ax.set_ylim(0, 0.85 if column == 0 else 0.55)
-    return caption(fig, "Figure 4 · ResNet18 model-wise double descent",
-                   "Our CIFAR-10 and CIFAR-100 runs at 0/10/20% noise, ten widths, epoch 400." if ours_only else
-                   "Separate test and train panels. Authors' CIFAR-10 has 0/5/10/15/20% noise, ours has 0/10/20%, at point/epoch 400.")
+    """Compare sources directly at common noise levels in four readable panels."""
+    fig, axes = plt.subplots(2, 2, figsize=(12, 8), sharex=True, sharey="col",
+                             layout="constrained")
+    for column, (dataset, author_frame, our_frame) in enumerate((
+            ("CIFAR-10", paper, ours), ("CIFAR-100", paper_cifar100, ours_cifar100))):
+        sources = (("Ours", our_frame),) if ours_only else (("Authors", author_frame), ("Ours", our_frame))
+        for row, metric in enumerate(("test_error", "train_error")):
+            ax = axes[row, column]
+            for source, frame in sources:
+                for noise in NOISE:
+                    values = frame.loc[frame["epoch"].eq(400) & frame["label_noise"].eq(noise)].set_index("model_width").loc[list(WIDTHS)]
+                    ax.plot(WIDTHS, values[metric], color=CNN_COLORS[noise], lw=2.2,
+                            linestyle="--" if source == "Ours" else "-",
+                            marker="o" if source == "Ours" else None, markersize=4)
+            ax.set(title=f"{dataset}: {'test' if row == 0 else 'train'} error",
+                   ylabel="Error fraction", ylim=(0, 0.55 if column == 0 else 0.85))
+            ax.set_xticks((2, 16, 32, 48, 64))
+            ax.set_xlim(2, 64)
+            ax.tick_params(labelsize=12)
+            if row == 1:
+                ax.set_xlabel("ResNet18 width")
+    comparison_legend(fig, ours_only)
+    fig.suptitle("ResNet18 width sweeps", fontsize=17, fontweight="bold")
+    return fig
 
 
 def figure_9(paper: pd.DataFrame, ours: pd.DataFrame, ours_only: bool = False) -> Figure:
@@ -330,36 +347,38 @@ def figure_9(paper: pd.DataFrame, ours: pd.DataFrame, ours_only: bool = False) -
 def figure_5_cnn(paper: pd.DataFrame, ours: pd.DataFrame,
                  paper_noaug: pd.DataFrame, ours_noaug: pd.DataFrame,
                  ours_only: bool = False) -> Figure:
-    """Augmented and non-augmented CNN width curves near 50,000 steps."""
-    rows = (("Ours · augmentation · 50k steps", ours, "global_step"),
-            ("Ours · no augmentation · 50k steps", ours_noaug, "global_step")) if ours_only else (
-            ("Authors · augmentation · estimated ≈50k steps", paper, "measurement_index"),
-            ("Ours · augmentation · 50k steps", ours, "global_step"),
-            ("Authors · no augmentation · estimated ≈50k steps", paper_noaug, "measurement_index"),
-            ("Ours · no augmentation · 50k steps", ours_noaug, "global_step"))
-    fig, axes = plt.subplots(len(rows), 2, figsize=(14, 3.5 * len(rows)), sharex=True, sharey="col", layout="constrained", squeeze=False)
-    for row, (name, full_frame, time_column) in enumerate(rows):
-        frame = (full_frame.loc[((full_frame["measurement_index"] + 1)
-                                 * CNN_PAPER_ESTIMATED_STEP_INTERVAL).le(CNN_COMPARISON_STEPS)]
-                 if time_column == "measurement_index" else full_frame)
-        for column, metric in enumerate(("test_error", "train_error")):
+    """Overlay sources by augmentation setting, with the time assumption in the caption."""
+    fig, axes = plt.subplots(2, 2, figsize=(12, 8), sharex=True, sharey=True,
+                             layout="constrained")
+    for column, (setting, author_frame, our_frame) in enumerate((
+            ("With augmentation", paper, ours), ("Without augmentation", paper_noaug, ours_noaug))):
+        sources = (("Ours", our_frame),) if ours_only else (("Authors", author_frame), ("Ours", our_frame))
+        for row, metric in enumerate(("test_error", "train_error")):
             ax = axes[row, column]
-            for noise in NOISE:
-                selected = frame.loc[frame["label_noise"].eq(noise) & frame["model_width"].le(64)]
-                endpoints = selected.loc[selected[time_column].eq(
-                    selected.groupby("model_width")[time_column].transform("max"))]
-                endpoints = endpoints.sort_values("model_width")
-                ax.plot(endpoints["model_width"], endpoints[metric],
-                        "--" if metric == "train_error" else "-", lw=2,
-                        color=CNN_COLORS[noise], label=f"{noise:.0%} noise")
-            ax.set(title=f"{name} · {'Test' if column == 0 else 'Train'} error",
-                   xlabel="CNN width", ylabel="Error fraction", xlim=(1, 64), ylim=(0, 0.85))
+            for source, full_frame in sources:
+                time_column = "measurement_index" if source == "Authors" else "global_step"
+                frame = (full_frame.loc[((full_frame["measurement_index"] + 1)
+                                         * CNN_PAPER_ESTIMATED_STEP_INTERVAL).le(CNN_COMPARISON_STEPS)]
+                         if source == "Authors" else full_frame)
+                for noise in NOISE:
+                    selected = frame.loc[frame["label_noise"].eq(noise)
+                                         & frame["model_width"].isin(SUBSET_WIDTHS)]
+                    endpoints = selected.loc[selected[time_column].eq(
+                        selected.groupby("model_width")[time_column].transform("max"))].sort_values("model_width")
+                    if tuple(endpoints["model_width"]) != SUBSET_WIDTHS:
+                        raise ValueError("Figure 5 needs the same eleven widths for both sources")
+                    ax.plot(endpoints["model_width"], endpoints[metric], color=CNN_COLORS[noise], lw=2.2,
+                            linestyle="--" if source == "Ours" else "-",
+                            marker="o" if source == "Ours" else None, markersize=4)
+            ax.set(title=f"{setting}: {'test' if row == 0 else 'train'} error",
+                   ylabel="Error fraction", xlim=(1, 64), ylim=(0, 0.85))
             ax.set_xticks((1, 16, 32, 48, 64))
-            if column == 0:
-                ax.legend(frameon=False)
-    return caption(fig, "Figure 5 subset · CIFAR-10 CNN augmentation",
-                   "Our augmented and non-augmented one-seed runs through 50,000 steps." if ours_only else
-                   "Paper index 194 ≈ 49,920 steps (256 steps/point inferred, unverified); ours exactly 50,000 steps. Our non-augmented grid has 11 widths.")
+            ax.tick_params(labelsize=12)
+            if row == 1:
+                ax.set_xlabel("CNN width")
+    comparison_legend(fig, ours_only)
+    fig.suptitle("Effect of data augmentation on CIFAR-10 CNNs", fontsize=17, fontweight="bold")
+    return fig
 
 
 def figure_10_cnn(
@@ -568,6 +587,22 @@ def figure_12_cnn(project_dir: Path, subsets: pd.DataFrame, ours_only: bool = Fa
                    "Same 3 sample sizes × 11 widths and color scale; authors' final recorded point versus our one-seed 50,000-step endpoint.")
 
 
+def style_figure(fig: Figure) -> None:
+    """Keep text and legends legible when comparison charts are placed in the report."""
+    for ax in fig.axes:
+        ax.tick_params(labelsize=11)
+        ax.xaxis.label.set_fontsize(13)
+        ax.yaxis.label.set_fontsize(13)
+        ax.title.set_fontsize(14)
+        legend = ax.get_legend()
+        if legend is not None:
+            for label in legend.get_texts():
+                label.set_fontsize(13)
+    for legend in fig.legends:
+        for label in legend.get_texts():
+            label.set_fontsize(13)
+
+
 def save_figures(project_dir: Path, output_dir: Path) -> dict[int, Path]:
     """Save matched comparison and ours-only PNGs under one plot root."""
     paper, ours, paper_cifar100 = load_comparison(project_dir)
@@ -583,6 +618,7 @@ def save_figures(project_dir: Path, output_dir: Path) -> dict[int, Path]:
             fig = (figure_4(paper, ours, paper_cifar100, ours_cifar100, ours_only)
                    if number == 4 else render(paper, ours, ours_only))
             path = directory / f"figure_{number:02d}.png"
+            style_figure(fig)
             fig.savefig(path, dpi=200, bbox_inches="tight")
             plt.close(fig)
             if not ours_only:
@@ -611,6 +647,7 @@ def save_figures(project_dir: Path, output_dir: Path) -> dict[int, Path]:
         for ours_only, directory in ((False, comparison_dir), (True, ours_dir)):
             fig = render(*arguments, ours_only=ours_only)
             path = directory / name
+            style_figure(fig)
             fig.savefig(path, dpi=200, bbox_inches="tight")
             plt.close(fig)
             if not ours_only:

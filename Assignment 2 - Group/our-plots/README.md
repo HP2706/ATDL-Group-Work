@@ -37,3 +37,5 @@ The visual geometry and colormap follow the authors' code. We corrected the nois
 Figure 10 reference selection: clean `pct-cifar10-mcnn-50000-p0-sgd-big` plus `dd_grid_p20` filtered to width 128 and sample size 50,000. The latter ends at 21.67% test error; the previously selected `pct-cifar10-mcnn-50000-p20-sgd-big` ends at 37.05% and is not substituted for the sample-grid history. Saved-position axes remain unverified physical time, with different series lengths.
 
 The report appendix contains only paired comparison assets. Figure 11(a) excludes the unmatched 10% subset row and compares the two sources at 20% noise. Standalone assets remain on disk for analysis but are not included in the report.
+
+Figures 4 and 5 overlay the two sources on common widths and noise rates: solid lines are authors, dashed lines with markers are ours. A shared legend identifies noise and source; Figure 5 keeps its unverified time conversion in the caption. All report comparison legends use at least 13-point plot text.
