@@ -516,8 +516,7 @@ def figure_11a_cnn(project_dir: Path, subsets: pd.DataFrame, ours_only: bool = F
     rows = (("Ours · 20% noise · 50,000 steps", final, 0.2),
             ("Ours · 10% noise · 50,000 steps", final, 0.1)) if ours_only else (
             ("Authors · 20% noise · final recorded point", paper_sample_grid(project_dir), None),
-            ("Ours · 20% noise · 50,000 steps", final, 0.2),
-            ("Ours · 10% noise · 50,000 steps", final, 0.1))
+            ("Ours · 20% noise · 50,000 steps", final, 0.2))
     fig, axes = plt.subplots(len(rows), 2, figsize=(12, 3.7 * len(rows)), sharex=True, sharey="col", layout="constrained", squeeze=False)
     for row, (title, frame, noise) in enumerate(rows):
         for column, metric in enumerate(("test_error", "train_error")):
@@ -535,7 +534,7 @@ def figure_11a_cnn(project_dir: Path, subsets: pd.DataFrame, ours_only: bool = F
                 ax.legend(frameon=False)
     return caption(fig, "Figure 11(a) subset · CIFAR-10 CNN sample sizes",
                    "Our 10% and 20% noise grids: three sample sizes, 11 widths, one seed, 50,000 steps." if ours_only else
-                   "20% rows compare the same 3 sample sizes × 11 widths at different horizons. Published 10% subset data were not released; our 10% row is shown separately.")
+                   "Both: 20% noise, same 3 sample sizes × 11 widths, different horizons. Unmatched 10% subset runs are excluded.")
 
 
 def figure_12_cnn(project_dir: Path, subsets: pd.DataFrame, ours_only: bool = False) -> Figure:

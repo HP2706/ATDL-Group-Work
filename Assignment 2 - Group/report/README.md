@@ -35,11 +35,8 @@ The current `main.tex` is a short factual working draft under this structure, no
 
 - Main Figure 1: noise-matched released-data reconstruction versus ours, both at 10% noise, ten widths, and 400 displayed epochs.
 - Appendix decision table (`appendix-protocol.tex`): one row per core model, data, or training setting, with exact journal pages, appendix subsections, released filenames, and factual differences. The methodology references this table.
-- Appendix Figure 1 reference: the original 15% journal-paper opening figure remains alongside the authors' matched 10% reconstruction.
-- Appendix A: all ten existing paired comparison charts, including their restricted data selections.
-- Appendix B: ten literal side-by-side pages, our standalone image on the left and the broader authors' released-data reconstruction on the right. These are context comparisons, not equal-horizon controls.
-- Appendix C: our ten standalone charts at larger size.
-- Appendix D: authors' standalone reconstructions for those same ten figure families, with multipart figures grouped on a page.
+- Appendix A: the full settings comparison with source pages and released filenames.
+- Appendix B: one gallery of ten paired replication charts, each comparing ours with the authors. No standalone or duplicate side-by-side galleries are included.
 
 The journal's opening figure uses **15% noise and 4,000 epochs**; our adaptation uses **10% noise and 400 epochs**. The existing matched Figure 1 chart uses the authors' released **10%** data, not their original opening figure. Keep those distinctions explicit.
 
@@ -53,7 +50,7 @@ The journal's opening figure uses **15% noise and 4,000 epochs**; our adaptation
 
 - `main.tex`: report source, opened in the native LaTeX editor.
 - `references.bib`: paper citation; use `\cite{nakkiran2021deepdouble}`.
-- `appendix-figures.tex`: our standalone figures and the authors' standalone reconstructions, included by `main.tex`. The combined and duplicate side-by-side galleries have been removed.
+- `appendix-figures.tex`: the ten paired replication charts, included by `main.tex`; standalone galleries are excluded.
 - `experiment-cost-audit.tex`: the old cost/inventory sections removed from the active manuscript.
 - `draft-before-reorganization.tex`: exact snapshot of the edited draft before this reorganization, including its unfinished abstract.
 - `paper-selection-cost-report.tex`: earlier historical paper-selection comparison.

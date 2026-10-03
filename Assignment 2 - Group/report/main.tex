@@ -162,9 +162,8 @@ notebook convention of measurement index plus one; ours are recorded
 training epochs. Each side uses one released or measured run per width,
 not the five-trial mean of the original Figure~1. Red curves show the
 minimum observed test error over the displayed evaluations, not
-validation-based early stopping. The original 15\%-noise, 4,000-epoch
-opening figure is retained separately in Appendix~\ref{app:authors-figure_01}
-for reference~\cite{nakkiran2021deepdouble}.}
+validation-based early stopping. The original opening figure instead uses 15\% noise and
+4,000 epochs~\cite{nakkiran2021deepdouble}.}
 \label{fig:opening}
 \end{figure*}
 
@@ -173,8 +172,8 @@ for reference~\cite{nakkiran2021deepdouble}.}
 The width sweeps and associated comparisons are organized by their
 experimental question rather than by compute cost. Paper Figures 1,
 2, 4, and 5 concern width and noise or augmentation; Figures 6 and 7
-add optimizer and dataset comparisons. Our figures and the authors' reconstructions are in
-Appendices~\ref{app:ours} and~\ref{app:published}. At 20\% noise, our augmented
+add optimizer and dataset comparisons. All replicated figure families are presented as comparisons of ours
+with the authors in Appendix~\ref{app:comparisons}. At 20\% noise, our augmented
 CIFAR-10 CNN test error rises from 21.74\% at width 16 to 28.11\%
 at width 48, then falls to 25.88\% at width 128 at step 50,000.
 This single-seed non-monotonicity does not establish the paper's
@@ -183,9 +182,9 @@ converged interpolation-threshold result.
 \subsection{Training time}
 Paper Figures 9 and 10 motivate comparisons of width-dependent
 training trajectories. Our ResNet histories cover 400 epochs and our
-CNN histories cover 50,000 steps. Figure~\ref{app:ours-figure_09}
+CNN histories cover 50,000 steps. Figure~\ref{app:matched-figure_09}
 uses the ResNet notebook's plotted epoch convention.
-Figure~\ref{app:ours-figure_10} covers only the width-128 CIFAR-10
+Figure~\ref{app:matched-figure_10} covers only the width-128 CIFAR-10
 CNN arm of paper Figure 10, not its two width-128 ResNet arms.
 Our references use the released clean full-data width sweep (1,952
 positions) and the explicitly labeled 50,000-example, 20\%-noise
@@ -195,10 +194,8 @@ updates on separate logarithmic axes, without claiming time alignment
 or applying smoothing. The latter reference ends at 21.67\% test
 error; an earlier selected 20\% archive ended at 37.05\% and was
 not interchangeable with this full-data sample-grid reference. The 10\%-noise published source has 1,421 positions and
-unresolved entry metadata; it is excluded from this comparison while
-our measured 10\% trajectory is shown only in the standalone
-chart. The standalone figures retain each source's measured noise settings
-and identify the separate time axes. A smoother published
+unresolved entry metadata; it is excluded from the plotted comparison. Both sides therefore
+show the common 0 and 20\% noise settings on separate time axes. A smoother published
 curve alone therefore does not establish equivalent training or a
 failure of our reproduction.
 
@@ -211,9 +208,9 @@ The corresponding train errors against corrupted labels are 10.71\%,
 25.89\%, and 29.67\%. At this width and horizon, more data improves
 test error; these measurements do not demonstrate the paper's
 claim that more data can hurt in a critical regime.
-Figures~\ref{app:ours-figure_11a} and~\ref{app:ours-figure_12}
+Figures~\ref{app:matched-figure_11a} and~\ref{app:matched-figure_12}
 show the broader measured grids. Our 10\%-noise sample curves have
-no matching published subset source and are labeled separately.
+no matching published subset source and are excluded from these figures.
 
 \section{Discussion and limitations}
 

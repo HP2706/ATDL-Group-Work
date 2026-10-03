@@ -1,77 +1,19 @@
-\section{Our standalone figures}\label{app:ours}
-These are the same ten standalone figure assets used in the comparisons,
-shown at full width for inspection. All measurements are single-seed,
-reduced-horizon results; no additional training is implied by displaying
-another view of the same cells.
-\resultplot{ours}{figure_01}{Our Figure 1 adaptation: 10\%-noise CIFAR-10 ResNet18 endpoints and training-time curves through epoch 400.}{app:ours-figure_01}
-\resultplot{ours}{figure_02}{Our Figure 2 adaptation: 10\%-noise CIFAR-10 ResNet18 test and train heatmaps through epoch 400.}{app:ours-figure_02}
-\resultplot{ours}{figure_04}{Our Figure 4 adaptation: CIFAR-10 and CIFAR-100 ResNet18 curves at 0/10/20\% noise.}{app:ours-figure_04}
-\resultplot{ours}{figure_05}{Our Figure 5 subset: augmented and unaugmented CIFAR-10 CNN curves through 50,000 SGD steps.}{app:ours-figure_05}
-\resultplot{ours}{figure_06}{Our Figure 6 subset: clean, unaugmented CIFAR-10 CNN endpoints for SGD and Adam.}{app:ours-figure_06}
-\resultplot{ours}{figure_07}{Our Figure 7 subset: one-seed clean CIFAR-100 CNN endpoints after 50,000 SGD steps.}{app:ours-figure_07}
-\resultplot{ours}{figure_09}{Our Figure 9 adaptation: 20\%-noise CIFAR-10 ResNet18 trajectories and width-by-epoch heatmap.}{app:ours-figure_09}
-\resultplot{ours}{figure_10}{Our Figure 10(c) subset: width-128 CIFAR-10 CNN test and train histories through 50,000 steps, with all 40 unsmoothed measurements per noise level shown.}{app:ours-figure_10}
-\resultplot{ours}{figure_11a}{Our Figure 11(a) subset: three CIFAR-10 CNN sample sizes at 10\% and 20\% noise.}{app:ours-figure_11a}
-\resultplot{ours}{figure_12}{Our Figure 12 subset: 20\%-noise CIFAR-10 CNN sample-size heatmap and slices, using the same color scale as the paired comparison.}{app:ours-figure_12}
-\section{Authors' standalone figure reconstructions}\label{app:published}
-These are the authors' individual released-data reconstructions for the
-ten figure families compared above~\cite{nakkiran2021deepdouble}.
-They are not crops of the original paper. Multiple panels from the same
-figure family are grouped on one page. Unmatched translation and auxiliary
-paper figures are outside this comparison gallery. The actual opening
-figure is reproduced in Figure~\ref{fig:opening} in the main report.
-\begin{figure}[p]
-\centering
-\textbf{Authors: matched 10\% released-data reconstruction}\par\medskip
-\includegraphics[width=0.96\textwidth,height=0.40\textheight,keepaspectratio]{../plots/published/figure_01_resnet_10pct_matched.png}\par\medskip
-\textbf{Original opening figure: 15\% noise, 4,000 epochs}\par\medskip
-\includegraphics[width=0.96\textwidth,height=0.20\textheight,keepaspectratio]{figures/paper-figure-01.png}\par\medskip
-\caption{Authors' 10\%-noise reconstruction using the same widths and displayed horizon as ours (top), and the original 15\%-noise, five-trial opening figure from page 4 of the paper (bottom)~\cite{nakkiran2021deepdouble}. The original figure is a reference, not a noise-matched comparison.}\label{app:authors-figure_01}
-\end{figure}\clearpage
-\begin{figure}[p]
-\centering
-\includegraphics[width=0.96\textwidth,height=0.32\textheight,keepaspectratio]{../plots/published/figure_02_resnet_15pct_test_heatmap.png}\par\medskip
-\includegraphics[width=0.96\textwidth,height=0.32\textheight,keepaspectratio]{../plots/published/figure_02_resnet_15pct_train_heatmap.png}\par\medskip
-\caption{Authors' released-data reconstruction for paper Figure 2~\cite{nakkiran2021deepdouble}. Coverage and horizons differ from our reduced runs; see the side-by-side caption and the main-text limitations.}\label{app:authors-figure_02}
-\end{figure}\clearpage
-\begin{figure}[p]
-\centering
-\includegraphics[width=0.96\textwidth,height=0.32\textheight,keepaspectratio]{../plots/published/figure_04_resnet_cifar10_noise.png}\par\medskip
-\includegraphics[width=0.96\textwidth,height=0.32\textheight,keepaspectratio]{../plots/published/figure_04_resnet_cifar100_noise.png}\par\medskip
-\caption{Authors' released-data reconstruction for paper Figure 4~\cite{nakkiran2021deepdouble}. Coverage and horizons differ from our reduced runs; see the side-by-side caption and the main-text limitations.}\label{app:authors-figure_04}
-\end{figure}\clearpage
-\begin{figure}[p]
-\centering
-\includegraphics[width=0.96\textwidth,height=0.68\textheight,keepaspectratio]{../plots/published/figure_05_cifar10_cnn_augmentation.png}\par\medskip
-\caption{Authors' released-data reconstruction for paper Figure 5~\cite{nakkiran2021deepdouble}. Coverage and horizons differ from our reduced runs; see the side-by-side caption and the main-text limitations.}\label{app:authors-figure_05}
-\end{figure}\clearpage
-\begin{figure}[p]
-\centering
-\includegraphics[width=0.96\textwidth,height=0.68\textheight,keepaspectratio]{../plots/published/figure_06_cifar10_cnn_optimizers.png}\par\medskip
-\caption{Authors' released-data reconstruction for paper Figure 6~\cite{nakkiran2021deepdouble}. Coverage and horizons differ from our reduced runs; see the side-by-side caption and the main-text limitations.}\label{app:authors-figure_06}
-\end{figure}\clearpage
-\begin{figure}[p]
-\centering
-\includegraphics[width=0.96\textwidth,height=0.68\textheight,keepaspectratio]{../plots/published/figure_07_cifar100_cnn.png}\par\medskip
-\caption{Authors' released-data reconstruction for paper Figure 7~\cite{nakkiran2021deepdouble}. Coverage and horizons differ from our reduced runs; see the side-by-side caption and the main-text limitations.}\label{app:authors-figure_07}
-\end{figure}\clearpage
-\begin{figure}[p]
-\centering
-\includegraphics[width=0.96\textwidth,height=0.68\textheight,keepaspectratio]{../plots/published/figure_09_resnet_20pct_panels.png}\par\medskip
-\caption{Authors' released-data reconstruction for paper Figure 9~\cite{nakkiran2021deepdouble}. Coverage and horizons differ from our reduced runs; see the side-by-side caption and the main-text limitations.}\label{app:authors-figure_09}
-\end{figure}\clearpage
-\begin{figure}[p]
-\centering
-\includegraphics[width=0.96\textwidth,height=0.68\textheight,keepaspectratio]{../plots/published/figure_10_cifar10_cnn_dynamics.png}\par\medskip
-\caption{Authors' released-data trajectory reconstruction for paper Figure 10(c), showing width-128 clean full-data and 50,000-example 20\%-noise sample-grid references on their saved positions rather than model width~\cite{nakkiran2021deepdouble}. Coverage and horizons differ from our reduced runs; see the side-by-side caption and the main-text limitations.}\label{app:authors-figure_10}
-\end{figure}\clearpage
-\begin{figure}[p]
-\centering
-\includegraphics[width=0.96\textwidth,height=0.68\textheight,keepaspectratio]{../plots/published/figure_11a_cifar10_cnn_sample_sizes.png}\par\medskip
-\caption{Authors' released-data reconstruction for paper Figure 11(a)~\cite{nakkiran2021deepdouble}. Coverage and horizons differ from our reduced runs; see the side-by-side caption and the main-text limitations.}\label{app:authors-figure_11a}
-\end{figure}\clearpage
-\begin{figure}[p]
-\centering
-\includegraphics[width=0.96\textwidth,height=0.68\textheight,keepaspectratio]{../plots/published/figure_12_cifar10_cnn_sample_heatmap.png}\par\medskip
-\caption{Authors' released-data reconstruction for paper Figure 12~\cite{nakkiran2021deepdouble}. Coverage and horizons differ from our reduced runs; see the side-by-side caption and the main-text limitations.}\label{app:authors-figure_12}
-\end{figure}\clearpage
+\section{Replication figures: ours compared with the authors}\label{app:comparisons}
+Every figure in this gallery places our replication results alongside
+measurements reconstructed from the authors' released data. There are
+no standalone galleries. Each caption identifies the shared settings
+and any differences in training horizon, trial count, or time coordinates.
+The Figure~1 comparison also appears in the main text. Released-data
+reconstructions are distinct from the original published artwork and
+are not additional experiments by our group~\cite{nakkiran2021deepdouble}.
+
+\resultplot{comparison}{figure_01}{Figure 1 adaptation: both authors and ours use 10\%-noise CIFAR-10 ResNet18, the same ten widths and 400 displayed epochs, with one run per width. Authors' epochs follow the notebook convention; ours are recorded epochs. Test error uses the same expected noisy-test transformation.}{app:matched-figure_01}
+\resultplot{comparison}{figure_02}{Figure 2 adaptation: authors' and our CIFAR-10 ResNet18 train/test heatmaps at 10\% noise, on the same ten widths and displayed horizon. Authors' epoch coordinates follow the released notebook convention; ours are recorded.}{app:matched-figure_02}
+\resultplot{comparison}{figure_04}{Figure 4 adaptation: authors' and our CIFAR-10/CIFAR-100 ResNet18 error curves. Our 0/10/20\%-noise results end at epoch 400; the released CIFAR-10 comparison also includes 5/15\% noise.}{app:matched-figure_04}
+\resultplot{comparison}{figure_05}{Figure 5 subset: authors' and our augmented and unaugmented CIFAR-10 CNN width curves. Ours end at 50,000 SGD updates; the authors' nearby horizon uses an estimated, unverified step mapping.}{app:matched-figure_05}
+\resultplot{comparison}{figure_06}{Figure 6 subset: authors' and our clean, unaugmented CIFAR-10 CNN results with SGD and Adam. Authors' endpoints use full released histories; ours use 50,000 SGD updates or 400 Adam epochs.}{app:matched-figure_06}
+\resultplot{comparison}{figure_07}{Figure 7 subset: authors' and our clean CIFAR-100 CNN results at eleven common widths. The authors' five-trial mean and standard deviation use full histories; ours use one seed and 50,000 SGD updates.}{app:matched-figure_07}
+\resultplot{comparison}{figure_09}{Figure 9 adaptation: authors' and our 20\%-noise CIFAR-10 ResNet18 trajectories and width-by-time heatmaps. Ours cover 400 epochs; the author reconstruction retains its labeled released coverage.}{app:matched-figure_09}
+\resultplot{comparison}{figure_10}{Figure 10(c) subset: authors' and our width-128 CIFAR-10 CNN trajectories at the common 0 and 20\% noise settings. Authors' clean full-data and 50,000-example/20\%-noise references use saved measurement numbers; ours use recorded optimizer steps through 50,000 updates. Logging intervals and horizons are not matched. No smoothing is applied. The unresolved 10\%-noise author source is excluded.}{app:matched-figure_10}
+\resultplot{comparison}{figure_11a}{Figure 11(a) subset: authors' and our 20\%-noise CIFAR-10 CNN sample-size curves, using 12,500/25,000/50,000 examples and eleven common widths. Authors' endpoints use full recorded histories; ours stop at 50,000 updates. Our 10\%-noise subset runs are excluded because no matching author source was identified.}{app:matched-figure_11a}
+\resultplot{comparison}{figure_12}{Figure 12 subset: authors' and our 20\%-noise CIFAR-10 CNN sample-size heatmaps and slices. Both use three sample sizes, eleven common widths, and a common color scale; training horizons differ.}{app:matched-figure_12}
