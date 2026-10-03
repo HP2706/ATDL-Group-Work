@@ -13,6 +13,7 @@ import pandas as pd
 import pyarrow.parquet as pq
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
+from matplotlib.ticker import FixedLocator, NullLocator, StrMethodFormatter
 from vision import load_colormap, noisy_test_error, rescale_viridis
 
 
@@ -136,6 +137,11 @@ def load_cnn_comparison(project_dir: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
             and ours["schedule"].eq("inverse_sqrt").all() and ours["sample_size"].eq(50000).all()):
         raise ValueError("CNN result protocol differs from the planned augmented SGD sweep")
 
+    return load_cnn_paper(project_dir), ours
+
+
+def load_cnn_paper(project_dir: Path) -> pd.DataFrame:
+    """Read the released CNN histories independently of our result files."""
     author_dir = project_dir / "their-results" / "hf_dataset" / "data" / "vision"
     paper_frames: list[pd.DataFrame] = []
     for noise, source in CNN_SOURCES.items():
@@ -148,9 +154,23 @@ def load_cnn_comparison(project_dir: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
         frame["label_noise"] = noise
         paper_frames.append(frame)
     paper = pd.concat(paper_frames, ignore_index=True)
-    if ours[["train_error", "test_error"]].isna().any().any() or paper[["train_error", "test_error"]].isna().any().any():
-        raise ValueError("CNN comparisons contain missing error values")
-    return paper, ours
+    if paper[["train_error", "test_error"]].isna().any().any():
+        raise ValueError("Published CNN histories contain missing error values")
+    return paper
+
+
+def load_figure10_paper(project_dir: Path) -> pd.DataFrame:
+    """Use the clean full-data source and the explicitly labeled 50k/20% sample grid."""
+    author_dir = project_dir / "their-results" / "hf_dataset" / "data" / "vision"
+    columns = ["trial_index", "sample_size", "model_width", "measurement_index", "test_error", "train_error"]
+    clean = pq.read_table(author_dir / "pct-cifar10-mcnn-50000-p0-sgd-big.parquet",
+                          columns=columns, filters=[("model_width", "=", 128), ("trial_index", "=", 0)]).to_pandas()
+    noisy = pq.read_table(author_dir / "dd_grid_p20.parquet", columns=columns,
+                          filters=[("model_width", "=", 128), ("sample_size", "=", 50000),
+                                   ("trial_index", "=", 0)]).to_pandas()
+    clean["label_noise"] = 0.0
+    noisy["label_noise"] = 0.2
+    return pd.concat([clean, noisy], ignore_index=True)
 
 
 def matrix(frame: pd.DataFrame, noise: float, metric: str) -> np.ndarray:
@@ -170,9 +190,12 @@ def caption(fig: Figure, title: str, detail: str) -> Figure:
     return fig
 
 
-def figure_1(paper: pd.DataFrame, ours: pd.DataFrame, ours_only: bool = False) -> Figure:
+def figure_1(paper: pd.DataFrame, ours: pd.DataFrame, ours_only: bool = False,
+             authors_only: bool = False) -> Figure:
     """Paper layout: blue endpoint curves and dense epoch-colored width curves."""
-    rows = (("Ours", ours),) if ours_only else (("Authors", paper), ("Ours", ours))
+    if ours_only and authors_only:
+        raise ValueError("Choose one standalone source")
+    rows = (("Ours", ours),) if ours_only else (("Authors", paper),) if authors_only else (("Authors", paper), ("Ours", ours))
     fig, axes = plt.subplots(len(rows), 2, figsize=(14, 4 * len(rows)), sharex="col", sharey="col", layout="constrained", squeeze=False)
     palette = rescale_viridis().reversed()
     time_norm = colors.LogNorm(vmin=10, vmax=400)
@@ -183,13 +206,6 @@ def figure_1(paper: pd.DataFrame, ours: pd.DataFrame, ours_only: bool = False) -
         endpoint_test = noisy_test_error(final["test_error"].to_numpy(dtype=float), 0.1, 10)
         left.plot(WIDTHS, endpoint_test, "-", color="blue", lw=2.3, label="Test")
         left.plot(WIDTHS, final["train_error"], "--", color="blue", alpha=0.45, lw=2.0, label="Train")
-        threshold = int(final.loc[final["train_error"].le(0.1)].index.min())
-        left.axvspan(4, 20, facecolor="#f1a578", alpha=0.48, zorder=0)
-        left.axvline(threshold, color="#543a2c", linestyle="--", lw=1.5)
-        left.annotate("Critical\nRegime", xy=(17, 0.36), xytext=(25, 0.46), color="#ef681f",
-                      arrowprops={"arrowstyle": "->", "color": "#ef681f"}, fontsize=9)
-        left.annotate("Interpolation\nThreshold", xy=(threshold, 0.11), xytext=(25, 0.21),
-                      arrowprops={"arrowstyle": "->", "color": "#3b302c"}, fontsize=9)
         left.set(title=f"{name} · final recorded point", ylabel="Test / Train Error", ylim=(0, 0.55))
         left.legend(frameon=False, loc="upper right")
         width_axis(left)
@@ -198,17 +214,18 @@ def figure_1(paper: pd.DataFrame, ours: pd.DataFrame, ours_only: bool = False) -
         noisy_values = noisy_test_error(values, 0.1, 10)
         for epoch, errors in zip(EPOCHS, noisy_values, strict=True):
             right.plot(WIDTHS, errors, color=palette(time_norm(epoch)), alpha=0.35, lw=1.0)
-        right.plot(WIDTHS, noisy_values.min(axis=0), "r--", lw=1.8, label="Optimal Early\nStopping")
+        right.plot(WIDTHS, noisy_values.min(axis=0), "r--", lw=1.8, label="Minimum observed\ntest error")
         right.set(title=f"{name} · varying training time", ylabel="Test Error", ylim=(0.2, 0.72))
         right.legend(frameon=False, loc="upper right")
         width_axis(right)
     bar = fig.colorbar(plt.cm.ScalarMappable(norm=time_norm, cmap=palette), ax=axes[:, 1], shrink=0.8)
     bar.set_ticks((10, 100, 400), labels=("10", "100", "400"))
     bar.ax.invert_yaxis()
-    bar.set_label("Our epoch" if ours_only else "Authors' recorded point / our epoch")
+    bar.set_label("Our epoch" if ours_only else "Authors' displayed epoch" if authors_only else "Authors' displayed epoch / our epoch")
     return caption(fig, "Figure 1 · CIFAR-10 ResNet18 · 10% label noise",
                    "Our ten widths, one seed, through epoch 400." if ours_only else
-                   "Paper layout, adapted from 15% to 10% noise; ten measured widths, one run each, through our epoch 400.")
+                   "Released 10% run: same ten widths and displayed epochs 10–400; test error transformed to 10% noisy labels." if authors_only else
+                   "Both: 10% label noise, same ten widths and displayed epochs 10–400. One run per width; test error transformed to 10% noisy labels.")
 
 
 def figure_2(paper: pd.DataFrame, ours: pd.DataFrame, ours_only: bool = False) -> Figure:
@@ -345,32 +362,72 @@ def figure_5_cnn(paper: pd.DataFrame, ours: pd.DataFrame,
                    "Paper index 194 ≈ 49,920 steps (256 steps/point inferred, unverified); ours exactly 50,000 steps. Our non-augmented grid has 11 widths.")
 
 
-def figure_10_cnn(paper: pd.DataFrame, ours: pd.DataFrame, ours_only: bool = False) -> Figure:
-    """Width-128 CNN histories over the same approximate step horizon."""
-    paper_step = (paper["measurement_index"] + 1) * CNN_PAPER_ESTIMATED_STEP_INTERVAL
-    paper_at_horizon = paper.loc[paper_step.le(CNN_COMPARISON_STEPS)].copy()
-    rows = (("Ours · recorded steps", ours, "global_step"),) if ours_only else (
-        ("Authors · estimated steps", paper_at_horizon, "measurement_index"),
-        ("Ours · recorded steps", ours, "global_step"))
-    fig, axes = plt.subplots(len(rows), 2, figsize=(15, 4.5 * len(rows)), sharex=True, sharey="col", layout="constrained", squeeze=False)
-    for row, (name, frame, time_column) in enumerate(rows):
-        for column, metric in enumerate(("test_error", "train_error")):
+def figure_10_cnn(
+    paper: pd.DataFrame, ours: pd.DataFrame | None = None,
+    ours_only: bool = False, authors_only: bool = False,
+) -> Figure:
+    """Plot width-128 histories on their recorded coordinates without time inference."""
+    if ours_only and authors_only:
+        raise ValueError("Choose one standalone source")
+    author_noise = (0.0, 0.2)
+    authors = paper.loc[paper["label_noise"].isin(author_noise)
+                        & paper["model_width"].eq(128)].copy()
+    if not authors_only:
+        if ours is None:
+            raise ValueError("Our result histories are required for an ours/comparison chart")
+        measured = ours.loc[ours["model_width"].eq(128)].copy()
+        expected_ours = set(product(NOISE, CNN_STEPS))
+        actual_ours = list(measured[["label_noise", "global_step"]].itertuples(index=False, name=None))
+        if len(actual_ours) != len(expected_ours) or set(actual_ours) != expected_ours:
+            raise ValueError("Figure 10 needs one width-128 measured history at each noise level")
+    expected_authors = {(0.0, index) for index in range(1952)} | {(0.2, index) for index in range(976)}
+    actual_authors = list(authors[["label_noise", "measurement_index"]].itertuples(index=False, name=None))
+    if len(actual_authors) != len(expected_authors) or set(actual_authors) != expected_authors:
+        raise ValueError("Figure 10 needs the complete two full-data author histories")
+    if authors_only:
+        sources = (("Authors", authors, "measurement_index", author_noise),)
+    elif ours_only:
+        sources = (("Ours", measured, "global_step", NOISE),)
+    else:
+        sources = (("Authors", authors, "measurement_index", author_noise),
+                   ("Ours", measured, "global_step", author_noise))
+    fig, axes = plt.subplots(2, len(sources), figsize=(7 * len(sources), 8),
+                             sharex="col", sharey="row", layout="constrained", squeeze=False)
+    for column, (name, frame, time_column, levels) in enumerate(sources):
+        author_column = time_column == "measurement_index"
+        for row, metric in enumerate(("test_error", "train_error")):
             ax = axes[row, column]
-            for noise in NOISE:
-                selected = frame.loc[frame["label_noise"].eq(noise) & frame["model_width"].eq(128)]
-                selected = selected.sort_values(time_column)
-                x = ((selected[time_column].to_numpy(dtype=float) + 1) * CNN_PAPER_ESTIMATED_STEP_INTERVAL / 1000
-                     if time_column == "measurement_index" else selected[time_column].to_numpy(dtype=float) / 1000)
-                ax.plot(x, selected[metric], "--" if metric == "train_error" else "-",
-                        lw=1.7, color=CNN_COLORS[noise], label=f"{noise:.0%} noise")
-            ax.set(title=f"{name} · {'Test' if column == 0 else 'Train'} error",
-                   xlabel="Optimizer steps (thousands)",
-                   ylabel="Error fraction", xlim=(0, 50), ylim=(0, 0.85))
-            if column == 0:
-                ax.legend(frameon=False)
-    return caption(fig, "Figure 10 subset · CIFAR-10 CNN width 128",
-                   "Our recorded test and train histories through 50,000 steps." if ours_only else
-                   "Both rows stop near 50,000 steps. Paper cadence of 256 steps/point is inferred from 1,952 points over 500,000 steps, not verified.")
+            for noise in levels:
+                selected = frame.loc[frame["label_noise"].eq(noise)].sort_values(time_column)
+                recorded = selected[time_column].to_numpy(dtype=float)
+                x = recorded + 1 if author_column else recorded / 1000
+                ax.plot(x, selected[metric], "--" if row else "-",
+                        lw=1.7, color=CNN_COLORS[noise], label=f"{noise:.0%} label noise",
+                        marker=None if author_column else "o", markersize=3)
+            ax.set(title=f"{name}: {'test' if row == 0 else 'train'} error",
+                   ylabel="Error fraction", ylim=(0, 0.85),
+                   xlim=(1, 1952) if author_column else (1.25, 50))
+            ax.set_xscale("log")
+            ticks = (1, 10, 100, 1000) if author_column else (2, 5, 10, 20, 50)
+            ax.xaxis.set_major_locator(FixedLocator(ticks))
+            ax.xaxis.set_major_formatter(StrMethodFormatter("{x:g}"))
+            ax.xaxis.set_minor_locator(NullLocator())
+            ax.tick_params(labelbottom=True)
+            ax.spines["top"].set_visible(False)
+            ax.spines["right"].set_visible(False)
+            if row == 0:
+                ax.legend(frameon=False, loc="upper right")
+            if row == 1:
+                ax.set_xlabel("Saved measurement number (log scale)" if author_column
+                              else "Optimizer steps (thousands, log scale)")
+    detail = (
+        "Full released histories; logging intervals unavailable."
+        if authors_only else
+        "One seed; 40 recorded evaluations per noise setting."
+        if ours_only else
+        "Common noise settings; independent time axes and horizons. Raw measurements, no smoothing."
+    )
+    return caption(fig, "CIFAR-10 CNN, width 128 · Figure 10(c) reference", detail)
 
 
 def load_paper_noaug(project_dir: Path) -> pd.DataFrame:
@@ -547,7 +604,7 @@ def save_figures(project_dir: Path, output_dir: Path) -> dict[int, Path]:
     figures = ((5, figure_5_cnn, (cnn_paper, cnn_ours, paper_noaug, cnn_noaug)),
                (6, figure_6_cnn, (project_dir, cnn_noaug, cnn_adam_noaug)),
                (7, figure_7_cnn, (project_dir, cifar100_cnn)),
-               (10, figure_10_cnn, (cnn_paper, cnn_ours)),
+               (10, figure_10_cnn, (load_figure10_paper(project_dir), cnn_ours)),
                (11, figure_11a_cnn, (project_dir, subsets)),
                (12, figure_12_cnn, (project_dir, subsets)))
     for number, render, arguments in figures:

@@ -1,0 +1,80 @@
+{
+  "checked_on": "2026-10-03",
+  "source": "UCloud jobs status: RUNNING to SUCCESS timestamps",
+  "duration_definition": "allocation wall time including startup, evaluation, checkpointing and export; not per-model training time",
+  "runs_per_gpu_configured": 4,
+  "scope": "seven 229-cell vision sweep jobs; excludes pilots and prior runs",
+  "total_gpu_hours": 14.97578472222222,
+  "jobs": [
+    {
+      "job_id": "12403634",
+      "state": "SUCCESS",
+      "gpu": "NVIDIA B200",
+      "gpu_count": 1,
+      "running_at_ms": 1790459668969,
+      "success_at_ms": 1790475972085,
+      "elapsed_seconds": 16303.116,
+      "elapsed_hours": 4.528643333333333
+    },
+    {
+      "job_id": "12403713",
+      "state": "SUCCESS",
+      "gpu": "NVIDIA B200",
+      "gpu_count": 1,
+      "running_at_ms": 1790503222327,
+      "success_at_ms": 1790520948126,
+      "elapsed_seconds": 17725.799,
+      "elapsed_hours": 4.923833055555555
+    },
+    {
+      "job_id": "12403687",
+      "state": "SUCCESS",
+      "gpu": "NVIDIA B200",
+      "gpu_count": 1,
+      "running_at_ms": 1790498641024,
+      "success_at_ms": 1790503863186,
+      "elapsed_seconds": 5222.162,
+      "elapsed_hours": 1.4506005555555557
+    },
+    {
+      "job_id": "12403788",
+      "state": "SUCCESS",
+      "gpu": "NVIDIA B200",
+      "gpu_count": 1,
+      "running_at_ms": 1790514278717,
+      "success_at_ms": 1790516931541,
+      "elapsed_seconds": 2652.824,
+      "elapsed_hours": 0.7368955555555555
+    },
+    {
+      "job_id": "12403936",
+      "state": "SUCCESS",
+      "gpu": "NVIDIA B200",
+      "gpu_count": 1,
+      "running_at_ms": 1790536167343,
+      "success_at_ms": 1790543820382,
+      "elapsed_seconds": 7653.039,
+      "elapsed_hours": 2.1258441666666665
+    },
+    {
+      "job_id": "12403784",
+      "state": "SUCCESS",
+      "gpu": "NVIDIA B200",
+      "gpu_count": 1,
+      "running_at_ms": 1790513964417,
+      "success_at_ms": 1790514879032,
+      "elapsed_seconds": 914.615,
+      "elapsed_hours": 0.25405972222222223
+    },
+    {
+      "job_id": "12403801",
+      "state": "SUCCESS",
+      "gpu": "NVIDIA B200",
+      "gpu_count": 1,
+      "running_at_ms": 1790516408421,
+      "success_at_ms": 1790519849691,
+      "elapsed_seconds": 3441.27,
+      "elapsed_hours": 0.9559083333333334
+    }
+  ]
+}

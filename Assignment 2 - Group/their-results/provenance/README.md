@@ -1,5 +1,7 @@
 # Verification record
 
+This folder is working provenance for the historical compute audit. It is not required report content and is not included by `../../report/main.tex`. See the [report guide](../../report/README.md) for the manuscript structure.
+
 Checked 2026-09-25. This is a source/count audit, not an executed ML replication or timing benchmark.
 
 ## Primary sources
@@ -28,7 +30,7 @@ Checked 2026-09-25. This is a source/count audit, not an executed ML replication
 - Read all figure captions, Appendix A and protocol text; visually inspected PDF pages 22, 23 and 26 for learning-rate/decay legends.
 - No public result CSV has a runtime/GPU-count field. No timing measurements or training were performed.
 - Large Mlist arrays and checkpoints were not downloaded. Model source definitions were not executed.
-- Source conflicts and metric-column problems are documented in main.tex.
+- Source conflicts and metric-column problems are documented in ../../report/experiment-cost-audit.tex.
 - Pricing is an inherited $3.49/hour scenario, not a newly verified market quote.
 
 ## Local file hashes

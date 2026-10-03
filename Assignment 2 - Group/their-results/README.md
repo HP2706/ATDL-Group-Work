@@ -20,3 +20,5 @@ authors' objects stay out of Git. A plot that reads a skipped LFS file needs
 that file fetched first.
 
 The [conversion scripts](convert_results.py) run on a CPU Modal Sprite or another Linux host. They keep the authors' values in float64, retain duplicate translation rows, and preserve source identifiers. See the [dataset card](hf_dataset/README.md) for schema and limitations.
+
+The [provenance archive](provenance/README.md) preserves the public CSV and notebook snapshots and grid/count verification records used for the historical compute audit. These are source records, not submission content. They were moved here from `report/` to keep the manuscript directory focused on report files.

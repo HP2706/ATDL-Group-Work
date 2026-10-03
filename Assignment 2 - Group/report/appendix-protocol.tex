@@ -1,0 +1,55 @@
+\section{Comparison of experimental settings}\label{app:protocol}
+Table~\ref{tab:protocol} compares the completed vision experiments one
+setting at a time. Page numbers refer to the 2021 journal article
+(32 pages), not an earlier arXiv version~\cite{nakkiran2021deepdouble}.
+Released code paths refer to commit
+\href{https://gitlab.com/harvard-machine-learning/double-descent/-/tree/0d653296f870e6bf7ee82dc71b4f7b49d53fa85d}{\texttt{0d653296}}.
+The release contains model definitions, plotting notebooks, and a
+\href{https://gitlab.com/harvard-machine-learning/double-descent/-/blob/0d653296f870e6bf7ee82dc71b4f7b49d53fa85d/README.md}{\texttt{README.md}}
+linking result archives; it does not provide the vision training loop or
+data loader. Where neither the paper nor those files specify a detail,
+we identify it as unstated rather than infer a setting from the results.
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.15\textwidth}>{\raggedright\arraybackslash}p{0.25\textwidth}>{\raggedright\arraybackslash}p{0.39\textwidth}>{\raggedright\arraybackslash}p{0.13\textwidth}@{}}
+\caption{Our model, data, and training settings, their source locations,
+and differences from the stated protocol.}\label{tab:protocol}\\
+\toprule
+Setting & Our setup & Paper setting and source location & Difference\\
+\midrule
+\endfirsthead
+\multicolumn{4}{l}{Table~\thetable\ (continued)}\\
+\toprule
+Setting & Our setup & Paper setting and source location & Difference\\
+\midrule
+\endhead
+\midrule
+\multicolumn{4}{r}{Continued on the next page}\\
+\endfoot
+\bottomrule
+\endlastfoot
+\multicolumn{4}{l}{\textbf{Model}}\\
+Vision architectures & Released ResNet18 and five-layer CNN; widths $[k,2k,4k,8k]$ & Same architectures: p.~17, Appendix~B.1. Code: \href{https://gitlab.com/harvard-machine-learning/double-descent/-/blob/0d653296f870e6bf7ee82dc71b4f7b49d53fa85d/models/resnet18k.py}{\texttt{models/resnet18k.py}} and \href{https://gitlab.com/harvard-machine-learning/double-descent/-/blob/0d653296f870e6bf7ee82dc71b4f7b49d53fa85d/models/mcnn.py}{\texttt{models/mcnn.py}}. & Same definitions\\
+Initialization & Random, default PyTorch initialization & Default PyTorch initialization: p.~17, Appendix~B.2, ``Initialization''. Model files above instantiate PyTorch layers. & Same rule\\
+Width grids & Widths listed in Table~\ref{tab:runs} & Width sweeps: p.~17, Appendix~B.1; exact arrays in linked archives, e.g. \path{cifar10-resnet18k-50k-adam/ks} and \texttt{pct-cifar10-mcnn-}\allowbreak\texttt{50000-p0-sgd-big/ks}. \texttt{README.md} supplies archive links. & Fewer widths\\
+\midrule
+\multicolumn{4}{l}{\textbf{Data}}\\
+Pixel preprocessing & Divide by 255; no channel normalization & Not stated in Section~4 (p.~8) or Appendix~B.2 (pp.~17--18). No released data-loader file. & Not stated\\
+Label corruption & Fixed Bernoulli mask; uniformly incorrect labels; fixed across augmentations & Once-sampled, uniformly incorrect labels: p.~8, Section~4, ``Label noise''. Fixed labels across augmentations: p.~17, Appendix~B.2. No released implementation. & Same rule; seed not stated\\
+Noise settings & 0, 10, 20\%; Figure~\ref{fig:opening} compares 10\% on both sides & Figure~4, p.~7, and experiment list in \texttt{README.md}; original Figure~1, p.~4, uses 15\%. & Same selected rates; original Figure~1 differs\\
+Augmentation & Padding 4, random crop 32, horizontal flip & RandomCrop(32, padding=4), RandomHorizontalFlip: p.~17, Appendix~B.2, ``Data-augmentation''. No released loader. & Same operations\\
+Subsampling & Seeded permutation; 12,500/25,000/50,000 training images & Sample sizes: Figure~11(a), p.~13. Random subsampling: p.~19, Appendix~B.4, ``Sample-wise nonmonotonicity''. No released subsampling code. & Same sizes; permutation and seed not stated\\
+Test evaluation & Clean test split; Figure~1 also transforms error to the expected noisy-test distribution & Clean test error except Figure~1: p.~8, Section~4. Transformation implemented in \href{https://gitlab.com/harvard-machine-learning/double-descent/-/blob/0d653296f870e6bf7ee82dc71b4f7b49d53fa85d/intro_resnet_plot.ipynb}{\texttt{intro\_resnet\_plot.ipynb}}, ``Simple Plot'' and \texttt{plot}. & Same error convention\\
+Train evaluation & Fixed training labels, without augmentation & Exact train-evaluation transform not stated in Appendix~B.2 (pp.~17--18). No released evaluation loop. & Transform not stated\\
+\midrule
+\multicolumn{4}{l}{\textbf{Training}}\\
+Loss & Cross-entropy & Cross-entropy: p.~17, Appendix~B.2, ``Loss function''. No released training loop. & Same loss\\
+Batch size & 128 & 128: p.~18, Appendix~B.2, ``Batch size''. No released loader. & Same size\\
+Adam & Constant LR $10^{-4}$; PyTorch defaults & Same settings: p.~17, Appendix~B.2, ``Optimization: Adam''. No released optimizer code. & Same settings\\
+SGD & LR 0.1, inverse-square-root; 512-step updates; momentum 0 & Same prescription: p.~18, Appendix~B.2, ``SGD'' and ``Learning rate schedule descriptions''. No released optimizer code. & Same prescription\\
+Regularization & No weight decay or dropout & None unless stated otherwise: p.~17, Appendix~B.2, ``Regularization''. & Same setting\\
+Training horizon & Adam 400 epochs; SGD 50,000 updates & Adam 4,000 epochs; SGD 500,000 steps: p.~8, Section~4. CIFAR-100 CNN uses 1 million steps: Figure~20, p.~25, Appendix~E.2.1. & 10\% of stated horizon; 5\% for CIFAR-100 CNN\\
+Trials & One seed (0) per condition & Five trials for Figures~1, 7, 11(a): p.~19, Appendix~B.4. Figure~1 averaging is in \texttt{intro\_resnet\_plot.ipynb}. & One trial rather than five\\
+Precision & FP32 & Arithmetic precision not stated in Section~4 or Appendix~B.2. No released training loop. & Not stated\\
+Evaluation cadence & Adam: 10 epochs; SGD: 1,250 updates & \href{https://gitlab.com/harvard-machine-learning/double-descent/-/blob/0d653296f870e6bf7ee82dc71b4f7b49d53fa85d/intro_ocean_dynamics.ipynb}{\texttt{intro\_ocean\_dynamics.ipynb}} labels ResNet indices plus one as epochs. CNN logging interval is not established by the paper or release. & No confirmed common cadence\\
+Run infrastructure & Our loop and checkpoints; up to four runs per B200 & Checkpointing, concurrency and GPU scheduling not stated in Appendix~B.2 or provided in the released files. & Our implementation\\
+\end{longtable}

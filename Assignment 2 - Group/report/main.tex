@@ -1,465 +1,238 @@
 \documentclass{article}
 \usepackage{ISBI_template-master/spconf,amsmath,amssymb,graphicx}
-\usepackage{booktabs,longtable,array,enumitem}
+\usepackage{booktabs,array,longtable}
 \usepackage[hidelinks]{hyperref}
-\newcolumntype{P}[1]{>{\raggedright\arraybackslash}p{#1}}
-\newcommand{\resultplot}[3]{%
+\setlength{\parindent}{0pt}
+\pagestyle{plain}
+\newcommand{\resultplot}[4]{%
   \begin{figure}[p]
   \centering
-  \includegraphics[width=0.96\textwidth,height=0.75\textheight,keepaspectratio]{../plots/#1/#2.png}
-  \caption{#3}
-  \end{figure}%
+  \includegraphics[width=0.96\textwidth,height=0.72\textheight,keepaspectratio]{../plots/#1/#2.png}
+  \caption{#3}\label{#4}
+  \end{figure}\clearpage
 }
-\setlength{\parindent}{0pt}
-\setlength{\parskip}{5pt}
-\setlist[itemize]{nosep,leftmargin=1.4em}
-\pagestyle{plain}
-\title{Deep Double Descent: Complete Experiment Inventory and Compute Audit}
-\name{Assignment 2: selected paper, replication track}
-\address{Advanced Topics in Deep Learning, University of Copenhagen\\Initial audit: 25 September 2026; result update: 29 September 2026}
+\title{Deep Double Descent: A Reduced Reproduction}
+\name{Assignment 2: replication track}
+\address{Advanced Topics in Deep Learning, University of Copenhagen}
 \begin{document}
-\onecolumn
 \maketitle
 
-\section{Decision and correction of the earlier estimate}
-We have selected \emph{Deep Double Descent: Where Bigger Models and More Data Hurt}.
-This document began as an inventory of every numbered figure in the locally
-stored, 32-page 2021 journal version, including its appendices. The original
-compute audit is followed by an update showing the completed reduced vision
-experiments. It is not the final four-page assignment submission. Figure
-numbers refer to the journal version;
-they should not be silently transferred to another arXiv or ICLR revision.
-The previous comparison of 18 candidate papers is preserved unchanged as
-\href{paper-selection-cost-report.pdf}{\texttt{paper-selection-cost-report.pdf}},
-with source \texttt{paper-selection-cost-report.tex}.
+\begin{abstract}
+We study a reduced subset of experiments from the paper "Deep Double
+Descent: Where Bigger Models and More Data Hurt". Our experiments
+cover CIFAR-10 and CIFAR-100 width sweeps, training trajectories, and
+selected optimizer, augmentation, and sample-size comparisons.
+\end{abstract}
 
-\textbf{The previous 56 GPU-hour / \$195.44 image-only core and 120 GPU-hour
-translation allowance do not price reproduction of this paper.} They were
-untimed allowances for reduced experiments, with neither the full run grids
-nor sufficient modality coverage. In particular, language translation is a
-central part of the evidence for model-wise and sample-wise double descent,
-not a minor optional add-on. No earlier runtime should be treated as measured.
+\section{Introduction}
+Nakkiran et al.~\cite{nakkiran2021deepdouble} investigate double descent
+with respect to model size, training time, and sample size. Their
+\href{https://gitlab.com/harvard-machine-learning/double-descent}{public repository}
+provides image-model definitions, plotting code, and links to results including detailed training logs.
 
-\textbf{An exact GPU-hour bill is not established by the available evidence.}
-The initial audit verified paper protocols, public result-table counts, and
-selected released width/sample grids. It preceded our training and GPU timing
-pilots, and the inspected sources did not supply hardware-specific wall times.
-Accordingly,
-this report provides exact conditional arithmetic where possible, explicit
-unknowns elsewhere, and sensitivity calculations rather than fabricated
-benchmark numbers. There is no verified all-figures total or guaranteed
-\$1,000 full reproduction.
+\section{Methodology and experimental design}
+\subsection{Reduced Training}
+To cover several experimental settings within our compute budget, we
+reduced Adam training from 4,000 to 400 epochs and CIFAR-10 SGD training
+from 500,000 to 50,000 updates. These are 10\% of the original experiment;
+the CIFAR-100 CNN run instead uses 5\% of the stated one-million SGD steps.
+\subsection{Model implementation}
+The original study uses three architecture families: width-scaled
+ResNet18, a five-layer CNN, and a Fairseq Transformer. Our completed
+experiments train the two vision families from random initialization.
+We reused the authors' model definitions of
+\href{https://gitlab.com/harvard-machine-learning/double-descent/-/blob/0d653296f870e6bf7ee82dc71b4f7b49d53fa85d/models/resnet18k.py}{ResNet18}
+and the
+\href{https://gitlab.com/harvard-machine-learning/double-descent/-/blob/0d653296f870e6bf7ee82dc71b4f7b49d53fa85d/models/mcnn.py}{five-layer CNN},
+rather than reimplemting the architectures. Both scale convolutional
+channels as $[k,2k,4k,8k]$. ResNet18 uses two preactivation residual
+blocks per stage; the CNN uses four convolutional stages with batch normalization and ReLU, spatial max pooling, and a final linear classifier. For the NLp experiment we use the same Transformer implementation as the paper, namelu the fairseq Transformer
+\href{https://github.com/facebookresearch/fairseq/tree/df2f84ce619edddb80e720a56abc74d5490fed99}{Fairseq v0.9.0}.
+Its six-layer encoder and decoder use eight attention heads, feed-forward
+width $4d$, sinusoidal positions, and post-normalization.
 
-\section{Evidence and what was actually verified}
-\textbf{P: paper evidence.} Read the local source PDF, its extracted text and
-OCR, including all 29 captions, Appendix A, and Appendices B--E. Visually
-checked the optimizer/schedule legends and weight-decay panels on printed
-pages 22, 23 and 26. The local PDF is
-\texttt{papers/deep-double-descent/source.pdf} relative to the course root;
-the journal source is \href{https://doi.org/10.1088/1742-5468/ac3a74}{DOI
-10.1088/1742-5468/ac3a74}. Statements labeled P are reported experimental
-settings or findings, not independently reproduced outcomes.
+We wrote our own PyTorch training code, data loading, evaluation,
+resumable checkpointing, and concurrency primitives that allow us to
+manage multiple training runs on the same GPU.
 
-\textbf{R: released-artifact evidence.} Read the authors'
-\href{https://gitlab.com/harvard-machine-learning/double-descent}{GitLab
-repository} README and all five top-level plotting notebooks at commit
-\texttt{0d653296f870e6bf7ee82dc71b4f7b49d53fa85d}.
-Queried the public \texttt{hml-public/dd/} Google Cloud Storage inventory,
-downloaded six small translation CSVs and selected numeric width/sample lists.
-Serialized lists were inspected as pickle opcodes without executing pickle
-payloads. No model checkpoint or large metric-array download was needed.
-Local copies of the CSVs, the upstream README, numeric grids, source URLs,
-and hashes are in \texttt{evidence/}. The notebooks are plotting examples;
-the inspected top-level tree is not an end-to-end training implementation.
-The model definitions themselves were not executed or validated.
 
-\textbf{A: assumption or inference.} Mapping a released directory to a figure,
-reusing runs across figures, selecting a seed count where none is given,
-and assigning seconds per step are identified as assumptions. A width list
-proves available width coordinates, not that every width has every condition
-and seed, or that every run completed. Missing configuration and timing
-information is not replaced by a plausible-looking number.
+Our loader scales pixels
+to $[0,1]$ without channel normalization, samples one fixed corruption
+mask per seed, and replaces selected labels with uniformly sampled
+incorrect classes. This noise procedure follows Section~4 of the
+paper, which specifies that label noise is sampled once rather than
+at each epoch~\cite{nakkiran2021deepdouble}. Subsets use a seeded
+permutation, implementing the paper's random subsampling reproducibly.
+Augmentation, when enabled, uses four-pixel padding, a random
+$32\times32$ crop, and horizontal flipping, as specified in
+Appendix~B.2. All augmentations of an image retain the same training
+label.
 
-\textbf{Not verified in the initial audit:} original GPU model/count; elapsed times; complete
-training logs and configuration manifests; every result-array shape;
-translation batch/token budget, vocabulary and exact split hashes; universal
-seed counts; mixed-precision compatibility; B200 throughput; present rental
-availability. No paid compute was launched for that initial document audit.
+Scaling pixels by $1/255$ is our preprocessing default; the paper and
+released model and plotting code do not establish whether the authors
+used channel normalization. This is a simple, reproducible choice that
+bounds the input values and keeps the same transformation across
+datasets, subset sizes, and noise settings without estimating
+additional channel statistics. We cannot establish that it matches
+the authors' preprocessing, and normalization could affect optimization
+and the resulting curves.
 
-\section{Tasks, modalities, and common protocol}
-\textbf{Image classification:} CIFAR-10 and CIFAR-100 with five-layer CNNs
-and preactivation ResNet18 variants. Widths scale as $[k,2k,4k,8k]$.
-The CNN has four convolution/BatchNorm/ReLU/pooling stages and a final
-classifier; $k=64$ has 1,558,026 parameters (P, Appendix B.1).
-Default image batch size is 128. Adam uses learning rate $10^{-4}$ for
-4,000 epochs; SGD generally uses 500,000 updates, initial learning rate
-0.1, no momentum, and inverse-square-root decay updated every 512 steps.
-CIFAR-100 CNN experiments in Figures 7/20 instead use one million steps.
-Augmentation is padded random crop and horizontal flip. Noise is sampled
-once per training example, replacing its label with a uniformly random
-\emph{incorrect} class; it is not resampled each epoch. Weight decay and
-dropout are absent unless explicitly introduced.
+We evaluate the training subset without augmentation against its fixed
+training labels and the full 10,000-image test split against clean
+labels. Mean cross-entropy and misclassification fractions are recorded
+every ten epochs for Adam and every 1,250 updates for SGD, for comparison
+with the authors' unchanged numeric results.
 
-\textbf{Neural machine translation:} IWSLT'14 German-to-English, approximately
-160,000 training sentence pairs; its 4,000/18,000-pair subsets and a larger
-sample-count sweep; WMT'14 English-to-French subsampled to 200,000 pairs.
-The paper specifies the six-layer encoder--decoder Transformer with eight
-attention heads, embedding dimension $d$, feed-forward width $4d$, 10\%
-label smoothing, no dropout, BPE preprocessing, and 80,000 updates.
-Appendix A identifies Adam, and Appendix B.3 refers to the Transformer
-warmup/inverse-square-root schedule. The image batch-size statement must not
-be assumed to define the translation token batch. Measure per-token
-held-out loss/perplexity with teacher forcing; BLEU generation is not a
-substitute for these figures.
 
-\textbf{Random features:} Fashion-MNIST with a fixed Gaussian random Fourier
-feature map, a zero-initialized linear readout and MSE/gradient flow.
-This is a separate estimator family on images, not another language or audio
-modality. Speech/TIMIT, SVHN and other tasks in the related-work discussion
-are experiments from other papers, not additional experiments in this one.
-The paper's non-image modality is text translation in two language pairs.
-Adversarial image training, regularization and ensembling are additional
-experimental families, not separate input modalities.
+\subsection{Training and optimizers}
+All reported runs use batch size 128 as the paper, cross-entropy loss, seed
+zero, FP32 training, and no weight decay.
 
-\section{GPU-hour accounting used throughout}
-Let $t_i$ be measured seconds per optimizer update, $U_i$ the update count,
-$g_i$ the number of GPUs used by that run, and $e_i$ its evaluation,
-checkpoint, initialization and interruption overhead in GPU-hours. Then
+Adam runs use a constant
+learning rate $10^{-4}$ with PyTorch's default moments
+$(\beta_1,\beta_2)=(0.9,0.999)$ and $\epsilon=10^{-8}$.
+SGD uses no momentum and our explicitly implemented schedule
 \[
- H=\sum_{i\in\text{unique runs}}\left(g_iU_it_i/3600+e_i\right),
- \qquad C=\sum_i r_i H_i+C_{\rm CPU,storage,transfer}.
+  \eta_t=\frac{0.1}{\sqrt{1+\lfloor t/512\rfloor}},
 \]
-Two GPUs for ten elapsed hours cost 20 GPU-hours. Repeated metric plots from
-one trajectory are not new training runs. Independent seeds, noise masks,
-subsets or optimizers are new runs. Reuse requires matching these as well as
-all hyperparameters and the full training horizon.
+where $t$ is the number of completed updates.
 
-For compact per-figure accounting, the following are \emph{training-only}
-GPU-hours per run on one GPU. Every $t$ is in seconds/update and depends on
-width, dataset, precision, batching and hardware; it is not constant across
-the real sweep.
-\begin{center}
-\begin{tabular}{lll}
+This implements the
+paper's inverse-square-root learning rate schedule. Adam metrics and checkpoints are saved every ten epochs, and SGD
+metrics and checkpoints every 1,250 updates, yielding 40 measurements
+per completed run. Checkpoints preserve model, optimizer, random-number
+state, and the data position for resumption after interruption.
+
+\subsection{Hidden Dimension size }
+
+The original paper does a sweep of each dimension from 1-128. In order to save compute we sweep a much smaller grid of {2, 3, 4, 6, 8, 12, 16, 24, 32,64} for Resnet18 and {1, 2, 3, 4, 6, 8, 12, 16, 24, 32,64} for CNN.
+For the CNN trained with augmentation we use {1, 2, 3, 4, 6, 8,
+12, 16, 24, 32, 36, 40, 48, 64, 96, 128}
+
+The reason behind the non uniform  grid-selection comes down to certain figures relying on a specific width, that thus has to be added to the grid
+
+We include a full comparison of our setup with the paper's stated
+protocol and released code in Appendix~\ref{app:protocol},
+Table~\ref{tab:protocol}, including source pages, appendix sections,
+and released filenames.
+
+\subsection{Runs}
+Table~\ref{tab:runs} summarizes the completed experiments.
+
+The seven jobs used 14.98 GPU-hours in total.
+
+\begin{table*}[t]
+\centering
+\begin{tabular}{@{}p{0.28\textwidth}p{0.23\textwidth}rrp{0.21\textwidth}@{}}
 \toprule
-Symbol & Verified protocol / accounting assumption & GPU-hours per run\\
+Dataset/model and setting & Widths $k$ & Runs & Hours & Training horizon\\
 \midrule
-$A(t)$ & 4,000 epochs, 50k images, batch 128 & $434.444t$\\
-$S(t)$ & 500,000 optimizer updates & $138.889t$\\
-$L(t)$ & 1,000,000 optimizer updates & $277.778t$\\
-$T(t)$ & 80,000 translation updates & $22.222t$\\
-$P(t)$ & 800 epochs, 25k images, batch 128 & $43.556t$\\
+CIFAR-10 ResNet18, augmented & 2, 3, 4, 6, 8, 12, 16, 24, 32, 64 & 30 & 4.53 & 400 Adam epochs\\
+CIFAR-100 ResNet18, augmented & 2, 3, 4, 6, 8, 12, 16, 24, 32, 64 & 30 & 4.92 & 400 Adam epochs\\
+CIFAR-10 CNN, augmented & 1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 36, 40, 48, 64, 96, 128 & 48 & 1.45 & 50,000 SGD updates\\
+CIFAR-10 CNN, no augmentation & 1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 64 & 33 & 0.74 & 50,000 SGD updates\\
+CIFAR-10 CNN, no augmentation & 1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 64 & 33 & 2.13 & 400 Adam epochs\\
+CIFAR-100 CNN, clean, no augmentation & 1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 64 & 11 & 0.25 & 50,000 SGD updates\\
+CIFAR-10 CNN, augmented subsets & 1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 64 & 44 & 0.96 & 50,000 SGD updates\\
+\midrule
+Total & One seed per cell & 229 & 14.98 & Up to four runs/GPU\\
 \bottomrule
 \end{tabular}
-\end{center}
-$A$ assumes $\lceil50000/128\rceil=391$ batches/epoch; dropping the final
-batch changes this to 390. $P$ assumes 196 batches/epoch. Here $t$ for $P$
-includes all ten PGD inner attack steps and the outer training update;
-ordinary SGD timing cannot be substituted. More GPUs require multiplication
-by $g$, using the measured distributed step time. For a sweep, sum the
-appropriate function separately over widths and seeds. Products such as
-$320A$ below are shorthand using a sweep-average per-run cost.
+\caption{Completed sweeps, exact model widths, and measured UCloud job
+durations. Each width is run at label-noise probabilities 0, 10, and
+20\%, except the clean CIFAR-100 CNN sweep (0\% only) and the subset
+sweep. For the subset sweep, $p$ is the label-noise probability
+(10 or 20\%) and $n$ is the number of training examples (12,500 or
+25,000): 11 widths $\times$ 2 noise rates $\times$ 2 subset sizes
+yield 44 runs. Other runs use all 50,000 training examples. Job IDs in row
+order are 12403634, 12403713, 12403687, 12403788, 12403936, 12403784,
+and 12403801. Durations are allocation wall times, rounded independently;
+overlapping model durations are not added to estimate GPU-hours.}
+\label{tab:runs}
+\end{table*}
 
-\textbf{Sensitivity, not measured bounds:} at $t=0.01/0.1$ s, $A$ costs
-4.34/43.44 GPU-h, $S$ costs 1.39/13.89 GPU-h and $L$ costs 2.78/27.78 GPU-h.
-At $t=0.1/0.5$ s, $T$ costs 2.22/11.11 GPU-h. At a complete adversarial
-update time of $0.1/1$ s, $P$ costs 4.36/43.56 GPU-h. These pairs are
-hypothetical timing scenarios, not confidence intervals, forecasts, or B200
-measurements. A width-1 CNN and a width-128 CNN should never receive one
-unqualified four-hour runtime.
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.96\textwidth]{../plots/comparison/figure_01.png}
+\caption{Noise-matched adaptation of the opening figure: authors' released
+10\%-noise CIFAR-10 ResNet18 measurements above our 10\%-noise results.
+Both panels use the same ten widths, 400 displayed epochs, and expected
+10\%-noise test-error transformation. Authors' epochs follow their
+notebook convention of measurement index plus one; ours are recorded
+training epochs. Each side uses one released or measured run per width,
+not the five-trial mean of the original Figure~1. Red curves show the
+minimum observed test error over the displayed evaluations, not
+validation-based early stopping. The original 15\%-noise, 4,000-epoch
+opening figure is retained separately in Appendix~\ref{app:authors-figure_01}
+for reference~\cite{nakkiran2021deepdouble}.}
+\label{fig:opening}
+\end{figure*}
 
-For continuity with the archived report, dollar examples use
-\textbf{\$3.49/GPU-hour as a historical scenario rate}, not a current verified
-quote. The provider pricing page was not retrievable during this audit.
-Requote the actual GPU, billing granularity and minimum GPU allocation before
-booking. CPU preprocessing, storage, transfer, checkpoint retention, idle
-rental, evaluation and failed/restarted work remain additional costs.
+\section{Results}
+\subsection{Model size, label noise, and optimization}
+The width sweeps and associated comparisons are organized by their
+experimental question rather than by compute cost. Paper Figures 1,
+2, 4, and 5 concern width and noise or augmentation; Figures 6 and 7
+add optimizer and dataset comparisons. Our figures and the authors' reconstructions are in
+Appendices~\ref{app:ours} and~\ref{app:published}. At 20\% noise, our augmented
+CIFAR-10 CNN test error rises from 21.74\% at width 16 to 28.11\%
+at width 48, then falls to 25.88\% at width 128 at step 50,000.
+This single-seed non-monotonicity does not establish the paper's
+converged interpolation-threshold result.
 
-\section{Every figure and its experiment / compute dependency}
-The table enumerates Figures 1--29 without treating 29 figures as 29 runs.
-$W$ is an unresolved width count, $N$ a sample-count grid size, $D$ a
-weight-decay count, and $s$ an unresolved repeat count. Values labeled R are
-verified coordinates, not verified execution logs. Add overhead $e_i$ to
-all training expressions. Where a figure reuses trajectories, its extra
-\emph{training} cost is zero only if those trajectories and predictions were
-saved; analysis/evaluation is still chargeable.
-\begingroup\small
-\setlength{\tabcolsep}{4pt}\renewcommand{\arraystretch}{1.13}
-\begin{longtable}{@{}P{0.32in}P{3.47in}P{2.9in}@{}}
-\toprule
-Fig. & Experiment, varied quantities, fixed conditions and evidence & GPU-hours / reuse and remaining uncertainty\\
-\midrule\endfirsthead
-\toprule Fig. & Experiment and evidence & GPU-hours / reuse and uncertainty\\\midrule\endhead
-1 & CIFAR-10, ResNet18; width sweep, 15\% noise, augmentation, Adam, 4k epochs. Train/test error and epoch-colored curves. Five trials (P, B.4); $k=1,\ldots,64$ (R). & $64\times5=320$ runs: $320A$. At 0.01/0.1 s: 1,390/13,902 GPU-h, before overhead. Figure 1 uses noisy-distribution test error.\\
-2 & Train/test heatmaps versus width and epoch for the same 15\% noise ResNet family (P). & Reuse Figure 1 trajectories if identical: zero additional training. Heatmap cells are not separate training runs. Exact repeat aggregation unverified.\\
-3 & IWSLT de--en, 4k versus 18k sentence pairs; Transformer width versus held-out perplexity (P). Released $d=8,16,\ldots,200$, 25 distinct widths each; 25+27 CSV rows (R). & $50T$ for distinct configurations, or $52T$ retaining all released rows as separate runs. At 0.1/0.5 s: 111--116 / 556--578 GPU-h. Two duplicate widths in the 18k file need provenance.\\
-4 & ResNet18, CIFAR-10 and CIFAR-100; width and label-noise sweeps, augmentation, Adam, 4k epochs (P). Appendix A lists CIFAR-10 noise 0/5/10/15/20\%; CIFAR-100 0/10/20\%. & $64s(5+3)A=512sA$ if all listed conditions use the released 64-width grid (A). R verifies 64 widths in each base archive, not the entire condition cross product. Subtract exact overlaps with Figure 1; do not assume five seeds everywhere.\\
-5 & CIFAR-10 CNN; widths, augmentation on/off, noise 0/10/20\%; SGD 500k steps (P). & $S\sum_{a,p}W_{a,p}s_{a,p}$. R: no-augmentation archive has 65 widths; augmented 10\% has 76 and 20\% has 60. Other grids/repeats need resolution. Figures 25/27 can reuse matching runs.\\
-6 & CIFAR-10 CNN, clean labels, no augmentation; SGD 500k steps versus Adam 4k epochs across width (P). & R: 65 widths in each optimizer archive. Conditional one-repeat cost $65S+65A$; SGD clean runs may overlap Figure 5. Adam is separately trained.\\
-7 & CIFAR-100 CNN, no label noise or augmentation; model-wise descent (P). Five trials in B.4; Figure 20 specifies one million steps. R: 64 widths. & $64\times5L=320L$ if all trials cover that grid: 889/8,889 GPU-h at 0.01/0.1 s. Do not cost this at 500k steps.\\
-8 & Transformer width on full IWSLT de--en (160k pairs) and WMT en--fr (200k pairs), 80k updates; test perplexity (P). R: 64 and 62 rows/widths. & $64T_{\rm IWSLT}+62T_{\rm WMT}$. At common 0.1/0.5 s: 280/1,400 GPU-h. Different vocabulary/length distributions require separate timings.\\
-9 & CIFAR-10 ResNet18 with 20\% noise and augmentation, Adam; three width slices and the width/epoch heatmap (P). & Reuse matching Figure 4 trajectories. Three displayed slices are not an additional three runs if already present.\\
-10 & Epoch-wise curves: ResNet18 on CIFAR-10 and CIFAR-100; width-128 CNN on CIFAR-10, with noise levels (P). ResNet uses Adam; CNN uses SGD. & Reuse exact matching runs from Figures 4/5; otherwise one $A$ or $S$ per missing dataset/noise/width/seed tuple. $k=128$ is outside the base 1--64 ResNet archive; do not assume it is covered.\\
-11(a) & CIFAR-10 CNN width versus sample size, augmentation, 10\%/20\% noise. Five trials for bottom panel, with initialization and subset randomness (P). & $S\sum_p W_pN_ps_p$, less exact reuse with Figure 12. Panel-specific grids/seeds not fully verified. B.4 says 500k ``epochs'', conflicting with the step-based protocol.\\
-11(b) & IWSLT sample-count curves at $d=64$ and $80$ (P). R: each file has 59 counts, 4k through 120k in increments of 2k. & $118T$, or 262/1,311 GPU-h at 0.1/0.5 s. Four $(n,d)$ coordinates overlap Figure 3, but matching seeds/subsets are not established.\\
-12 & CIFAR-10 CNN, 20\% noise; width/sample heatmap and three slices (P). R: 42 widths and nine sample sizes. & $42\times9=378$ configurations per seed, subject to valid cells: $378sS$. At 0.01/0.1 s: 525/5,250 GPU-h per seed. Reuse matching Figure 11(a) cells only once.\\
-13 & Parameter count versus width/embedding dimension for CNN, ResNet and Transformer (P). & Zero training GPU-hours; instantiate/count on CPU. Transformer counts depend on vocabulary and embedding sharing, still unresolved.\\
-14 & Fashion-MNIST random Fourier features: feature-count/sample-count heatmap and model-wise slice (P, Appendix D). & $\sum_{d,n,s}h_{\rm solve}(d,n,s)$. CPU-only implementation has zero GPU-h but nonzero CPU/RAM cost; GPU solve must be timed. Exact grid/solver/tolerance/seeds unverified.\\
-15 & Sample-wise random-feature curve at 1,000 features (P). & Reuse the $d=1000$ slice of Figure 14 if present; otherwise additional fits for every sample count. Not a new deep-network sweep.\\
-16 & CIFAR-10 ResNet18, 20\% noise/augmentation; Adam; constant, inverse-square-root and dynamic schedules. Legends show initial LR $10^{-4},10^{-3}$; axes extend to $10^6$ iterations (P, visual). & Six displayed settings per repeat. A full one-million-update horizon gives $6sL$; this horizon is a planning interpretation of axes, not a verified completion log. Width, dynamic-drop settings and actual terminal steps unresolved.\\
-17 & Same task; SGD without momentum. Constant LR $10^{-4},10^{-3},10^{-2}$; inverse-square-root and dynamic LR $10^{-3},10^{-2},10^{-1}$ (P, visual). & Nine displayed settings: $9sL$ under the same full-horizon assumption. Reuse only configurations identical to other image runs; nominal SGD alone does not establish reuse.\\
-18 & Same task; SGD with momentum 0.9. Each of three schedules shows LR $10^{-4},10^{-3},10^{-2}$ (P, visual). & Nine displayed settings: $9sL$ under the full-horizon assumption. Together Figures 16--18 have 24 settings, not merely nine optimizer/schedule pairs.\\
-19 & Clean CIFAR-100 ResNet18, augmentation, Adam 4k epochs; width/epoch heatmaps and optimal early-stopping envelope (P). & Reuse clean CIFAR-100 runs from Figure 4. Early-stopping envelope can be computed from saved metrics; no retraining. This setting can retain model-wise double descent even with optimal early stopping.\\
-20 & Clean CIFAR-100 CNN, no augmentation, SGD one million steps; dynamics/early stopping (P). & Same experiment as Figure 7: no additional training with saved histories.\\
-21 & CIFAR-10 CNN, 10\% noise, augmentation, SGD 500k; width and weight decay $0,10^{-4},5\times10^{-4}$ (P, visual). & $S\sum_\lambda W_\lambda s_\lambda$; $180sS$ if all three use the 60-width decay grid (A). Zero-decay runs may already exist. R: decay directory listed only \texttt{ks}, no \texttt{Mlist}.\\
-22 & CIFAR-10 ResNet18, 20\% noise/augmentation; regularization strength from 0 to 0.1 versus time, SGD inverse-square-root (P, E.2.2). & $\sum_{\lambda,s}U_{\lambda,s}t_{\lambda,s}/3600$. Exact decay grid, fixed width and horizons unresolved. A similarly named released archive says Adam, so it is not verified as this figure's data. Instability/reruns are an additional cost.\\
-23 & Early-stopping/dynamics for IWSLT 4k/18k width sweeps (P). & Reuse Figure 3 training if epoch histories are saved. Released CSVs contain endpoint metrics only; they cannot reconstruct these trajectories.\\
-24 & Early-stopping/dynamics for IWSLT 160k and WMT 200k width sweeps (P). & Reuse Figure 8 trajectories. Endpoint CSVs alone are insufficient; missing histories require new full runs or locating additional released logs.\\
-25 & CIFAR-10 CNN, 10\% noise, augmentation, SGD inverse-square-root; width/epoch heatmaps (P, caption). & Reuse matching Figure 5/27 runs; conditional released 76-width family costs $76sS$ if generated from scratch. Appendix A's pointer for this figure conflicts with its caption.\\
-26 & CIFAR-10 25k, clean labels; adversarial ResNet18 width sweep at $L_2$ radii 0.5 and 1.0, ten-step PGD. SGD LR 0.1 for 400 epochs then 0.01 for 400 (P). & $2WsP$ plus robust evaluation attacks. R: an \texttt{adv-mcnn} archive has 36 widths, but its architecture name conflicts with the caption. $72sP$ is conditional, not a verified ResNet run count.\\
-27 & Wider augmented CIFAR-10 CNNs, noise conditions, SGD 500k; extension of Figure 5(b) (P). R: larger-model archives include 59/60 widths for 0/20\% noise. & Only widths/configurations absent from Figure 5 incur additional $S$ runs. Adding the full archive sizes would double-count shared small widths. Ten-percent family has its own 76-width list.\\
-28 & CIFAR-10 ResNet18, 15\% noise; plurality-vote ensembles of five, with independently sampled corruption for each member; Adam 4k (P). & Reuse Figure 1 members only if independent-noise semantics and predictions match. Otherwise $5WA$ new training plus inference. Aggregate errors cannot reconstruct ensemble votes.\\
-29 & CIFAR-10 CNN, clean labels, no augmentation; five-member ensemble, SGD (P, caption). & $5WsS$ if 500k is used, minus reusable independent members. Width grid/repeats not established. Caption points to Figure 7, which is CIFAR-100; do not reuse that different dataset.\\
-\bottomrule
-\end{longtable}
-\endgroup
+\subsection{Training time}
+Paper Figures 9 and 10 motivate comparisons of width-dependent
+training trajectories. Our ResNet histories cover 400 epochs and our
+CNN histories cover 50,000 steps. Figure~\ref{app:ours-figure_09}
+uses the ResNet notebook's plotted epoch convention.
+Figure~\ref{app:ours-figure_10} covers only the width-128 CIFAR-10
+CNN arm of paper Figure 10, not its two width-128 ResNet arms.
+Our references use the released clean full-data width sweep (1,952
+positions) and the explicitly labeled 50,000-example, 20\%-noise
+sample grid (976 positions), whereas ours have 40 measurements. Their logging cadence
+is not established, so we show authors' saved indices and our recorded
+updates on separate logarithmic axes, without claiming time alignment
+or applying smoothing. The latter reference ends at 21.67\% test
+error; an earlier selected 20\% archive ended at 37.05\% and was
+not interchangeable with this full-data sample-grid reference. The 10\%-noise published source has 1,421 positions and
+unresolved entry metadata; it is excluded from this comparison while
+our measured 10\% trajectory is shown only in the standalone
+chart. The standalone figures retain each source's measured noise settings
+and identify the separate time axes. A smoother published
+curve alone therefore does not establish equivalent training or a
+failure of our reproduction.
 
-\section{Translation: verified grids and defensible cost arithmetic}
-The six released tables contain the following exact coordinates. These
-counts are verified from CSV contents, not inferred from axis tick marks.
-They do not establish how many seeds originally produced each row.
-\begin{center}\small
-\begin{tabular}{@{}llll@{}}
-\toprule
-Released table / task & Grid & Rows & Unique within table\\\midrule
-\texttt{nlp-model-dd.csv} / IWSLT & $d=8,16,\ldots,512$ & 64 & 64\\
-\texttt{dd-translation-model-french.csv} / WMT & $d=8,16,\ldots,496$ & 62 & 62\\
-\texttt{df4k.csv} / IWSLT 4k & $d=8,16,\ldots,200$ & 25 & 25\\
-\texttt{df18k.csv} / IWSLT 18k & same grid & 27 & 25\\
-\texttt{dd-translation-samples-aug26-small.csv} & $d=64$, 59 sample counts & 59 & 59\\
-\texttt{dd-translation-samples-aug27-size80.csv} & $d=80$, 59 sample counts & 59 & 59\\\midrule
-Total & & 296 & 294\\\bottomrule
-\end{tabular}
-\end{center}
-The 18k table repeats widths 56 and 112. Without run IDs these could be
-reruns, separate seeds or accidental duplication; they must not be silently
-averaged or treated as independent trials. Four coordinates, $(n,d)$ with
-$n\in\{4000,18000\}$ and $d\in\{64,80\}$, appear in both small-data width
-sweeps and sample sweeps. If their complete configuration, seed and subset
-match, 294 within-table unique settings reduce to 290 globally unique
-configurations. Otherwise budget separately. Retaining all published rows
-without reuse gives 296 runs, before any new repeats.
+\subsection{Sample size}
+Paper Figures 11(a) and 12 motivate the sample-size comparisons.
+At width 16 and 20\% label noise, our augmented CIFAR-10 CNN test
+errors are 40.97\%, 31.19\%, and 21.74\% for 12,500, 25,000,
+and 50,000 training examples, respectively, at step 50,000.
+The corresponding train errors against corrupted labels are 10.71\%,
+25.89\%, and 29.67\%. At this width and horizon, more data improves
+test error; these measurements do not demonstrate the paper's
+claim that more data can hurt in a critical regime.
+Figures~\ref{app:ours-figure_11a} and~\ref{app:ours-figure_12}
+show the broader measured grids. Our 10\%-noise sample curves have
+no matching published subset source and are labeled separately.
 
-For one GPU per run and the stated 80,000-update protocol:
-\[
- H_{\rm language}=\frac{80000}{3600}\sum_i t_i+E.
-\]
-At a uniform hypothetical $t_i=0.1$ seconds, the 290--296 accounting cases
-cost \textbf{644.44--657.78 GPU-h}, or \textbf{\$2,249.11--\$2,295.64} at the
-historical scenario rate. At $0.5$ seconds they cost
-\textbf{3,222.22--3,288.89 GPU-h}, or \textbf{\$11,245.56--\$11,478.22}.
-These include neither overhead nor repeated-seed replication. Three fresh
-seeds multiply the chosen unique-configuration budget by three. They are
-not claims that either timing is achievable on a B200.
+\section{Discussion and limitations}
 
-Even the 50-configuration small-data Figure 3 sweep costs 111.11 GPU-h at
-0.1 s/update and 555.56 GPU-h at 0.5 s/update. Thus 120 GPU-h could cover
-that subset only if the average update took approximately 0.108 s or less,
-with no overhead and only one repeat. It cannot be called the cost of all
-translation experiments.
 
-\textbf{Metric/provenance caveats discovered in the released data.}
-The model-wise notebooks label the vertical axis cross-entropy, while the
-paper captions call it perplexity. Some CSVs have identical train-error and
-test-error columns, and the 18k error column uses a different numerical scale
-from several other tables. The notebook legend also reverses the language
-directions relative to the paper. These discrepancies do not alter row
-counts, but the files must not be used uncritically as validated metrics.
-Record loss units and log base before transforming to perplexity; use clean
-held-out negative log-likelihood rather than the label-smoothed training
-objective for a newly implemented evaluation.
 
-\section{Image and auxiliary experiments: what can be priced now}
-\textbf{The Figure 1 grid alone:} 64 widths and five trials imply 320 runs.
-At 4,000 epochs and 391 batches/epoch that is 500,480,000 updates.
-An assumed sweep-average 0.01 s/update costs 1,390.22 GPU-h and
-\$4,851.88; at 0.1 s/update it costs 13,902.22 GPU-h and \$48,518.76.
-These are conditional examples, not measured requirements, but they expose
-why seven widths on a reduced dataset cannot price the original figure.
-
-\textbf{The Figure 12 sample/width grid:} the nine released sample sizes are
-3,125; 4,419; 6,250; 8,839; 12,500; 17,678; 25,000; 35,355; and 50,000.
-Its 42 widths give 378 settings per repeat if every cell is required and
-valid. With 500k updates each, $t=0.01$ s implies 525 GPU-h
-(\$1,832.25); $t=0.1$ s implies 5,250 GPU-h (\$18,322.50).
-The five-repeat statement for Figure 11(a)'s lower panel is not evidence
-that the entire Figure 12 grid has five repeats.
-
-\textbf{Optimizer/schedule checks:} the 24 visually identified settings in
-Figures 16--18, each extended to one million updates, imply $24L$ per
-repeat: 66.67/666.67 GPU-h at 0.01/0.1 s. Width and dynamic-drop parameters
-still need recovery. Learning-rate curves that stop early in the plot do
-not establish a common completed horizon.
-
-\textbf{Random features and parameter counting:} CPU-only choices require
-zero GPU-hours, but dense feature matrices and least-squares factorizations
-can dominate RAM and CPU time. Exact dimensions, numerical method and
-regularization/gradient-flow stopping must be specified and timed. Do not
-reserve a GPU merely because the previous cost table used one as a proxy.
-A large solve belongs on suitable remote compute.
-
-\textbf{Adversarial training:} counting 800 epochs alone misses ten PGD
-steps inside each update and separate robust evaluation. The ambiguous
-36-width released archive would imply 72 runs for two radii only after its
-architecture and condition mapping are resolved. It is not legitimate to
-price this as two ordinary image sweeps.
-
-\textbf{Ensembles:} five members per width, with the specified independent
-corruptions for Figure 28. Preserve per-example predictions. The paper's
-mean/standard-deviation curves and a CSV of aggregate losses cannot recover
-plurality-vote ensemble errors. If members or predictions are missing,
-training or inference is additional work.
-
-\textbf{No grand total is added across figure rows.} Many rows are views of
-shared trajectories, while several grids and seed counts remain unknown.
-A defensible full total requires a union of run configurations, not the
-sum of all displayed figure costs. The verified grids already show that the
-full paper is materially larger than the previous proposed course subset.
-
-\section{Conflicts that must remain visible}
-\begin{enumerate}[leftmargin=1.5em,itemsep=3pt]
-\item Appendix B.1 says ``80 gradient steps'' for Transformers, whereas
-Section 4 and Figure 8 say 80k. This audit uses 80,000 and records the conflict.
-\item Appendix B.4 says 500k \emph{epochs} for Figure 11(a); the main SGD
-protocol is 500k \emph{updates}. Costs here use updates provisionally, not
-500k full dataset passes. Original run configurations are needed to settle it.
-\item Appendix A has figure mappings inconsistent with captions, including
-Figure 25 and Figure 21's noise level. Caption-specific settings are used
-provisionally: Figure 21 is 10\% noise; Figure 25 is augmented SGD at 10\%.
-\item Figure 29's reference to Figure 7 conflicts on CIFAR-10 versus
-CIFAR-100. They are not counted as the same training job.
-\item The README calls translation optimization SGD; Appendix A says Adam
-and B.3 references the Transformer recipe. This audit follows the paper
-provisionally and does not claim released training code confirms it.
-\item The adversarial archive says \texttt{mcnn}; Figure 26 says ResNet18.
-The decay archive says Adam while E.2.2 specifies SGD. Directory names are
-not enough to resolve either mapping.
-\item Figure 1 evaluates against a noisy test distribution; other figures
-use clean test targets. For ten classes and noise probability $p$, clean
-error $e$ gives expected noisy error $p+(1-10p/9)e$. The inspected plotting
-notebook instead uses an expression with the opposite sign on its final
-$ep/9$ term. Check against original data before claiming exact curve recovery.
-\item Optimal early stopping in published plots is an oracle envelope over
-test trajectories. A new practical early-stopping experiment must use a
-validation split. Figure 19 is an explicit exception to the broad appendix
-heading claiming early stopping does not exhibit double descent.
-\end{enumerate}
-
-\section{A costable course subset, without concealing its reductions}
-A useful cross-modality candidate is one image width/dynamics experiment,
-one translation width/sample experiment and one independent ablation. This
-is a proposed menu, not an approved compute launch or a claim that it
-reproduces every figure.
-
-\textbf{Image contribution:} seven pilot-selected ResNet widths, CIFAR-10
-50k, 15\% noise, augmentation, full 4k epochs, three seeds: 21 runs.
-It targets Figures 1/2 but uses fewer widths and repeats. A clean-label
-ablation at three of those widths adds nine runs. Both epoch-wise and
-model-wise plots use the same saved histories. Total: $30A$, or
-130.33/1,303.33 GPU-h at hypothetical 0.01/0.1 s per update.
-
-\textbf{Translation contribution:} six pilot-selected dimensions (multiples
-of eight) at both 4k and 18k pairs, three seeds: 36 runs at 80k updates.
-It targets Figures 3/23 and a sparse cross-section of Figure 11(b), with
-explicitly reduced grid density. Total: $36T$, or 80/400 GPU-h at
-hypothetical 0.1/0.5 s per update. A separate WMT comparison is not included;
-adding six WMT widths and three seeds costs another $18T_{\rm WMT}$.
-
-The image sweep, translation sweep and clean-label ablation give three
-concrete experimental contributions without pretending image-only work
-covers the text results. At the faster illustrative timings, the combined
-$30A+36T$ is 210.33 GPU-h or \$734.06 before overhead; doubling that amount
-is \$1,468.13. At the slower illustrative timings it is 1,703.33 GPU-h or
-\$5,944.63 before overhead. \textbf{Even this subset cannot yet be promised
-under \$1,000.} Fewer seeds, fewer widths, smaller image subsets or shorter
-horizons require a new explicit scope decision; stopping before interpolation
-can remove the phenomenon being tested. Pilot results must determine the
-choice rather than retroactively justifying an attractive price.
-
-\section{What is required to turn this into a measured quote}
-At the time of the initial audit, the missing step was a small remote timing
-pilot on the actual rentable GPU, after an executable training path had been
-verified. A100 and B200 pilots were completed subsequently; their reports are
-in \texttt{../our-results-folder/pilots/}. No ML training or benchmark should
-run on the local Mac. A pilot should cover a small,
-near-interpolation and large width for each chosen architecture and dataset;
-translation needs both language pairs if both are included. Fix vocabulary,
-sequence lengths, tokens per update, gradient accumulation, numerical
-precision, evaluation cadence and checkpoint policy before timing.
-
-Measure warmup separately, then multiple steady-state windows; record
-seconds/update, examples or tokens per second, peak VRAM, GPU count and model,
-software versions, complete configuration, source/data hashes and seed.
-Time a complete validation pass and a checkpoint write separately. Verify
-that resuming restores optimizer, schedule, RNG and sampler state, so
-preemption does not force repeated training. Save training/validation/test
-histories with their exact steps and independent-noise identifiers.
-
-The run ledger must contain one row per unique
-(dataset/split, sample subset, architecture, width, optimizer, schedule,
-noise seed, augmentation, weight decay, training seed, horizon) tuple, with
-its target figures. Calculate each row with its own measured throughput and
-sum once. Record setup, data processing, storage, transfer, inference and
-interruption costs separately; re-price the chosen provider allocation.
-Until that ledger and the missing source configurations are resolved,
-\emph{the protocols and counts above are auditable, but an exact final
-GPU-hour cost remains unverified}.
+\section{Reproducibility and contributions}
+The assignment code and result organization are available at
+\href{https://github.com/HP2706/ATDL-Group-Work}{the group's GitHub repository}.
+Detailed run coverage and deviations are recorded in the repository's
+\texttt{EXPERIMENTS.md}. Group identification and individual contribution
+statements remain to be supplied by the group before submission.
 
 \clearpage
-\section{Completed reduced vision results}
-After the initial audit, our group completed 229 single-seed vision cells.
-The Adam runs end at epoch 400 and the SGD CNN runs end at 50,000 optimizer
-steps. The authors generally used denser width grids, 4,000 Adam epochs,
-500,000 CIFAR-10 SGD updates, or one million clean CIFAR-100 SGD updates.
-The figures below therefore document partial reproductions of the numbered
-paper figures. They do not establish a full replication of any numbered
-figure. Our training time is recorded as epochs or optimizer steps; the
-authors' released arrays often supply only a measurement index. For CNN
-panels near 50,000 steps, the authors' step scale uses an unverified
-256-step-per-measurement estimate. Our single-seed results have no inferred
-error bars. The data and remaining gaps are detailed in
-\texttt{../EXPERIMENTS.md}.
-
-\subsection{Our measurements beside the released measurements}
-Each image pairs our results with a plot reconstructed from the authors'
-released numeric data. The image labels identify the source of each panel;
-matching visual layout does not imply equal training horizons.
-
-\resultplot{comparison}{figure_01}{Figure 1 adaptation: CIFAR-10 ResNet18 at 10\% label noise. Our ten widths and 400 epochs cover one seed; the paper uses 15\% noise, more widths, five trials, and 4,000 epochs.}
-\resultplot{comparison}{figure_02}{Figure 2 adaptation: train and test error heatmaps at 10\% noise. The published measurement positions and our recorded epochs are displayed separately.}
-\resultplot{comparison}{figure_04}{Figure 4 adaptation: CIFAR-10 and CIFAR-100 ResNet18 noise curves. Our 0/10/20\% noise cells end at epoch 400; the published CIFAR-10 set also includes 5/15\% noise.}
-\resultplot{comparison}{figure_05}{Figure 5 subset: augmented and unaugmented CIFAR-10 CNN curves. Our runs end at 50,000 SGD steps; the authors' step mapping near that horizon is estimated.}
-\resultplot{comparison}{figure_06}{Figure 6 subset: clean, unaugmented CIFAR-10 CNN with SGD and Adam. The published endpoints are from full recorded histories; ours stop at 50,000 steps or 400 epochs.}
-\resultplot{comparison}{figure_07}{Figure 7 subset: clean CIFAR-100 CNN. The published five-trial mean and spread are shown beside our one-seed 50,000-step result at eleven widths.}
-\resultplot{comparison}{figure_09}{Figure 9 adaptation: 20\%-noise CIFAR-10 ResNet18 trajectories and width-by-time heatmap. Our run ends at epoch 400.}
-\resultplot{comparison}{figure_10}{Figure 10 subset: width-128 CIFAR-10 CNN histories at three noise levels. Our curves use recorded steps; the published step coordinate is inferred.}
-\resultplot{comparison}{figure_11a}{Figure 11(a) subset: CIFAR-10 CNN sample-size curves. The 20\%-noise comparison uses three sample sizes and eleven widths; our 10\%-noise results appear separately because matching published subset data were unavailable.}
-\resultplot{comparison}{figure_12}{Figure 12 subset: 20\%-noise CIFAR-10 CNN heatmaps and sample-size slices at three sample sizes and eleven widths, with a common color scale.}
-
+\bibliographystyle{ISBI_template-master/IEEEbib}
+\bibliography{references}
 \clearpage
-\subsection{Our measurements alone}
-The following panels use the same plot definitions and our same measured
-cells as the paired images above. They make our observed curves readable
-without the additional published panels. The experimental limits stated
-above apply to every image in this subsection.
-
-\resultplot{ours}{figure_01}{Our Figure 1 adaptation: 10\%-noise CIFAR-10 ResNet18 endpoints and training-time curves through epoch 400.}
-\resultplot{ours}{figure_02}{Our Figure 2 adaptation: 10\%-noise CIFAR-10 ResNet18 test and train heatmaps through epoch 400.}
-\resultplot{ours}{figure_04}{Our Figure 4 adaptation: CIFAR-10 and CIFAR-100 ResNet18 curves at 0/10/20\% noise.}
-\resultplot{ours}{figure_05}{Our Figure 5 subset: augmented and unaugmented CIFAR-10 CNN curves through 50,000 SGD steps.}
-\resultplot{ours}{figure_06}{Our Figure 6 subset: clean, unaugmented CIFAR-10 CNN endpoints for SGD and Adam.}
-\resultplot{ours}{figure_07}{Our Figure 7 subset: one-seed clean CIFAR-100 CNN endpoints after 50,000 SGD steps.}
-\resultplot{ours}{figure_09}{Our Figure 9 adaptation: 20\%-noise CIFAR-10 ResNet18 trajectories and width-by-epoch heatmap.}
-\resultplot{ours}{figure_10}{Our Figure 10 subset: width-128 CIFAR-10 CNN test and train histories through 50,000 steps.}
-\resultplot{ours}{figure_11a}{Our Figure 11(a) subset: three CIFAR-10 CNN sample sizes at 10\% and 20\% noise.}
-\resultplot{ours}{figure_12}{Our Figure 12 subset: 20\%-noise CIFAR-10 CNN sample-size heatmap and slices, using the same color scale as the paired comparison.}
+\onecolumn
+\appendix
+\input{appendix-protocol}
+\clearpage
+\input{appendix-figures}
 \end{document}

@@ -19,6 +19,7 @@ sys.path.insert(0, str(PLOTS_CODE))
 
 from translation import sample_plot, translation_plot  # noqa: E402
 from vision import dynamics, figure9_panels, final_curve, load_vision, ocean  # noqa: E402
+from paper_figures import EPOCHS, WIDTHS, figure_1, figure_10_cnn, load_figure10_paper  # noqa: E402
 
 
 def save(figure: plt.Figure, path: Path) -> None:
@@ -148,6 +149,12 @@ def render(dataset_dir: str = str(ROOT.parent / "their-results" / "hf_dataset"),
         print(path, flush=True)
 
     # These use the layouts and colormap ported from the authors' notebooks.
+    matched = load_vision("cifar10-resnet18k-50k-adam", data, 400, WIDTHS)
+    matched = matched.loc[matched["trial_index"].eq(1)
+                          & matched["measurement_index"].isin([epoch - 1 for epoch in EPOCHS])].copy()
+    matched["label_noise"] = 0.1
+    matched["epoch"] = matched["measurement_index"] + 1
+    emit("figure_01_resnet_10pct_matched.png", figure_1(matched, matched, authors_only=True))
     p15 = "cifar10-resnet18k-p15-adam-reps"
     emit("figure_01_resnet_15pct_final.png", final_curve(p15, data, 0.15, 10))
     emit("figure_01_resnet_15pct_dynamics.png", dynamics(p15, data, 0, noise_level=0.15))
@@ -184,7 +191,8 @@ def render(dataset_dir: str = str(ROOT.parent / "their-results" / "hf_dataset"),
     emit("figure_05_cifar10_cnn_augmentation.png", augmentation_panels(data))
     emit("figure_07_cifar100_cnn.png", source_curve("pct-cifar100-mcnn-p0-sgd-noaug-reps", data, split_metrics=True))
     emit("figure_11a_cifar10_cnn_sample_sizes.png", source_curve("dd_grid_p20", data))
-    emit("figure_10_cifar10_cnn_dynamics.png", dynamics("cifar10-mcnn-p20-sgd", data, 0))
+    cnn_paper = load_figure10_paper(data.parent.parent)
+    emit("figure_10_cifar10_cnn_dynamics.png", figure_10_cnn(cnn_paper, authors_only=True))
     emit("figure_21_cifar10_cnn_weight_decay.png", comparison([
         ("pct-cifar10-mcnn-p10-sgd-aug-decay-big", "Decay archive 1", 0),
         ("pct-cifar10-mcnn-p10-sgd-aug-decay5-big", "Decay archive 2", 0),

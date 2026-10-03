@@ -40,7 +40,7 @@ At width 16, our augmented CIFAR-10 CNN's 20%-noise test error is **40.97%, 31.1
 | **7** | [Figure 7](plots/comparison/figure_07.png): clean CIFAR-100 CNN, authors’ five-trial mean ± SD beside our one-seed result at 11 shared widths; ours has 50,000 steps. | 64 widths, five seeds, and 1,000,000 steps. |
 | **8** | No translation run. | IWSLT'14 and WMT'14 model sweeps. |
 | **9** | [Figure 9](plots/comparison/figure_09.png): three ResNet width trajectories and ten-width heatmap through epoch 400. | Denser widths and 4,000 epochs. |
-| **10** | [Figure 10](plots/comparison/figure_10.png): CIFAR-10 CNN width-128 histories at 0/10/20% noise through 50,000 steps. | Width-128 ResNets on both datasets and 500,000 CNN steps. |
+| **10(c)** | [Figure 10(c)](plots/comparison/figure_10.png): our CIFAR-10 CNN width-128 0/20% histories (10% in the standalone chart) through 50,000 updates beside the clean full-data and explicit 50,000-example/20% released histories on native saved-position axes. | Width-128 ResNets on both datasets and 500,000 CNN steps. |
 | **11(a)** | [Figure 11(a)](plots/comparison/figure_11a.png): **12,500/25,000/50,000-example** CNN curves at 20% noise beside published curves on the same 11 widths, plus our 10% curves separately; ours has one seed and 50,000 steps. The released archive has no 10%-noise subset source. | Denser widths, five seeds for 20% noise, and 500,000 steps. |
 | **11(b)** | No translation run. | Translation sample-size sweep. |
 | **12** | [Figure 12](plots/comparison/figure_12.png): published and our 20%-noise CNN heatmaps and slices for the same **three sample sizes × 11 widths** and color scale; ours has 50,000 steps. | Nine sample sizes, 42 widths, and 500,000 steps. |
@@ -71,4 +71,14 @@ Each row gives the complete training configuration for that figure. **Jobs** cou
 
 The union is **3,083 distinct training jobs** if all stated subset, noise-mask, seed, and tokenizer matches are deliberately enforced; without any cross-figure reuse, adding the standalone figure counts double-counts shared runs. Figure 11(a)'s “500K epochs” versus “500K steps” conflict and its exact original five-trial width coverage still require original configuration records. Save per-run histories and metric definitions so the time-dependent figures can be drawn without retraining.
 
-Sources: [local paper OCR](../../papers/deep-double-descent/ocr/paper.md), [verified released grids](report/evidence/verified-grids.json), [translation CSV coordinate audit](report/evidence/verified-csv-counts.json), and [source audit](report/evidence/README.md).
+Sources: [local paper OCR](../../papers/deep-double-descent/ocr/paper.md), [verified released grids](their-results/provenance/verified-grids.json), [translation CSV coordinate audit](their-results/provenance/verified-csv-counts.json), and [source audit](their-results/provenance/README.md).
+
+## Verified sweep allocation times (3 October 2026)
+
+The seven completed 229-cell sweeps used one B200 each, with up to four independent training processes configured per GPU. UCloud job `RUNNING` to `SUCCESS` timestamps give durations of 4.53, 4.92, 1.45, 0.74, 2.13, 0.25, and 0.96 hours in the row order of the completed-run table above. The unrounded total is 14.9757847 GPU-hours. These are allocation wall times including startup, evaluation, checkpointing, and export, not summed training-loop times. Jobs overlap; pilot and prior exploratory allocations are excluded. The sanitized records are in [completed-sweep-timings.json](our-results-folder/completed-sweep-timings.json).
+
+### Figure 10 correction
+
+The standalone published Figure 10 asset previously showed error versus model width with time encoded by color, while the intended Figure 10(c) comparison concerns width-128 error versus training time. It now uses the same trajectory renderer as the paired comparison. The clean full-data source contains 1,952 saved positions and the explicitly labeled 50,000-example/20%-noise sample-grid reference contains 976 and use a native measurement-index axis; ours contains 40 evaluations through 50,000 actual updates. The 10% source contains 1,421 positions and unresolved entry metadata, so it is excluded from this Figure 10 comparison. Our 10% trajectory remains shown. No smoothing, repeat averaging, guessed 256-step mapping, or claim of equal horizons is applied to Figure 10. Other approximate-horizon CNN charts retain their explicitly unverified mapping; endpoint comparisons such as Figures 6, 7, 11(a), and 12 are not time-matched replications.
+
+Figure 10 reference selection: clean `pct-cifar10-mcnn-50000-p0-sgd-big` plus `dd_grid_p20` filtered to width 128 and sample size 50,000. The latter ends at 21.67% test error; the previously selected `pct-cifar10-mcnn-50000-p20-sgd-big` ends at 37.05% and is not substituted for the sample-grid history. Saved-position axes remain unverified physical time, with different series lengths.

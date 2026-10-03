@@ -19,7 +19,7 @@ The [short-horizon comparison notebook](short_horizon_comparison.ipynb) has one 
 | 7 | [`CIFAR-100 CNN`](../plots/published/figure_07_cifar100_cnn.png) | All five released repetitions, with separate solid test-error and dashed train-error subfigures; training setting in archive is no augmentation. |
 | 8 | [`full translation`](../plots/published/figure_08_translation_full.png) | Endpoint CSVs with separate solid test-loss and dashed train-loss subfigures; archive loss units remain unresolved. |
 | 9 | [`two-panel reconstruction`](../plots/published/figure_09_resnet_20pct_panels.png), [`dynamics`](../plots/published/figure_09_resnet_20pct_dynamics.png), [`heatmap`](../plots/published/figure_09_resnet_20pct_heatmap.png) | The left panel follows widths 3, 12, and 64; the right panel shows the corresponding width-by-time heatmap from the released 20% noise ResNet run. |
-| 10 | [`CNN dynamics`](../plots/published/figure_10_cifar10_cnn_dynamics.png) | One component; related ResNet dynamics are under Figures 1, 9, and 19. |
+| 10(c) | [`Width-128 CNN trajectories`](../plots/published/figure_10_cifar10_cnn_dynamics.png) | Clean full-data reference and explicit 50,000-example/20% sample-grid reference; logging cadences unverified. The paper's two width-128 ResNet arms are not reproduced. |
 | 11(a) | [`CNN sample-size curves`](../plots/published/figure_11a_cifar10_cnn_sample_sizes.png) | One released sample-size grid, with no trial error bars. |
 | 11(b) | [`translation sample-size curves`](../plots/published/figure_11b_translation_samples.png) | Endpoint CSVs only. |
 | 12 | [`CNN sample-size heatmap`](../plots/published/figure_12_cifar10_cnn_sample_heatmap.png) | Final recorded error from the released grid; not the original paper layout. |
@@ -45,3 +45,9 @@ MPLCONFIGDIR=/tmp/atdl-mpl ../.venv/bin/python their_plots/render.py
 ```
 
 This runs the plotting pass only; it does not train models. The script prints each output path. It reads the local Parquet dataset and does not download anything.
+
+Figure 10(c) now uses `paper_figures.figure_10_cnn(..., authors_only=True)` to render actual width-128 training trajectories, not the width-sweep `dynamics` renderer. Authors' 0%/20% full-data histories use saved measurement indices without an inferred optimizer-step axis; the 10% source is excluded pending entry/cadence provenance. No smoothing is applied.
+
+Figure 10 reference selection: clean `pct-cifar10-mcnn-50000-p0-sgd-big` plus `dd_grid_p20` filtered to width 128 and sample size 50,000. The latter ends at 21.67% test error; the previously selected `pct-cifar10-mcnn-50000-p20-sgd-big` ends at 37.05% and is not substituted for the sample-grid history. Saved-position axes remain unverified physical time, with different series lengths.
+
+The matched Figure 1 asset, `figure_01_resnet_10pct_matched.png`, uses the released 10% ResNet run on the same ten widths and 400 displayed epochs as ours. The 15% full-history reconstructions remain available as references.
