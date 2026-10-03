@@ -274,41 +274,36 @@ def plot_noise_curves(ax: Axes, frame: pd.DataFrame, metric: str) -> None:
         ax.legend(frameon=False, fontsize=8, loc="upper right")
 
 
-def comparison_legend(fig: Figure, ours_only: bool = False) -> None:
+def comparison_legend(fig: Figure) -> None:
     handles = [Line2D([], [], color=CNN_COLORS[noise], lw=2.5, label=f"{noise:.0%} label noise")
                for noise in NOISE]
-    if not ours_only:
-        handles.append(Line2D([], [], color="black", lw=2.5, label="Authors"))
-    handles.append(Line2D([], [], color="black", lw=2.5, linestyle="--", marker="o", label="Ours"))
-    fig.legend(handles=handles, loc="outside lower center", ncol=5,
-               frameon=False, fontsize=13, handlelength=2.5)
+    fig.legend(handles=handles, loc="outside lower center", ncol=3,
+               frameon=False, fontsize=16, handlelength=2.5)
 
 
 def figure_4(paper: pd.DataFrame, ours: pd.DataFrame, paper_cifar100: pd.DataFrame,
              ours_cifar100: pd.DataFrame, ours_only: bool = False) -> Figure:
-    """Compare sources directly at common noise levels in four readable panels."""
-    fig, axes = plt.subplots(2, 2, figsize=(12, 8), sharex=True, sharey="col",
-                             layout="constrained")
-    for column, (dataset, author_frame, our_frame) in enumerate((
+    """Give authors and ours separate, explicitly labeled columns."""
+    sources = ("Ours",) if ours_only else ("Authors", "Ours")
+    fig, axes = plt.subplots(4, len(sources), figsize=(6 * len(sources), 12),
+                             sharex=True, sharey="row", layout="constrained", squeeze=False)
+    for dataset_index, (dataset, author_frame, our_frame) in enumerate((
             ("CIFAR-10", paper, ours), ("CIFAR-100", paper_cifar100, ours_cifar100))):
-        sources = (("Ours", our_frame),) if ours_only else (("Authors", author_frame), ("Ours", our_frame))
-        for row, metric in enumerate(("test_error", "train_error")):
-            ax = axes[row, column]
-            for source, frame in sources:
+        for metric_index, metric in enumerate(("test_error", "train_error")):
+            row = dataset_index * 2 + metric_index
+            for column, source in enumerate(sources):
+                ax = axes[row, column]
+                frame = author_frame if source == "Authors" else our_frame
                 for noise in NOISE:
                     values = frame.loc[frame["epoch"].eq(400) & frame["label_noise"].eq(noise)].set_index("model_width").loc[list(WIDTHS)]
                     ax.plot(WIDTHS, values[metric], color=CNN_COLORS[noise], lw=2.2,
-                            linestyle="--" if source == "Ours" else "-",
                             marker="o" if source == "Ours" else None, markersize=4)
-            ax.set(title=f"{dataset}: {'test' if row == 0 else 'train'} error",
-                   ylabel="Error fraction", ylim=(0, 0.55 if column == 0 else 0.85))
-            ax.set_xticks((2, 16, 32, 48, 64))
-            ax.set_xlim(2, 64)
-            ax.tick_params(labelsize=12)
-            if row == 1:
-                ax.set_xlabel("ResNet18 width")
-    comparison_legend(fig, ours_only)
-    fig.suptitle("ResNet18 width sweeps", fontsize=17, fontweight="bold")
+                ax.set(title=f"{source}: {dataset}, {'test' if metric_index == 0 else 'train'} error",
+                       ylabel="Error fraction", xlabel="ResNet18 width",
+                       ylim=(0, 0.55 if dataset_index == 0 else 0.85), xlim=(2,64))
+                ax.set_xticks((2,16,32,48,64))
+    comparison_legend(fig)
+    fig.suptitle("ResNet18 width sweeps", fontsize=18, fontweight="bold")
     return fig
 
 
@@ -347,15 +342,17 @@ def figure_9(paper: pd.DataFrame, ours: pd.DataFrame, ours_only: bool = False) -
 def figure_5_cnn(paper: pd.DataFrame, ours: pd.DataFrame,
                  paper_noaug: pd.DataFrame, ours_noaug: pd.DataFrame,
                  ours_only: bool = False) -> Figure:
-    """Overlay sources by augmentation setting, with the time assumption in the caption."""
-    fig, axes = plt.subplots(2, 2, figsize=(12, 8), sharex=True, sharey=True,
-                             layout="constrained")
-    for column, (setting, author_frame, our_frame) in enumerate((
-            ("With augmentation", paper, ours), ("Without augmentation", paper_noaug, ours_noaug))):
-        sources = (("Ours", our_frame),) if ours_only else (("Authors", author_frame), ("Ours", our_frame))
-        for row, metric in enumerate(("test_error", "train_error")):
-            ax = axes[row, column]
-            for source, full_frame in sources:
+    """Give authors and ours separate columns for each augmentation setting."""
+    sources = ("Ours",) if ours_only else ("Authors", "Ours")
+    fig, axes = plt.subplots(4, len(sources), figsize=(6 * len(sources),12),
+                             sharex=True, sharey="row", layout="constrained", squeeze=False)
+    for setting_index, (setting, author_frame, our_frame) in enumerate((
+            ("with augmentation", paper, ours), ("without augmentation", paper_noaug, ours_noaug))):
+        for metric_index, metric in enumerate(("test_error", "train_error")):
+            row = setting_index * 2 + metric_index
+            for column, source in enumerate(sources):
+                ax = axes[row, column]
+                full_frame = author_frame if source == "Authors" else our_frame
                 time_column = "measurement_index" if source == "Authors" else "global_step"
                 frame = (full_frame.loc[((full_frame["measurement_index"] + 1)
                                          * CNN_PAPER_ESTIMATED_STEP_INTERVAL).le(CNN_COMPARISON_STEPS)]
@@ -368,16 +365,12 @@ def figure_5_cnn(paper: pd.DataFrame, ours: pd.DataFrame,
                     if tuple(endpoints["model_width"]) != SUBSET_WIDTHS:
                         raise ValueError("Figure 5 needs the same eleven widths for both sources")
                     ax.plot(endpoints["model_width"], endpoints[metric], color=CNN_COLORS[noise], lw=2.2,
-                            linestyle="--" if source == "Ours" else "-",
                             marker="o" if source == "Ours" else None, markersize=4)
-            ax.set(title=f"{setting}: {'test' if row == 0 else 'train'} error",
-                   ylabel="Error fraction", xlim=(1, 64), ylim=(0, 0.85))
-            ax.set_xticks((1, 16, 32, 48, 64))
-            ax.tick_params(labelsize=12)
-            if row == 1:
-                ax.set_xlabel("CNN width")
-    comparison_legend(fig, ours_only)
-    fig.suptitle("Effect of data augmentation on CIFAR-10 CNNs", fontsize=17, fontweight="bold")
+                ax.set(title=f"{source}: {setting}\n{'Test' if metric_index == 0 else 'Train'} error",
+                       ylabel="Error fraction", xlabel="CNN width", xlim=(1,64), ylim=(0,0.85))
+                ax.set_xticks((1,16,32,48,64))
+    comparison_legend(fig)
+    fig.suptitle("Effect of data augmentation on CIFAR-10 CNNs", fontsize=18, fontweight="bold")
     return fig
 
 
@@ -589,18 +582,19 @@ def figure_12_cnn(project_dir: Path, subsets: pd.DataFrame, ours_only: bool = Fa
 
 def style_figure(fig: Figure) -> None:
     """Keep text and legends legible when comparison charts are placed in the report."""
+    dense = len(fig.axes) > 6
     for ax in fig.axes:
-        ax.tick_params(labelsize=11)
-        ax.xaxis.label.set_fontsize(13)
-        ax.yaxis.label.set_fontsize(13)
-        ax.title.set_fontsize(14)
+        ax.tick_params(labelsize=12 if dense else 11)
+        ax.xaxis.label.set_fontsize(14 if dense else 13)
+        ax.yaxis.label.set_fontsize(14 if dense else 13)
+        ax.title.set_fontsize(16 if dense else 14)
         legend = ax.get_legend()
         if legend is not None:
             for label in legend.get_texts():
                 label.set_fontsize(13)
     for legend in fig.legends:
         for label in legend.get_texts():
-            label.set_fontsize(13)
+            label.set_fontsize(16 if dense else 13)
 
 
 def save_figures(project_dir: Path, output_dir: Path) -> dict[int, Path]:

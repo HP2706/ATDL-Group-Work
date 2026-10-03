@@ -38,4 +38,4 @@ Figure 10 reference selection: clean `pct-cifar10-mcnn-50000-p0-sgd-big` plus `d
 
 The report appendix contains only paired comparison assets. Figure 11(a) excludes the unmatched 10% subset row and compares the two sources at 20% noise. Standalone assets remain on disk for analysis but are not included in the report.
 
-Figures 4 and 5 overlay the two sources on common widths and noise rates: solid lines are authors, dashed lines with markers are ours. A shared legend identifies noise and source; Figure 5 keeps its unverified time conversion in the caption. All report comparison legends use at least 13-point plot text.
+Figures 4 and 5 put the sources in separate, explicitly labeled columns: authors on the left, ours on the right, with common widths and noise rates. A shared legend identifies noise; Figure 5 keeps its unverified time conversion in the caption. All report comparison legends use at least 13-point plot text.
