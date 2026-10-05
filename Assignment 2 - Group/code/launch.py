@@ -183,6 +183,17 @@ def argument_value(arguments: tuple[str, ...], name: str) -> str | None:
     return values[-1] if values else None
 
 
+def under_root(arguments: tuple[str, ...], root: PurePosixPath | Path) -> tuple[str, ...]:
+    """Resolve relative results_dir and extend_from paths on the persistent work drive."""
+    resolved = []
+    for argument in arguments:
+        name, _, value = argument.partition("=")
+        if name in {"results_dir", "extend_from"} and value and not PurePosixPath(value).is_absolute():
+            argument = f"{name}={root / value}"
+        resolved.append(argument)
+    return tuple(resolved)
+
+
 def run(*sweep_args: str) -> None:
     os.execv(sys.executable, [sys.executable, str(CODE_DIR / "sweep.py"), *map(str, sweep_args)])
 
@@ -209,6 +220,7 @@ def submit_ucloud(script: Path, hours: int, sweep_args: tuple[str, ...],
     ))
     if remote_root not in run_root.parents:
         raise ValueError(f"RUN_ROOT must be under {remote_root}")
+    sweep_args = under_root(sweep_args, remote_root)
     sweep_args = add_default(sweep_args, "data_dir", environment.get("DATA_DIR", str(remote_root / "data")))
     sweep_args = add_default(sweep_args, "results_dir", environment.get("RESULTS_DIR", str(remote_root / "our-results-folder")))
     sweep_args = add_default(sweep_args, "run_root", str(run_root))
@@ -256,12 +268,17 @@ def submit_ucloud(script: Path, hours: int, sweep_args: tuple[str, ...],
             print(f"Run root: {run_root}")
             return
         token = environment.get("WANDB_API_KEY")
-        if not token:
-            raise ValueError("WANDB_API_KEY is not set in the sourced shell environment")
+        if environment.get("WANDB_MODE") == "disabled":
+            credentials = "WANDB_MODE=disabled\n"
+        elif token:
+            credentials = f"WANDB_API_KEY={shlex.quote(token)}\n"
+        else:
+            raise ValueError("WANDB_API_KEY is not set in the sourced shell environment; "
+                             "set WANDB_MODE=disabled to train without W&B")
         ssh_command(
             host, port, environment,
             f"umask 077; cat > {shlex.quote(str(launch_dir / 'wandb.env'))}",
-            f"WANDB_API_KEY={shlex.quote(token)}\n",
+            credentials,
         )
         response = json_output(command_output(
             ["ucloud", "jobs", "submit", "--payload-file", str(payload_path), "--project", settings.project_id,
@@ -289,6 +306,7 @@ def submit(script_path: str, hours: int, *sweep_args: str) -> None:
             run(*arguments, "plan=true")
         root = environment.get("ATDL_WORK_ROOT")
         if root:
+            arguments = under_root(arguments, Path(root))
             arguments = add_default(arguments, "data_dir", str(Path(root) / "data"))
             arguments = add_default(arguments, "results_dir", str(Path(root) / "our-results-folder"))
             arguments = add_default(arguments, "run_root", str(Path(root) / "runs" / "sweeps" /

@@ -39,7 +39,8 @@ class CIFARExperimentDataset(Dataset[tuple[Tensor, int, int]]):
         if sample_count is not None and not 1 <= sample_count <= total:
             raise ValueError(f"sample_count must be in [1, {total}]")
         subset_rng = torch.Generator().manual_seed(seed)
-        self.indices = torch.randperm(total, generator=subset_rng)[:sample_count] if sample_count else torch.arange(total)
+        subset = sample_count is not None and sample_count < total
+        self.indices = torch.randperm(total, generator=subset_rng)[:sample_count] if subset else torch.arange(total)
         self.labels = self.clean_labels.clone()
         if label_noise:
             noise_rng = torch.Generator().manual_seed(seed + 10_000_019)

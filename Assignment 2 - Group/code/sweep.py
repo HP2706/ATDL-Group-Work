@@ -5,6 +5,7 @@ import math
 import os
 import platform
 import selectors
+import shutil
 import signal
 import subprocess
 import sys
@@ -75,6 +76,7 @@ class SweepConfig:
     data_dir: str = ""
     results_dir: str = ""
     run_root: str = ""
+    extend_from: str = ""
     plan: bool = False
 
     @chz.validate
@@ -174,6 +176,31 @@ def validate_existing(config: SweepConfig, optimizer: str, width: int, noise: fl
     return previous
 
 
+def extend_run(config: SweepConfig, condition: Condition, train_size: int) -> None:
+    """Copy a checkpointed run from extend_from; only its paths and a longer horizon may change."""
+    from src.training.common import save_config
+    from vision_train import VisionConfig
+
+    target = config.condition_directory(*condition)
+    if existing_run(target) is not None:
+        return
+    source = existing_run(Path(config.extend_from) / target.relative_to(config.sweep_root))
+    if source is None or not (source / "checkpoint.pt").exists():
+        raise ValueError(f"No checkpointed run to extend for {condition} in {config.extend_from}")
+    saved = VisionConfig.model_validate_json((source / "config.json").read_text())
+    extended = VisionConfig.from_sweep(config, *condition, train_size)
+    movable = {"data_dir", "output_dir", "results_dir", "epochs", "max_steps"}
+    old, new = saved.model_dump(exclude=movable), extended.model_dump(exclude=movable)
+    changed = [name for name in old if old[name] != new[name]]
+    if changed:
+        raise ValueError(f"Cannot extend {source}; settings differ: {', '.join(changed)}")
+    if (saved.epochs is None) != (extended.epochs is None) or \
+            (saved.epochs or saved.max_steps) >= (extended.epochs or extended.max_steps):
+        raise ValueError(f"Cannot extend {source}; the new horizon must be longer in the same unit")
+    shutil.copytree(source, target / source.name, ignore=shutil.ignore_patterns("completed.json", "test_predictions.pt"))
+    save_config(target / source.name, extended)
+
+
 def verify_md5(path: Path) -> None:
     digest = hashlib.md5()
     with path.open("rb") as source:
@@ -257,8 +284,8 @@ def steps_per_run(config: SweepConfig, optimizer: str, sample_count: int) -> int
 
 
 def run_sweep(config: SweepConfig) -> None:
-    if config.wandb_project and not os.environ.get("WANDB_API_KEY"):
-        raise ValueError("WANDB_API_KEY must be set for W&B logging")
+    if config.wandb_project and not os.environ.get("WANDB_API_KEY") and os.environ.get("WANDB_MODE") != "disabled":
+        raise ValueError("WANDB_API_KEY must be set for W&B logging; set WANDB_MODE=disabled to train without it")
     for name, path in (("DATA_DIR", config.data_path), ("RESULTS_DIR", config.results_path), ("RUN_ROOT", config.sweep_root)):
         if not path.resolve().is_relative_to(Path("/work")):
             raise ValueError(f"{name} must be under persistent /work: {path}")
@@ -271,6 +298,9 @@ def run_sweep(config: SweepConfig) -> None:
 
     for optimizer, width, noise, sample_count in conditions(config):
         VisionConfig.from_sweep(config, optimizer, width, noise, sample_count, train_size)
+    if config.extend_from:
+        for condition in conditions(config):
+            extend_run(config, condition, train_size)
     previous_runs = {condition: validate_existing(config, *condition, train_size) for condition in conditions(config)}
 
     config.sweep_root.mkdir(parents=True, exist_ok=True)
@@ -359,6 +389,8 @@ def run_sweep(config: SweepConfig) -> None:
 def main(config: SweepConfig) -> None:
     if config.plan:
         print(f"{len(conditions(config))} {config.dataset}/{config.architecture} runs")
+        if config.extend_from:
+            print(f"Continues copies of the matching runs in {config.extend_from}")
         for optimizer, width, noise, sample_count in conditions(config):
             variant = config.variants[optimizer]
             horizon = f"{variant.epochs} epochs" if variant.epochs is not None else f"{variant.max_steps} steps"

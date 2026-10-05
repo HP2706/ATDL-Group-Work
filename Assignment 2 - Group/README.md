@@ -2,7 +2,7 @@
 
 Selected paper: **Deep Double Descent**, replication track. The [report guide](report/README.md) contains the official requirements, suggested narrative outline, and figure/source conventions. The [report](report/main.tex) now separates the reproducibility narrative from the complete figure appendix. The historical [experiment inventory and compute audit](report/experiment-cost-audit.tex) is preserved as working material rather than included in the submission.
 
-For a compact figure-by-figure table, code availability, and setup status, see [the experiment map](EXPERIMENTS.md).
+For a compact figure-by-figure table, code availability, and setup status, see [the experiment map](EXPERIMENTS.md). The targeted ablations X1–X4 and how to run them are in [ABLATIONS.md](ABLATIONS.md).
 
 The authors' public result snapshot is converted to [a Parquet dataset for Hugging Face Datasets](their-results/hf_dataset/README.md), with the original files pinned in [the source manifest](their-results/manifest.json). Curated images are organized in [plots](plots/README.md): paired comparisons, our measurements alone, and reconstructions from the authors' measurements alone. The [published plot coverage table](their_plots/README.md) identifies figures the release cannot reconstruct. Our measurements belong in [our-results-folder](our-results-folder/README.md). Use the [plotting CLI](our-plots/README.md) to render the authors' curve and heatmap layouts without notebooks.
 

@@ -22,6 +22,8 @@ All **229 completed vision cells** now have local [Parquet results](our-results-
 | CIFAR-100 CNN | No augmentation, SGD, 50,000 steps; 11 widths, clean labels | 11/11 | `12403784` |
 | CIFAR-10 CNN subsets | Augmented, SGD, 50,000 steps; 11 widths × 10/20% noise × 12,500/25,000 examples | 44/44 | `12403801` |
 
+Targeted ablations that reuse these sweeps (longer horizon, extra seeds, weight decay, optimizer) are defined in [ABLATIONS.md](ABLATIONS.md).
+
 **Job-name correction:** UCloud job `12403784` is named `figure-6`, but its submitted batch script and saved result metadata show **CIFAR-100 CNN with SGD**. It contributes to reduced Figure 7. The CIFAR-10 Adam arm for Figure 6 came from the separate, audited job `12403936`.
 
 These are reduced horizons and width grids. The paper uses 4,000 epochs for Adam ResNets and CIFAR-10 CNNs, 500,000 steps for CIFAR-10 SGD CNNs, and 1,000,000 steps for the clean CIFAR-100 CNN. The [comparison notebook](our-plots/resnet_ours_vs_published.ipynb) distinguishes our recorded epochs/steps from the authors' measurement indices. For CNN comparisons near 50,000 SGD steps, 256 steps per author measurement is an **unverified estimate** from the released 1,952-point series and the stated 500,000-step protocol. Do not interpret these as exactly aligned trajectories.
