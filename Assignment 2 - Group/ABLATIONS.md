@@ -13,7 +13,7 @@ Estimated cost: X1 ≈ 3.5, X2 ≈ 1.8, X3 ≈ 0.7, X4 ≈ 1.0 B200-hours.
 
 ## Run
 
-From `Assignment 2 - Group/`, with the launch setup described in [code/README.md](code/README.md#vision-sweep-launcher). Each command submits one GPU job; append `plan=true` to list its conditions without training.
+Without the UCloud CLI, follow [UCLOUD_ABLATIONS.md](UCLOUD_ABLATIONS.md): one GPU job started from the web UI runs everything. Otherwise, from `Assignment 2 - Group/`, with the launch setup described in [code/README.md](code/README.md#vision-sweep-launcher). Each command submits one GPU job; append `plan=true` to list its conditions without training.
 
 ```bash
 bash code/scripts/x1_horizon_resnet.sh

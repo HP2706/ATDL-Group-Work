@@ -41,3 +41,6 @@ __pycache__/
 # Machine-specific experiment launch settings
 .atdl-launch.local.toml
 AGENTS.md
+
+# Upload bundle for running the ablations on UCloud (UCLOUD_ABLATIONS.md)
+/ablations-ucloud-code.zip
