@@ -184,9 +184,39 @@ def argument_value(arguments: tuple[str, ...], name: str) -> str | None:
 
 
 def run(*sweep_args: str) -> None:
-    os.execv(sys.executable, [sys.executable, str(CODE_DIR / "sweep.py"), *map(str, sweep_args)])
+    arguments = tuple(map(str, sweep_args))
 
+    if "task=translation" in arguments:
+        arguments = tuple(
+            arg for arg in arguments
+            if arg != "task=translation"
+        )
 
+        fire_arguments = [
+            f"--{arg}" if "=" in arg and not arg.startswith("--") else arg
+            for arg in arguments
+        ]
+
+        os.execv(
+            sys.executable,
+            [
+                sys.executable,
+                str(CODE_DIR / "translation_launch.py"),
+                "run",
+                *fire_arguments,
+            ],
+        )
+
+    os.execv(
+        sys.executable,
+        [
+            sys.executable,
+            str(CODE_DIR / "sweep.py"),
+            *arguments,
+        ],
+    )
+
+    
 def submit_ucloud(script: Path, hours: int, sweep_args: tuple[str, ...],
                   settings: UCloudSettings, dry_run: bool, environment: dict[str, str]) -> None:
     environment["UCLOUD_SSH_KEY"] = settings.ssh_key

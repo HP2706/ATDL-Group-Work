@@ -99,27 +99,74 @@ def learning_rate(config: TranslationConfig, step: int) -> float:
     )
 
 
-def evaluate(model: nn.Module, data: ParallelText, config: TranslationConfig, device: torch.device) -> dict[str, float]:
+def evaluate(
+    model: nn.Module,
+    data: ParallelText,
+    config: TranslationConfig,
+    device: torch.device,
+) -> dict[str, float]:
     model.eval()
+
     nll_sum = 0.0
+    smoothed_loss_sum = 0.0
     token_count = 0
     token_errors = 0
-    with torch.no_grad():
-        for source, previous, target in make_batches(data, config.max_tokens, config.seed, 0, False):
-            source, previous, target = source.to(device), previous.to(device), target.to(device)
-            logits = model(source, previous)
-            nll_sum += float(F.cross_entropy(
-                logits.reshape(-1, logits.size(-1)), target.reshape(-1),
-                ignore_index=data.target_vocab.pad_id, reduction="sum",
-            ))
-            token_count += int(target.ne(data.target_vocab.pad_id).sum())
-            token_errors += int(((logits.argmax(dim=-1) != target) & target.ne(data.target_vocab.pad_id)).sum())
-    token_nll = nll_sum / token_count
-    return {
-        "token_nll": token_nll, "perplexity": math.exp(token_nll),
-        "token_error_percent": 100 * token_errors / token_count, "tokens": token_count,
-    }
 
+    with torch.no_grad():
+        for source, previous, target in make_batches(
+            data, config.max_tokens, config.seed, 0, False
+        ):
+            source = source.to(device)
+            previous = previous.to(device)
+            target = target.to(device)
+
+            logits = model(source, previous)
+
+            flat_logits = logits.reshape(-1, logits.size(-1))
+            flat_target = target.reshape(-1)
+
+            batch_token_count = int(
+                target.ne(data.target_vocab.pad_id).sum()
+            )
+
+            nll_sum += float(
+                F.cross_entropy(
+                    flat_logits,
+                    flat_target,
+                    ignore_index=data.target_vocab.pad_id,
+                    reduction="sum",
+                )
+            )
+
+            smoothed_loss_sum += float(
+                F.cross_entropy(
+                    flat_logits,
+                    flat_target,
+                    ignore_index=data.target_vocab.pad_id,
+                    label_smoothing=config.label_smoothing,
+                    reduction="sum",
+                )
+            )
+
+            token_count += batch_token_count
+
+            token_errors += int(
+                (
+                    (logits.argmax(dim=-1) != target)
+                    & target.ne(data.target_vocab.pad_id)
+                ).sum()
+            )
+
+    token_nll = nll_sum / token_count
+    token_smoothed_loss = smoothed_loss_sum / token_count
+
+    return {
+        "token_nll": token_nll,
+        "token_smoothed_loss": token_smoothed_loss,
+        "perplexity": math.exp(token_nll),
+        "token_error_percent": 100 * token_errors / token_count,
+        "tokens": token_count,
+    }
 
 def train(config: TranslationConfig, resume: str | None = None) -> Path:
     seed_everything(config.seed)
@@ -129,8 +176,28 @@ def train(config: TranslationConfig, resume: str | None = None) -> Path:
     )
     if resume:
         saved = TranslationConfig.model_validate_json((run_dir / "config.json").read_text())
-        if saved != config:
-            raise ValueError("resume config does not match the saved run")
+
+        saved_without_horizon = saved.model_dump(exclude={"max_steps"})
+        config_without_horizon = config.model_dump(exclude={"max_steps"})
+
+        if saved_without_horizon != config_without_horizon:
+            raise ValueError(
+                "resume config does not match the saved run except for max_steps"
+            )
+
+        if config.max_steps < saved.max_steps:
+            raise ValueError(
+                f"cannot resume to a shorter horizon: "
+                f"saved max_steps={saved.max_steps}, requested={config.max_steps}"
+            )
+
+        if config.max_steps != saved.max_steps:
+            original_config = run_dir / "config.before-extension.json"
+            if not original_config.exists():
+                original_config.write_text(
+                    saved.model_dump_json(indent=2) + "\n"
+                )
+            save_config(run_dir, config)
     else:
         save_config(run_dir, config)
     train_data, valid_data, test_data = prepare_data(config, run_dir, bool(resume))

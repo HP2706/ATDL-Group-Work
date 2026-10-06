@@ -71,6 +71,9 @@ class TranslationResult(ResultRecord):
     epoch: int = Field(ge=0)
     train_perplexity: float = Field(ge=1)
     test_perplexity: float = Field(ge=1)
+    train_smoothed_loss: float = Field(ge=0)
+    test_smoothed_loss: float = Field(ge=0)
+    validation_smoothed_loss: float = Field(ge=0)
     validation_loss: float = Field(ge=0)
     validation_error: float = Field(ge=0, le=100)
 
@@ -82,6 +85,9 @@ class TranslationResult(ResultRecord):
         "global_step": "Int64", "epoch": "Int64", "train_perplexity": "float64",
         "test_perplexity": "float64", "validation_loss": "float64",
         "validation_error": "float64",
+        "train_smoothed_loss": "float64",
+        "test_smoothed_loss": "float64",
+        "validation_smoothed_loss": "float64",
     }
 
 
@@ -158,6 +164,9 @@ def translation_row(
         epoch=metric["epoch"],
         train_perplexity=metric["train"]["perplexity"],
         test_perplexity=metric["test"]["perplexity"],
+        train_smoothed_loss=metric["train"]["token_smoothed_loss"],
+        test_smoothed_loss=metric["test"]["token_smoothed_loss"],
+        validation_smoothed_loss=metric["valid"]["token_smoothed_loss"],
         validation_loss=metric["valid"]["token_nll"],
         validation_error=metric["valid"]["token_error_percent"],
     )
