@@ -53,13 +53,35 @@ def read_parallel_split(root: Path, split: str) -> list[tuple[str, str]]:
 
 def build_vocabulary(lines: list[str], max_size: int | None) -> Vocabulary:
     counts = Counter(token for line in lines for token in line.split())
-    ranked = sorted(counts, key=lambda token: (-counts[token], token))
+
+    # Match Fairseq Dictionary.finalize():
+    # frequency descending, lexical ordering for equal-frequency tokens.
+    ranked = sorted(
+        (
+            token
+            for token in counts
+            if token not in SPECIAL_TOKENS
+        ),
+        key=lambda token: (-counts[token], token),
+    )
+
     if max_size is not None:
         if max_size < len(SPECIAL_TOKENS):
             raise ValueError("max_size must include the special tokens")
         ranked = ranked[: max_size - len(SPECIAL_TOKENS)]
-    return Vocabulary(list(SPECIAL_TOKENS) + [token for token in ranked if token not in SPECIAL_TOKENS])
 
+    tokens = list(SPECIAL_TOKENS) + ranked
+
+    # Fairseq Dictionary.finalize() pads the dictionary size
+    # to a multiple of 8 by default.
+    madeup_index = 0
+    while len(tokens) % 8 != 0:
+        token = f"madeupword{madeup_index:04d}"
+        if token not in counts and token not in tokens:
+            tokens.append(token)
+        madeup_index += 1
+
+    return Vocabulary(tokens)
 
 class ParallelText:
     def __init__(self, pairs: list[tuple[str, str]], source_vocab: Vocabulary, target_vocab: Vocabulary) -> None:
@@ -72,30 +94,89 @@ class ParallelText:
 
 
 def make_batches(
-    data: ParallelText, max_tokens: int, seed: int, epoch: int, shuffle: bool
+    data: ParallelText,
+    max_tokens: int,
+    seed: int,
+    epoch: int,
+    shuffle: bool,
 ) -> Iterator[tuple[Tensor, Tensor, Tensor]]:
     if max_tokens <= 0:
         raise ValueError("max_tokens must be positive")
-    order = torch.randperm(len(data), generator=torch.Generator().manual_seed(seed + epoch)).tolist() if shuffle else list(range(len(data)))
+
+    generator = torch.Generator().manual_seed(seed + epoch)
+
+    if shuffle:
+        order = torch.randperm(len(data), generator=generator).tolist()
+    else:
+        order = list(range(len(data)))
+
+    # Match Fairseq LanguagePairDataset.ordered_indices():
+    # shuffle first, then stable-sort by target length and source length.
+    order.sort(key=lambda index: len(data.examples[index][1]))
+    order.sort(key=lambda index: len(data.examples[index][0]))
+
+    batches: list[list[int]] = []
     group: list[int] = []
-    max_source = 0
-    max_target = 0
+    max_num_tokens = 0
+
     for index in order:
         source, target = data.examples[index]
-        next_source = max(max_source, len(source))
-        next_target = max(max_target, len(target))
-        if next_source + next_target > max_tokens:
+
+        # Fairseq LanguagePairDataset.num_tokens(index)
+        # returns max(source_length, target_length).
+        sample_tokens = max(len(source), len(target))
+
+        if sample_tokens > max_tokens:
             raise ValueError("one sentence pair exceeds max_tokens")
-        if group and (len(group) + 1) * (next_source + next_target) > max_tokens:
-            yield collate(data, group)
-            group = []
-            max_source = 0
-            max_target = 0
+
+        next_max_num_tokens = max(max_num_tokens, sample_tokens)
+        next_batch_size = len(group) + 1
+
+        if group and next_batch_size * next_max_num_tokens > max_tokens:
+            # Fairseq normally requires batch sizes to be multiples of 8.
+            if len(group) >= 8:
+                split = len(group) - (len(group) % 8)
+
+                if split > 0 and split < len(group):
+                    batches.append(group[:split])
+                    group = group[split:]
+
+                    if group:
+                        max_num_tokens = max(
+                            max(
+                                len(data.examples[i][0]),
+                                len(data.examples[i][1]),
+                            )
+                            for i in group
+                        )
+                    else:
+                        max_num_tokens = 0
+                else:
+                    batches.append(group)
+                    group = []
+                    max_num_tokens = 0
+            else:
+                batches.append(group)
+                group = []
+                max_num_tokens = 0
+
+            next_max_num_tokens = max(max_num_tokens, sample_tokens)
+
         group.append(index)
-        max_source = max(max_source, len(source))
-        max_target = max(max_target, len(target))
+        max_num_tokens = next_max_num_tokens
+
     if group:
-        yield collate(data, group)
+        batches.append(group)
+
+    if shuffle:
+        permutation = torch.randperm(
+            len(batches),
+            generator=generator,
+        ).tolist()
+        batches = [batches[i] for i in permutation]
+
+    for indices in batches:
+        yield collate(data, indices)
 
 
 def collate(data: ParallelText, indices: list[int]) -> tuple[Tensor, Tensor, Tensor]:
