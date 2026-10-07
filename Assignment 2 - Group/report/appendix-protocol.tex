@@ -48,7 +48,7 @@ Adam & Constant LR $10^{-4}$; PyTorch defaults & Same settings: p.~17, Appendix~
 SGD & LR 0.1, inverse-square-root; 512-step updates; momentum 0 & Same prescription: p.~18, Appendix~B.2, ``SGD'' and ``Learning rate schedule descriptions''. No released optimizer code. & Same prescription\\
 Regularization & No weight decay or dropout & None unless stated otherwise: p.~17, Appendix~B.2, ``Regularization''. & Same setting\\
 Training horizon & Adam 400 epochs; SGD 50,000 updates & Adam 4,000 epochs; SGD 500,000 steps: p.~8, Section~4. CIFAR-100 CNN uses 1 million steps: Figure~20, p.~25, Appendix~E.2.1. & 10\% of stated horizon; 5\% for CIFAR-100 CNN\\
-Trials & One seed (0) per condition & Five trials for Figures~1, 7, 11(a): p.~19, Appendix~B.4. Figure~1 averaging is in \texttt{intro\_resnet\_plot.ipynb}. & One trial rather than five\\
+Trials & One seed (0) per condition & Five trials for Figures~1, 7 and 11(a), bottom panel: p.~19, Appendix~B.4. Figure~1 averaging is in \texttt{intro\_resnet\_plot.ipynb}. & One trial rather than five\\
 Precision & FP32 & Arithmetic precision not stated in Section~4 or Appendix~B.2. No released training loop. & Not stated\\
 Evaluation cadence & Adam: 10 epochs; SGD: 1,250 updates & \href{https://gitlab.com/harvard-machine-learning/double-descent/-/blob/0d653296f870e6bf7ee82dc71b4f7b49d53fa85d/intro_ocean_dynamics.ipynb}{\texttt{intro\_ocean\_dynamics.ipynb}} labels ResNet indices plus one as epochs. CNN logging interval is not established by the paper or release. & No confirmed common cadence\\
 Run infrastructure & Our loop and checkpoints; up to four runs per B200 & Checkpointing, concurrency and GPU scheduling not stated in Appendix~B.2 or provided in the released files. & Our implementation\\

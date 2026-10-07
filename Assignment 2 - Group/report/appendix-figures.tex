@@ -15,5 +15,13 @@ are not additional experiments by our group~\cite{nakkiran2021deepdouble}.
 \resultplot{comparison}{figure_07}{CIFAR-100 CNN width sweeps (paper Figure~7): authors' and our clean CIFAR-100 CNN results at eleven common widths. The authors' five-trial mean and standard deviation use full histories; ours use one seed and 50,000 SGD updates.}{app:matched-figure_07}
 \resultplot{comparison}{figure_09}{Training trajectories and heatmaps (paper Figure~9): authors' and our 20\%-noise CIFAR-10 ResNet18 trajectories and width-by-time heatmaps. Ours cover 400 epochs; the author reconstruction retains its labeled released coverage.}{app:matched-figure_09}
 \resultplot{comparison}{figure_10}{Training trajectories (paper Figure~10(c)): authors' and our width-128 CIFAR-10 CNN trajectories at the common 0 and 20\% noise settings. Authors' clean full-data and 50,000-example/20\%-noise references use saved measurement numbers; ours use recorded optimizer steps through 50,000 updates. Logging intervals and horizons are not matched. No smoothing is applied. The unresolved 10\%-noise author source is excluded.}{app:matched-figure_10}
-\resultplot{comparison}{figure_11a}{Effect of training-set size (paper Figure~11(a)): authors' and our 20\%-noise CIFAR-10 CNN sample-size curves, using 12,500/25,000/50,000 examples and eleven common widths. Authors' endpoints use full recorded histories; ours stop at 50,000 updates. Our 10\%-noise subset runs are excluded because no matching author source was identified.}{app:matched-figure_11a}
+\resultplot{comparison}{figure_11a}{Effect of training-set size (paper
+Figure~11(a), 20\% panel): authors' and our 20\%-noise CIFAR-10 CNN test
+and train error for 12,500, 25,000 and 50,000 examples at the eleven
+common widths. Authors' curves come from the released Figure~12 grid, a
+single trial, whereas the published panel shows the mean and standard
+deviation of five; ours are one seed at 50,000 updates. Dotted line:
+train error 0.1. \autoref{tab:samplewise} uses the finer grid of each
+side. Our 10\%-noise subset runs are excluded because no matching author
+source was identified.}{app:matched-figure_11a}
 \resultplot{comparison}{figure_12}{Sample-size heatmaps and slices (paper Figure~12): authors' and our 20\%-noise CIFAR-10 CNN sample-size heatmaps and slices. Both use three sample sizes, eleven common widths, and a common color scale; training horizons differ.}{app:matched-figure_12}
