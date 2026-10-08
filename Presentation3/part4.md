@@ -1,6 +1,6 @@
 # Presentation manuscript: nnActive, part 4
 
-Slides 14–16. Target time: approximately 3:45 at a steady speaking pace.
+Slides 14–17. Target time: approximately 3:45 at a steady speaking pace.
 Bracketed directions are not spoken.
 
 ## Slide 14: Measuring annotation effort (~65 seconds)
@@ -48,7 +48,7 @@ Bracketed directions are not spoken.
 > Together, these experiments show that acquisition quality depends on the
 > surrounding training and annotation procedure.
 
-## Slide 16: Conclusion (~95 seconds)
+## Slide 16: How far should we trust the conclusion? (~55 seconds)
 
 > The study has several strengths: a strong segmentation pipeline, four diverse
 > tasks, multiple budgets and seeds, and more demanding baselines. It also
@@ -65,6 +65,8 @@ Bracketed directions are not spoken.
 > Finally, the starting labels already cover every foreground class. These
 > experiments examine how to expand a structured initial dataset. They do not
 > test how to choose the first labels from a completely unlabeled collection.
+
+## Slide 17: Does active learning save annotation effort? (~40 seconds)
 
 > The paper's answer is conditional. Active learning usually beats uniform
 > random patch sampling. But none of the tested active methods consistently

@@ -61,7 +61,7 @@ Bracketed directions are not spoken.
 > for the value of active learning. Part of the apparent benefit can come from
 > selecting useful anatomy instead of easy background.
 
-## Slide 13: Results for different datasets (~70 seconds)
+## Slide 13: The dataset can reverse the winner (~70 seconds)
 
 > These two examples make the dataset dependence concrete. Dice measures overlap
 > between the prediction and the reference segmentation; higher is better.
