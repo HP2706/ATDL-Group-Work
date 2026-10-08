@@ -1,9 +1,9 @@
 # HP presentation manuscript: nnActive, part 3
 
-Slides 9–12. Target time: approximately 3:45 at a steady speaking pace.
+Slides 10–13. Target time: approximately 3:45 at a steady speaking pace.
 Bracketed directions are not spoken.
 
-## Slide 9: A benchmark across tasks and budgets (~55 seconds)
+## Slide 10: A benchmark across tasks and budgets (~55 seconds)
 
 > Now that we have seen the acquisition methods, the question is how to compare
 > them fairly. The authors test four datasets: cardiac structures, fifteen
@@ -22,7 +22,7 @@ Bracketed directions are not spoken.
 > This lets us ask whether a method works across tasks and budgets, rather than
 > only in one favorable experiment.
 
-## Slide 10: Foreground-aware random sampling (~55 seconds)
+## Slide 11: Foreground-aware random sampling (~55 seconds)
 
 > The random baseline is especially important here. A medical scan can contain
 > a lot of background, so uniformly sampling patches may spend much of the
@@ -43,7 +43,7 @@ Bracketed directions are not spoken.
 > although the screening time is not measured. The question becomes: can
 > uncertainty selection beat this anatomy-aware random baseline?
 
-## Slide 11: The baseline changes the verdict (~45 seconds)
+## Slide 12: The baseline changes the verdict (~45 seconds)
 
 > [Point first to the uniform Random comparison, then to Random 66% FG.]
 >
@@ -61,7 +61,7 @@ Bracketed directions are not spoken.
 > for the value of active learning. Part of the apparent benefit can come from
 > selecting useful anatomy instead of easy background.
 
-## Slide 12: The dataset can reverse the winner (~70 seconds)
+## Slide 13: Results for different datasets (~70 seconds)
 
 > These two examples make the dataset dependence concrete. Dice measures overlap
 > between the prediction and the reference segmentation; higher is better.
