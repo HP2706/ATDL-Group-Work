@@ -396,7 +396,7 @@ KiTS, medium budget & 48.41 & 51.67 & {\color{Accent}\textbf{65.39}}\\\bottomrul
 %%% PART 4
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-\begin{frame}{Measuring annotation effort}
+\begin{frame}{Measuring an notation effort}
 \begin{columns}[c,onlytextwidth]
 \column{.55\textwidth}\centering\includegraphics[width=\linewidth]{foreground-efficiency.png}
 \column{.41\textwidth}\small
@@ -422,7 +422,7 @@ Smaller query patches & Relative method rankings change. Halving each dimension 
 \source{nnActive, \S5.3 and Appendix G. Smaller patches do not establish equal accuracy with eight times less annotation.}
 \end{frame}
 
-\begin{frame}{How far should we trust the conclusion?}
+\begin{frame}{Conclusion}
 \begin{columns}[T,onlytextwidth]
 \column{.48\textwidth}
 {\color{Teal}\large\textbf{Strong evidence}}\par\vspace{.2cm}
@@ -432,23 +432,23 @@ Smaller query patches & Relative method rankings change. Halving each dimension 
 \item Stronger baselines and cost proxies.
 \end{itemize}
 \column{.48\textwidth}
-{\color{Accent}\large\textbf{Remaining assumptions}}\par\vspace{.2cm}
+{\color{Accent}\large\textbf{Remaining limitations}}\par\vspace{.2cm}
 \begin{itemize}\setlength{\itemsep}{8pt}
 \item Foreground localization is simulated with ground truth.
 \item Foreground voxels do not measure annotation minutes.
 \item Five uncertainty methods do not cover all active learning.
+\item Starting labels already cover every class, and a fully unlabeled cold start is not tested.
 \end{itemize}
 \end{columns}
-\takeaway{Structured starting labels already cover every class.\\The study does not test a fully unlabeled cold start.}
 \source{nnActive, \S4--6 and Appendix D.4.}
 \end{frame}
 
 \begin{frame}{Does active learning save annotation effort?}
 \vspace{.25cm}
 \begin{enumerate}\setlength{\itemsep}{15pt}
-\item It usually beats \textbf{uniform random} patch sampling.
+\item It usually beats uniform random sampling.
 \item No tested method consistently dominates \textbf{foreground-aware random} sampling across tasks and budgets.
-\item \textbf{Predictive Entropy} is strongest among the active methods overall; early performance and effort still matter.
+\item \textbf{Predictive Entropy} is strongest among the active methods overall, but may require more annotation effort.
 \end{enumerate}
 \takeaway{Show gains over a strong baseline\\under a defensible annotation-cost model.}
 \vspace{.1cm}\centering{\color{Muted}\small Questions}
