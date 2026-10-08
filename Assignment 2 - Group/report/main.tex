@@ -1,13 +1,15 @@
 \documentclass{article}
-\usepackage{ISBI_template-master/spconf,amsmath,amssymb,graphicx}
+\usepackage{ISBI_template-master/spconf}
+\usepackage{amsmath,amssymb,graphicx}
 \usepackage{booktabs,array,longtable}
 \usepackage[hidelinks]{hyperref}
+\graphicspath{{Assignment 2 - Group/plots/}}
 \setlength{\parindent}{0pt}
 \pagestyle{plain}
 \newcommand{\resultplot}[4]{%
   \begin{figure}[p]
   \centering
-  \includegraphics[width=0.96\textwidth,height=0.72\textheight,keepaspectratio]{../plots/#1/#2.png}
+  \includegraphics[width=0.96\textwidth,height=0.72\textheight,keepaspectratio]{#1/#2.png}
   \caption{#3}\label{#4}
   \end{figure}\clearpage
 }
@@ -170,7 +172,7 @@ overlapping model durations are not added to estimate GPU-hours.}
 
 \begin{figure*}[t]
 \centering
-\includegraphics[width=0.96\textwidth]{../plots/comparison/figure_01.png}
+\includegraphics[width=0.96\textwidth]{comparison/figure_01.png}
 \caption{Noise-matched adaptation of the opening figure: authors' released
 10\%-noise CIFAR-10 ResNet18 measurements above our 10\%-noise results.
 Both panels use the same ten widths, 400 displayed epochs, and expected
@@ -304,11 +306,11 @@ horizon; wrote \autoref{sec:samplesize}, the sample-wise discussion and the revi
 
 \clearpage
 \bibliographystyle{ISBI_template-master/IEEEbib}
-\bibliography{references}
+\bibliography{Assignment 2 - Group/report/references}
 \clearpage
 \onecolumn
 \appendix
-\input{appendix-protocol}
+\input{Assignment 2 - Group/report/appendix-protocol}
 \clearpage
-\input{appendix-figures}
+\input{Assignment 2 - Group/report/appendix-figures}
 \end{document}
