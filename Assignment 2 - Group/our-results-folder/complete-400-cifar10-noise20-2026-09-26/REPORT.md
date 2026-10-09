@@ -17,7 +17,7 @@ The remote run root is `/work/atdl-b200-benchmark-2026-09-26/runs/sweeps/resnet-
 
 ## Same-epoch comparison with the authors
 
-The authors' [CIFAR-10 ResNet results](https://storage.googleapis.com/hml-public/dd/cifar10-resnet18k-50k-adam/Mlist) are converted locally at `../../their-results/hf_dataset/data/vision/cifar10-resnet18k-50k-adam.parquet`. Their [plotting notebook](https://gitlab.com/harvard-machine-learning/double-descent/-/blob/master/intro_ocean_plot.ipynb) identifies `Mlist[2]` as 20% label noise and labels measurement position `i` as epoch `i + 1`. We therefore compare our explicit epoch 400 with their `trial_index = 2`, `measurement_index = 399` at the same widths. This is the authors' **plotted epoch convention**; the public Parquet conversion itself has no explicit epoch field.
+The authors' [CIFAR-10 ResNet results](https://storage.googleapis.com/hml-public/dd/cifar10-resnet18k-50k-adam/Mlist) are converted locally at `../../their-results/hf_dataset/data/vision/cifar10-resnet18k-50k-adam.parquet`. Their [plotting notebook](https://gitlab.com/harvard-machine-learning/double-descent/-/blob/master/intro_ocean_plot.ipynb) identifies `Mlist[2]` as 20% label noise and labels measurement position `i` as epoch `i + 1`. We therefore compare our explicit epoch 400 with their `trial_index = 2`, `measurement_index = 399` at the same widths. This is the authors' **plotted epoch convention**; the public Parquet conversion itself has no explicit epoch field. The width-12 run is the matching 400-epoch trajectory at `../data/vision/cifar10-resnet-k12-seed0-2026-09-27-03-23-12.parquet`; widths 3 and 64 are the concurrent runs documented above.
 
 | Width | Metric | Paper at epoch 400 | Ours at epoch 400 | Ours minus paper |
 | ---: | --- | ---: | ---: | ---: |
@@ -25,11 +25,29 @@ The authors' [CIFAR-10 ResNet results](https://storage.googleapis.com/hml-public
 | 3 | Test error | 29.570% | 28.930% | −0.640 points |
 | 3 | Train loss | 1.41995 | 1.37959 | −0.04036 |
 | 3 | Test loss | 0.96737 | 0.95037 | −0.01700 |
+| 12 | Train error | 18.390% | 17.070% | −1.320 points |
+| 12 | Test error | 34.100% | 29.700% | −4.400 points |
+| 12 | Train loss | 0.55045 | 0.51770 | −0.03275 |
+| 12 | Test loss | 1.33347 | 1.08888 | −0.24459 |
 | 64 | Train error | 0.620% | 0.556% | −0.064 points |
 | 64 | Test error | 21.890% | 20.880% | −1.010 points |
 | 64 | Train loss | 0.01965 | 0.01806 | −0.00159 |
 | 64 | Test loss | 1.82865 | 1.65671 | −0.17194 |
 
-The [comparison chart](paper-comparison.png) overlays train and test error at every tenth epoch through 400. The corresponding [comparison CSV](paper-comparison.csv) contains all 80 matched width/epoch rows and the metric differences. Mean absolute test-error difference across those 40 matched epochs is 0.505 percentage points at width 3 and 1.617 points at width 64. The trajectories have similar shapes, but they are independent single runs: the authors' seed, corruption mask, and augmentation random choices are not available, so equality of individual metric values is not expected. The loss columns are shown as published; their exact evaluation reduction is not independently documented.
+The [matched comparison chart](paper-comparison.png) overlays train and test error at every tenth epoch through 400. The corresponding [comparison CSV](paper-comparison.csv) contains all 120 matched width/epoch rows and metric differences. Mean absolute test-error differences across the 40 matched epochs are 0.505, 3.618, and 1.617 percentage points at widths 3, 12, and 64, respectively. The trajectories are independent single runs: the authors' seed, corruption mask, and augmentation random choices are not available, so equality of individual metric values is not expected. The loss columns are shown as published; their exact evaluation reduction is not independently documented.
+
+## Epochwise double descent
+
+Across our 400-epoch runs, width 3 decreases to 28.93% at epoch 400. Width 12 reaches its first minimum, 20.71%, at epoch 80 and rises to 29.70% at epoch 400. Width 64 reaches 15.08% at epoch 20, peaks afterward at 26.13% at epoch 70, and descends to 20.88% at epoch 400. Thus all three regimes appear within our horizon; width 64 meets the weak second-descent condition, but its final error remains 5.80 points above its first minimum.
+
+| Width | Our first minimum | Our subsequent peak | Our epoch-400 error | Authors at epoch 400 | Authors' final released point |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 3 | — | — | 28.93% | 29.57% | 24.61% (epoch 3,999) |
+| 12 | 20.71% (80) | 29.70% (400) | 29.70% | 34.10% | 34.59% (epoch 3,999) |
+| 64 | 15.08% (20) | 26.13% (70) | 20.88% | 21.89% | 19.63% (epoch 3,999) |
+
+The authors trained for 4,000 epochs, but the released trajectory contains measurement indices 0 through 3,998. Under the notebook's documented `index + 1` plotting convention, its last recorded point is epoch 3,999, not an observed epoch-4,000 value. For width 64, the authors' test error falls from 21.89% at epoch 400 to 19.63% at the last released point. This supports a second descent continuing well beyond our horizon. It does not establish the strong form: the authors' full trajectory first reaches 17.30% at epoch 23, below its final 19.63%.
+
+The [long-horizon plot](epochwise-comparison.png) shows all three authors' trajectories through their last released point, our trajectories through epoch 400, and the budget boundary. The [epochwise summary CSV](epochwise-summary.csv) records first minima, subsequent peaks, endpoints, and their epochs. C3 is therefore partially reproduced: the three regimes and weak second descent are reproduced, and the released width-64 run confirms continued descent after epoch 400; however, neither run demonstrates that longer training corrects overfitting relative to the first minimum. The width-128 CNN arm of Figure 10 is shown in Appendix `app:matched-figure_10`.
 
 UCloud job `12403590` was stopped on request after these results were secured; its final status was `SUCCESS`.
