@@ -102,7 +102,14 @@ def write_parquet(rows: list[ResultRecord], path: Path) -> None:
     os.replace(temporary, path)
 
 
-def export_vision(run_dir: Path, results_root: Path) -> Path:
+# Columns that identify one image run; a same-named file that differs here came from another run.
+VISION_RUN_COLUMNS = ["model_width", "sample_size", "seed", "dataset", "architecture",
+                      "label_noise", "augmentation", "optimizer", "schedule", "weight_decay"]
+
+
+def export_vision(run_dir: Path, results_root: Path, name: str | None = None) -> Path:
+    """Write the run's history; ``name`` replaces the run ID when two runs share a directory name."""
+    run_id = name or run_dir.name
     config = json.loads((run_dir / "config.json").read_text())
     run_metadata = json.loads((run_dir / "run_metadata.json").read_text())
     history = {int(metric["step"]): metric for metric in read_metrics(run_dir) if "train" in metric and "test" in metric}
@@ -110,7 +117,7 @@ def export_vision(run_dir: Path, results_root: Path) -> Path:
     for measurement_index, step in enumerate(sorted(history)):
         metric = history[step]
         rows.append(VisionResult(
-            source_experiment=run_dir.name,
+            source_experiment=run_id,
             trial_index=None,
             model_width=config["width"],
             sample_size=run_metadata["train_size"],
@@ -121,7 +128,7 @@ def export_vision(run_dir: Path, results_root: Path) -> Path:
             train_loss=metric["train"]["loss"],
             test_loss=metric["test"]["loss"],
             robust_test_error=None,
-            run_id=run_dir.name,
+            run_id=run_id,
             seed=config["seed"],
             dataset=config["dataset"],
             architecture=config["architecture"],
@@ -133,7 +140,13 @@ def export_vision(run_dir: Path, results_root: Path) -> Path:
             global_step=metric["step"],
             epoch=metric["epoch"],
         ))
-    path = results_root / "data" / "vision" / f"{run_dir.name}.parquet"
+    path = results_root / "data" / "vision" / f"{run_id}.parquet"
+    if path.exists():
+        previous = pd.read_parquet(path, columns=VISION_RUN_COLUMNS).iloc[0].to_dict()
+        changed = [column for column in VISION_RUN_COLUMNS if previous[column] != getattr(rows[0], column)]
+        if changed:
+            raise FileExistsError(f"{path} belongs to another run ({', '.join(changed)} differ); "
+                                  "rerun export_results.py with --name=<unique run ID>")
     write_parquet(rows, path)
     return path
 

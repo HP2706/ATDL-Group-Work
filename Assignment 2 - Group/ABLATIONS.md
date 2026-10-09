@@ -36,4 +36,22 @@ Resume an interrupted job with `RUN_ROOT=<printed run root>` before the same com
 
 Each job writes Parquet files to `/work/<drive>/our-results-folder/ablations/<id>/data/vision/`. Download them to the same path under [our-results-folder](our-results-folder/README.md), **not** into `data/vision/`: the figure scripts expect exactly the 229 baseline cells, and X1 files keep their baseline run IDs. X1 files hold the full history, so their first 400 epochs or 50k steps repeat the baseline. The Parquet schema has no learning-rate column; within X4, the `optimizer` column separates arm (a) from (b).
 
-For the X2 ensemble, fetch `test_predictions.pt` from each run directory (seed 0: `runs/sweeps/resnet-cifar10-adam-400-2026-09-26-21-52-00`) and take a plurality vote per test image, as in the paper. The analysis itself (interpolation threshold, peak height, harm region, ensemble error) is not yet scripted.
+X2 also needs each seed's `test_predictions.pt` under `ablations/x2-seeds/predictions/seed<N>/width-<k>/` ([UCLOUD_ABLATIONS.md](UCLOUD_ABLATIONS.md) packs them) and the CIFAR-10 test labels in `code/data/`.
+
+## Plots
+
+[our-plots/ablations.ipynb](our-plots/ablations.ipynb) draws each ablation in the layout of the paper's matching figure (X1: Fig 9; X2: Fig 28; X3: Figs 21 and 11(a); X4: Figs 16 and 18), next to the main-sweep runs with the same settings, and shows the key numbers as tables. The figure code is [our-plots/ablation_figures.py](our-plots/ablation_figures.py); the PNGs are in [plots/ablations/](plots/README.md).
+
+Two caveats from the first runs:
+- **X4 Adam LR 10⁻³ is missing.** Both X4 arms started in the same second, so their run directories (`adam/…` and `sgd/…`) and Parquet files got the same name, and the SGD file replaced the Adam one. New runs cannot collide this way: a run name now includes the optimizer when it is not the architecture's default (`cifar10-resnet-sgd-k12-…`), and the export refuses to replace a file written by a run with other settings. The Adam metrics should still be under `/work/<drive>/runs/sweeps/ablations/x4-optimizer/adam/noise-20/width-{12,64}/`. Export them under new names with the current code, either on UCloud or on the Mac after copying each run's `metrics.jsonl`, `config.json` and `run_metadata.json`:
+
+  ```bash
+  cd "Assignment 2 - Group/code"
+  for run in <x4 run root>/adam/noise-20/width-*/cifar10-resnet-k*/; do
+    name="$(basename "$run")"
+    ../../.venv/bin/python export_results.py "$run" --results_dir=../our-results-folder/ablations/x4-optimizer --name="${name/resnet-/resnet-adam-}"
+  done
+  ```
+
+  This writes `cifar10-resnet-adam-k{12,64}-…parquet` next to the SGD files. The `optimizer` column still tells the two arms apart.
+- **X4 SGD + dynamic drop stalled.** After about 15k iterations its train error stays flat at about the noise level. The drop rule compares every batch loss with the lowest single-batch loss seen so far, so it cuts the learning rate every 2,000 updates. This arm therefore cannot show epoch-wise double descent; the notebook's X4 check makes this visible.

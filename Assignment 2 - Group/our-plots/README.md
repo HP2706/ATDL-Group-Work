@@ -17,6 +17,8 @@ Regenerate the paired and ours-only PNG figures from `Assignment 2 - Group` with
 MPLCONFIGDIR=/tmp/atdl-mpl ../.venv/bin/python -c "from pathlib import Path; import sys; sys.path.insert(0, 'our-plots'); from paper_figures import save_figures; save_figures(Path.cwd(), Path('plots'))"
 ```
 
+The [ablation notebook](ablations.ipynb) and [`ablation_figures.py`](ablation_figures.py) follow the same pattern for the targeted ablations X1–X4 ([../ABLATIONS.md](../ABLATIONS.md)). They read `../our-results-folder/ablations/`, compare each ablation with the matching main-sweep runs, and save five PNGs to `../plots/ablations/`.
+
 These Python modules port the layouts in the authors' five plotting notebooks at [commit `0d653296`](https://gitlab.com/harvard-machine-learning/double-descent): the 14×7 blue ResNet curve, 15×8 heatmap with the exact 256-color `colormap_inferno_strong_1.txt`, 15×6 epoch-colored dynamics, and 20×8 translation line plots. The CLI does not require TensorFlow or W&B.
 
 From the `ATDL-Group-Work` project root, after `uv sync`:

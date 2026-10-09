@@ -40,6 +40,10 @@ if TYPE_CHECKING:
     from sweep import SweepConfig
 
 
+# The paper protocol per architecture; run names add the optimizer only when it differs.
+DEFAULT_OPTIMIZER = {"resnet": "adam", "cnn": "sgd"}
+
+
 class VisionConfig(TrainingConfig):
     architecture: Literal["resnet", "cnn"]
     dataset: Literal["cifar10", "cifar100"]
@@ -96,7 +100,7 @@ class VisionConfig(TrainingConfig):
     @model_validator(mode="after")
     def resolve_protocol(self) -> "VisionConfig":
         if self.optimizer is None:
-            self.optimizer = "adam" if self.architecture == "resnet" else "sgd"
+            self.optimizer = DEFAULT_OPTIMIZER[self.architecture]
         if self.schedule is None:
             self.schedule = "constant" if self.optimizer == "adam" else "inverse_sqrt"
         if self.learning_rate is None:
@@ -187,8 +191,10 @@ def train(
 ) -> Path:
     seed_everything(config.seed)
     device = resolve_device(config.device)
+    model_name = config.architecture if config.optimizer == DEFAULT_OPTIMIZER[config.architecture] \
+        else f"{config.architecture}-{config.optimizer}"
     run_dir = Path(resume) if resume else create_run_directory(
-        config.output_dir, f"{config.dataset}-{config.architecture}-k{config.width}", config.seed
+        config.output_dir, f"{config.dataset}-{model_name}-k{config.width}", config.seed
     )
     if resume:
         saved = VisionConfig.model_validate_json((run_dir / "config.json").read_text())
