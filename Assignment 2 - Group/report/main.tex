@@ -65,10 +65,11 @@ Increasing width or training time raises the EMC and moves a model through the t
 
 \subsection{Vision setup}
 \subsubsection{Reduced Training}
+
 To cover several experimental settings within our compute budget, we
 reduced Adam training from 4,000 to 400 epochs and CIFAR-10 SGD training
 from 500,000 to 50,000 updates. These are 10\% of the original experiment;
-the CIFAR-100 CNN run instead uses 5\% of the stated one-million SGD steps.
+the CIFAR-100 CNN run instead uses 5\% of the stated one-million SGD steps. 
 
 \subsubsection{Model implementation}
 The original study uses three architecture families: width-scaled
@@ -437,8 +438,10 @@ Detailed run coverage and deviations are recorded in the repository's
 \texttt{EXPERIMENTS.md}.
 
 \subsection{Individual contribution}
-\textbf{HP} 
-\\ \\
+\textbf{Hans Peter Lyngsøe}
+
+Wrote the training code for the vision experiments along with scaffolding for running multiple experiments on the same gpu in parallel in order to fully utilize the hardware. Ran and conducted the experiments for the model-wise double descent experiments
+
 \textbf{Mathias Elmegaard Nielsen:}
 Epoch-wise double descent (paper Figures~9 and~10). Ran and analyzed the CIFAR-10 ResNet18 trajectories for widths
 3, 12 and 64 at 20\% label noise as well as the width-128 CIFAR-10 CNN trajectories at 0\% and 20\% label noise (paper figure 10c). Defined the first-minimum, peak and final-error criteria for the three regimes and compared them with the authors' released runs at epochs 400 and 4,000. Built \autoref{tab:epochwise} and \autoref{fig:epochwise}. Wrote the Introduction, Background and \autoref{sec:epochwise}, and the epoch-wise parts of the Discussion. Contributed to abstract and general discussion sections.
