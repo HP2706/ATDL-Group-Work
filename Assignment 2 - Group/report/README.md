@@ -1,5 +1,24 @@
 # Assignment 2 report
 
+## Measure text length
+
+From this directory, run `../../.venv/bin/python measure_text_pages.py`
+with `latexmk` and `pdfinfo` on the shell's PATH. The script rebuilds the
+report, then creates two text-only PDFs in the gitignored `.text-length/`
+directory without editing `main.tex`:
+
+- `main-text.pdf`: title, abstract, main sections and contributions.
+- `all-text.pdf`: the same material plus appendix prose and headings.
+
+Both exclude figures, tables, captions and references, retain the ISBI font,
+spacing, margins and two-column layout, and preserve original citation and
+figure numbers. Appendix page breaks and the one-column gallery layout are
+removed for the all-text measurement. Equations and headings count as text.
+The page counts are written to `.text-length/summary.txt`. These are rendered
+page counts, so a partially filled final page still counts as a page. This is
+a reproducible layout check, rather than an official interpretation of which
+additional material the course may exempt.
+
 ## Official report description
 
 Source: [Group Assignment 2 (Topics 1–2–3–4), Absalon](https://absalon.ku.dk/courses/91642/assignments/268755), checked directly on 3 October 2026.
@@ -37,7 +56,8 @@ The current `main.tex` is a short factual working draft under this structure, no
 - Appendix decision table (in `main.tex`): one row per core model, data, or training setting, with exact journal pages, appendix subsections, released filenames, and factual differences. The methodology references this table.
 - Appendix A: vision sweeps, translation coverage, and a figure-by-figure table with internal references to the appendix plots.
 - Appendix B: the full settings comparison with source pages and released filenames.
-- Appendix C: twelve comparison figures, including the IWSLT'14 experiments for paper Figures 3 and 11(b).
+- Appendix C: mathematical definition of the text-length measurement.
+- Appendix D: twelve comparison figures, including the IWSLT'14 experiments for paper Figures 3 and 11(b).
 
 The journal's opening figure uses **15% noise and 4,000 epochs**; our adaptation uses **10% noise and 400 epochs**. The existing matched Figure 1 chart uses the authors' released **10%** data, not their original opening figure. Keep those distinctions explicit.
 

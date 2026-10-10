@@ -20,26 +20,45 @@
 \maketitle
 
 \begin{abstract}
-We replicate a subset of the experiments in ``Deep Double Descent: Where Bigger Models and More Data Hurt'' by Nakkiran et al. Using the authors' released ResNet18 and five-layer CNN definitions inside our own PyTorch training pipeline, we reproduce width sweeps, training trajectories and sample-size comparisons on CIFAR-10 and CIFAR-100, and compare them with the authors' released measurements. We further re-implement the IWSLT'14 Transformer experiments. To fit our budget, we train for at most a tenth of the original horizon with one seed per setting (229 vision runs, 14.98 B200 GPU-hours). Model-wise double descent under label noise, and the shift of the interpolation threshold with noise, augmentation and sample size, are reproduced qualitatively. Epoch-wise double descent is replicated for sufficiently large models, while small and medium sized models follow a monotone and U-shaped test error trajectories. The CNN plateau, where more data does not help, does not appear at the authors' widths, which we attribute to the fixed update budget. The noise-free peaks reported for CIFAR-100 are not confirmed at our horizons. [Translation: one sentence missing??] 
+We replicate a subset of the experiments in ``Deep Double Descent: Where Bigger Models and More Data Hurt'' by Nakkiran et al. Building on the authors' released results and codebase, we reproduce all vision experiments albeit at lower epoch size, and compare them with the authors' released measurements. We further re-implement the IWSLT'14 Transformer experiments. To fit our budget, we train for at most a tenth of the original horizon with one seed per setting (229 vision runs, 14.98 B200 GPU-hours). Model-wise double descent under label noise, and the shift of the interpolation threshold with noise, augmentation and sample size, are reproduced qualitatively. Epoch-wise double descent is replicated for sufficiently large models, while small and medium sized models follow a monotone and U-shaped test error trajectories. The CNN plateau, where more data does not help, does not appear at the authors' widths, which we attribute to the fixed update budget. The noise-free peaks reported for CIFAR-100 are not confirmed at our horizons. [Translation: one sentence missing?ok?] 
 \end{abstract}
 
 \section{Introduction}
 Classical learning theory predicts a U-shaped bias-variance trade-off, where larger models overfit beyond some complexity. Modern networks contradict this, generalising better as they grow far beyond the number of training samples. Which regime applies matters in practice. It affects whether to enlarge a model, train it longer, stop early or collect more data.
 \\ \\
 Nakkiran et al.~\cite{nakkiran2021deepdouble} reconcile the two views through the \emph{effective model complexity} (EMC) of a training procedure: the largest number of samples it can fit to near-zero training error (Section~\ref{sec:background}). They hypothesize that test error behaves atypically when the EMC is close to the number of training samples $n$. Varying the width, the training time or $n$ moves a model through this critical regime. The results are \emph{model-wise} and \emph{epoch-wise} double descent, and \emph{sample-wise} non-monotonicity, where more data
-can hurt. The authors demonstrate these effects for CNNs, ResNets and Transformers on CIFAR-10/100 and machine translation. We test five of their claims:
+can hurt. The authors demonstrate these effects for CNNs, ResNets and Transformers on CIFAR-10/100 and machine translation. We organize our reproduction around five empirical findings described in the paper, labelled C1--C5 below:
 \begin{enumerate}
-  \item[C1] Model-wise double descent occurs with the test-error peak at the interpolation threshold.
-  \item[C2] Label noise, data augmentation and more training samples move this threshold, and the peak, to larger models.
-  \item[C3] Small, intermediate and large models show respectively monotone, U-shaped and double-descent test-error trajectories over training time.
-  \item[C4] Near the threshold, more training data does not help and can increase test error.
-  \item[C5] Optimal early stopping largely removes these peaks
+  \item[C1] Model-wise double descent exhibits a test-error peak near the interpolation threshold~\cite[Section~2, p.~6; Section~5]{nakkiran2021deepdouble}.
+  \item[C2] Adding label noise or data augmentation, or increasing the training-set size, shifts the interpolation threshold and the associated test-error peak towards larger models~\cite[Section~5, p.~8]{nakkiran2021deepdouble}.
+  \item[C3] As training proceeds, small, intermediate and large models can exhibit monotonically decreasing, U-shaped and double-descent test-error trajectories, respectively~\cite[Section~6, p.~10]{nakkiran2021deepdouble}.
+  \item[C4] Near the critical regime, increasing the training-set size may provide little benefit and, in some settings, worsen test performance~\cite[Section~7, pp.~11--12]{nakkiran2021deepdouble}.
+  \item[C5] Optimal early stopping suppresses double descent in many tested settings, but exceptions remain~\cite[Section~8, p.~15]{nakkiran2021deepdouble}.
 \end{enumerate}
 
-Our contributions are threefold. First, we wrote an independent PyTorch pipeline for training, evaluation and checkpointing around the authors' released model definitions. Second, we replicate the model-, epoch- and sample-wise vision experiments on CIFAR-10/100 and compare them directly with the authors' released measurements. We also re-implement the IWSLT'14 Transformer experiments of their Figures~3 and~11(b). Third, we report the compute cost of this reduced protocol. In summary, C1 and C2 are reproduced qualitatively, C3 and C4 only partially, and our results are
-consistent with C5. 
-% TODO: verify C5 wording; add translation verdict
-The noise-free peaks reported for CIFAR-100 remain unconfirmed at our training horizons.
+We treat C1, C3 and C4 as the central empirical results because they
+describe the model-wise, epoch-wise and sample-wise behavior that the EMC
+framework connects. C2 and C5 are supporting findings about shifts in the
+critical region and the effect of early stopping. This distinction guides
+our assessment of the reproduction.
+
+Our contributions are threefold. First, we write an independent PyTorch training and evaluation codebase based on the best-effort interpretation of the information in the paper. Second, we replicate the model-, epoch- and sample-wise vision experiments on CIFAR-10/100 and compare them directly with the authors' released measurements. We also re-implement the IWSLT'14 Transformer experiments of their Figures~3 and~11(b). Third, we report the compute cost of this reduced protocol.
+Appendix~\ref{app:comparisons} collects paired plots comparing our results
+with the authors' results for each reproduced figure, allowing direct
+visual comparison across the experimental settings.
+
+Among the central findings, C1 receives qualitative support in noisy vision
+and translation width sweeps (Figures~\ref{app:matched-figure_04}
+and~\ref{fig:translation-figure3}), while the noise-free CIFAR-100 peaks
+remain unconfirmed (Figures~\ref{app:matched-figure_04}
+and~\ref{app:matched-figure_07}). C3 is partially reproduced
+(Figure~\ref{app:matched-figure_09}); C4 has mixed support, with
+sample-wise non-monotonicity in translation but no matching CNN plateau
+(Figures~\ref{fig:translation-figure11b} and~\ref{app:matched-figure_11a}).
+Among the supporting findings, C2 receives qualitative support
+(Figures~\ref{app:matched-figure_04}, \ref{app:matched-figure_05}
+and~\ref{app:matched-figure_12}), and the opening comparison is consistent
+with C5 (Figure~\ref{fig:opening}).
 
 
 \section{Background}\label{sec:background}
@@ -58,12 +77,14 @@ where $\mathrm{Error}_S$ is the error on the training set itself and the
 authors use $\epsilon=0.1$. Their generalized double-descent hypothesis distinguishes three regimes. If $\mathrm{EMC}\ll n$ (under-parameterized) or $\mathrm{EMC}\gg n$ (over-parameterized), any change that increases the EMC decreases test error. If $\mathrm{EMC}\approx n$ (critically parameterized), such a change may either increase or decrease it. The \emph{interpolation threshold} is the point where $\mathrm{EMC}=n$. Since the EMC cannot be computed directly, we follow the authors and estimate the threshold as the smallest width $\hat{k}_{\mathrm{interp}}$ whose final training error on the (possibly noisy) training labels is at most $\epsilon$.
 
 Increasing width or training time raises the EMC and moves a model through the threshold. Increasing $n$, adding label noise or adding augmentation makes the training set harder to fit and shifts the threshold to larger models. Model-, epoch- and sample-wise double descent (C1, C3, C4) are thus one-dimensional slices through the same picture, and C2 describes how that picture shifts.
+The paper investigates these relationships by varying model size, training duration, and training-set size, each of which changes effective model complexity relative to the number of training samples.
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Methodology and experimental design}
 
-\subsection{Vision setup}
+\subsection{Vision setup}\label{sec:vision-setup}
 \subsubsection{Reduced Training}
 
 The authors publish extensive training and evaluation logs. This allowed us to understand how many epochs or optimization steps were needed before their results materialized. We found that plotting their results for the first 10\% of epochs we were able to get results that looked almost visually identical to what they reported. Thus to cover several experimental settings within our compute budget, we
@@ -187,18 +208,42 @@ The seven jobs used 14.98 GPU-hours in total.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Results}
 %% Model-wise double descent (C1 and C2)
-\subsection{Model-wise Double Descent}
+\subsection{Model-wise Double Descent}\label{sec:modelwise}
 
 \subsubsection{Model size, label noise, and optimization}
-The width sweeps and associated comparisons are organized by their
-experimental question rather than by compute cost. Paper Figures 1,
-2, 4, and 5 concern width and noise or augmentation; Figures 6 and 7
-add optimizer and dataset comparisons. All replicated figure families are presented as comparisons of ours
-with the authors in Appendix~\ref{app:comparisons}. At 20\% noise, our augmented
-CIFAR-10 CNN test error rises from 21.74\% at width 16 to 28.11\%
-at width 48, then falls to 25.88\% at width 128 at step 50,000.
-This single-seed non-monotonicity does not establish the paper's
-converged interpolation-threshold result.
+The model-wise experiments test how test error rises and then falls as
+model width increases near the interpolation threshold (C1; Figure~\ref{app:matched-figure_04}), and whether
+label noise and augmentation shift this region towards larger models
+(C2; Figures~\ref{app:matched-figure_04} and~\ref{app:matched-figure_05}).
+Our ResNet18 sweeps reproduce a local test-error peak followed by a second
+descent under 10\% and 20\% label noise on both CIFAR-10 and CIFAR-100
+(Figure~\ref{app:matched-figure_04}). The corresponding noise-free curves
+decrease across the tested widths (Figure~\ref{app:matched-figure_04}). Increasing label noise also shifts the
+training-error threshold towards larger widths, with the test-error peak
+generally moving in the same direction (Figure~\ref{app:matched-figure_04}). These results qualitatively support
+C1 and the label-noise component of C2, although our sparse width grid limits
+how precisely the peak can be located relative to the threshold.
+
+The CNN results show that this pattern depends on the training setting.
+Without augmentation, the CIFAR-10 curves on noisy data show a pronounced peak
+followed by decreasing test error (Figure~\ref{app:matched-figure_05}). With
+augmentation, fitting the training labels requires larger widths, and the
+test-error's rise occurs further to the right (Figure~\ref{app:matched-figure_05}). However, the augmented
+20\%-noise curve shows only a slight decline after its peak within the
+displayed range: test error rises from 21.74\% at width 16 to 28.11\% at
+width 48, then falls slightly by width 64 after 50,000 updates
+(Figure~\ref{app:matched-figure_05}). This supports a shift in the critical
+region under augmentation (C2), while providing weaker evidence for a
+completed second descent (C1; Figures~\ref{app:matched-figure_05} and~\ref{app:matched-figure_12}). The noise-free CIFAR-100 CNN peak reported
+by the authors is not resolved in our reproduction
+(Figure~\ref{app:matched-figure_07}). For clean CIFAR-10, test error decreases
+with width under both SGD and Adam (Figure~\ref{app:matched-figure_06}).
+
+The minimum observed test-error envelope in the opening comparison
+(Figure~\ref{fig:opening}) largely suppresses the width-dependent peak,
+consistent with C5. This is an oracle comparison using test evaluations,
+however, and does not establish that validation-based early stopping would
+achieve the same result. An epoch- or step-matched comparison of the results visualized in Figures 1-12 of the original paper, alongside the auhtors results, can be found in Appendix~\ref{app:comparisons}.
 
 %% Epoch-wise double descent (C3)
 \subsection{Epoch-wise Double Descent}
@@ -207,11 +252,11 @@ Nakkiran et al. argue that traning time acts like model size. As traning proceed
 the peak grows with label noise and is absent without it.
 
 We summarize each trajectory by its first minimum $E(t_1)$, the
-subsequent peak $E(t_p)$ and the final error $E(T)$. The weak form of the large-model claim requires $E(T)<E(t_p)$, i.e. a second descent. The strong form requires $E(T)<E(t_1)$. All three regimes appear within our 400 epochs (Table~\ref{tab:epochwise}, Figure~\ref{fig:epochwise}). The $k=3$ error decreases monotonically to 28.9\%. The $k=12$ error reaches 20.7\% at epoch 80 and then rises to 29.7\% at epoch 400, still increasing. The $k=64$ error falls to 15.1\% at epoch 20, peaks at 26.1\% at epoch 70 and descends to 20.9\% at epoch 400. Finally, the $k=64$ peak falls in the epoch range of the paper's ResNet peaks. Thus, the weak form holds. However, the strong form does not hold as the final error is still 5.8 points above the first minimum. 
+subsequent peak $E(t_p)$ and the final error $E(T)$. The weak form of the large-model claim requires $E(T)<E(t_p)$, i.e. a second descent. The strong form requires $E(T)<E(t_1)$. All three regimes appear within our 400 epochs (Table~\ref{tab:epochwise}, Figure~\ref{fig:epochwise}). The $k=3$ error decreases monotonically to 28.9\%. The $k=12$ error reaches 20.7\% at epoch 80 and then rises to 29.7\% at epoch 400, still increasing. The $k=64$ error falls to 15.1\% at epoch 20, peaks at 26.1\% at epoch 70 and descends to 20.9\% at epoch 400. Finally, the $k=64$ peak falls in the epoch range of the paper's ResNet peaks (Figure~\ref{fig:epochwise}). Thus, the weak form holds. However, the strong form does not hold as the final error is still 5.8 points above the first minimum. 
 
-The authors train for 4,000 epochs. Their released $k=64$ trajectory is at 21.9\% at epoch 400 and reaches 19.6\% at epoch 4,000. The second descent therefore continues well beyond our horizon, and the missing strong form is not supported as 20\% label noise in both ours and the authors experiments. The papers only evidence of the strong form comes from the 10\% runs (Fig. 10 in the paper).  C3 is therefore partially reproduced. The three regimes and the second descent are reproduced, while \textit{"training longer corrects overfitting"} is shown in its weak from for 20\% label noise, while the strong form for 10\% label noise is untested rather than contradicted. 
+The authors train for 4,000 epochs. Their released $k=64$ trajectory is at 21.9\% at epoch 400 and reaches 19.6\% at epoch 4,000 (Figure~\ref{fig:epochwise}; Table~\ref{tab:epochwise}). The second descent therefore continues well beyond our horizon, and the missing strong form is not supported as 20\% label noise in both ours and the authors experiments. The papers only evidence of the strong form comes from the 10\% runs (Fig. 10 in the paper).  C3 is therefore partially reproduced. The three regimes and the second descent are reproduced, while \textit{"training longer corrects overfitting"} is shown in its weak from for 20\% label noise, while the strong form for 10\% label noise is untested rather than contradicted. 
 
-The width-128 CNN arm of Figure~10 is shown in Appendix~\ref{app:matched-figure_10} for 0\% and 20\% label noise, which verifies the authors additional claim that the epoch-wise double descent phenomenon holds for different architectures in the presence of label noise. While without label noise, no epoch-wise double descent occurs. 
+The width-128 CNN arm of Figure~10 is shown in Appendix~\ref{app:matched-figure_10} for 0\% and 20\% label noise, which verifies the authors additional claim that the epoch-wise double descent phenomenon holds for different architectures in the presence of label noise. The clean CNN trajectory does not show epoch-wise double descent (Figure~\ref{app:matched-figure_10}). 
 
 \begin{table}[t]
 \centering
@@ -254,11 +299,11 @@ interpolation threshold as the smallest width with train error at most
 0.1, the $\epsilon$ of their Definition~2.1, the threshold grows with the
 sample size in both the authors' grid and ours, and the test-error peak
 lies close to it (\autoref{tab:samplewise}). The moving peak is thus
-reproduced (C2).
+reproduced (C2; Figures~\ref{app:matched-figure_11a} and~\ref{app:matched-figure_12}).
 
 The plateau (C4) is not, at least not at the same widths. From 12,500 to 50,000
 samples the authors' test error falls by 1.9 points at width 32, whereas ours
-falls by 10.1, and by 3.3 at width 64, next to our 50,000-sample threshold. With
+falls by 10.1, and by 3.3 at width 64, next to our 50,000-sample threshold (Figure~\ref{app:matched-figure_11a}; Table~\ref{tab:samplewise}). With
 a fixed budget of 50,000 updates the three sets get 512, 256 and 128 epochs, so
 the largest set is the furthest from fitting; its threshold therefore lies
 further right than the authors', and the plateau, if present, moves with it. Our
@@ -297,14 +342,14 @@ the widths of \autoref{tab:runs}.}
 \label{sec:translation-res}
 
 \subsubsection{Model-wise double descent}
-In the original paper, figure 3 showed that for both 4k and 18k samples, test-loss initially increased with $d_{model}$, but after peaking around $d_{model}=24$ for 4k samples, and $d_{model}=56$ for 18k samples, the test loss decreased with increased dimension continuing decreasing even at $d_{model}=200$, which fits with the authors broader claim that increasing sample size can shift the critical region towards larger models. The peak in test loss is also observed in our results, but earlier for both 4k and 18k samples. We were not able to reproduce their result where more data can actually hurt performance, as the 18k-sample curve remains below the 4k-sample curve across all tested dimensions, as seen in Figure \ref{fig:translation-figure3}. So we partly reproduce the results of model-wise double descent, but we do not reproduce the result of more data hurting performance.
+In the original paper, figure 3 showed that for both 4k and 18k samples, test-loss initially increased with $d_{model}$, but after peaking around $d_{model}=24$ for 4k samples, and $d_{model}=56$ for 18k samples, the test loss decreased with increased dimension continuing decreasing even at $d_{model}=200$, which fits with the authors broader claim that increasing sample size can shift the critical region towards larger models. The peak in test loss is also observed in our results, but earlier for both 4k and 18k samples. We were not able to reproduce their result where more data can actually hurt performance, as the 18k-sample curve remains below the 4k-sample curve across all tested dimensions, as seen in Figure \ref{fig:translation-figure3}. So we partly reproduce the results of model-wise double descent, but we do not reproduce the result of more data hurting performance (Figure~\ref{fig:translation-figure3}).
 
 
 
 \subsubsection{Sample-wise non-monotonicity}
 In Figure 11(b), the authors plot the result of an experiment where they instead vary the number of samples, from 2k to 50k, for two models with dimensions 64 and 80. The results in the paper show a non-monotonic region, where increasing the number of samples actually causes worse performance, and then continuing to increase samples beyond that point gives a monotone decrease in the loss. This result supports the authors claim that near the threshold, more training data does not help and can in fact hurt.
 
-Our attempt to reproduce these results were partly successful, and we see that for our $d_{model}=80$ model, the test loss rises from 4k samples to 6k samples, and we need 12k samples before the loss is lower than at 4k. The $d_{model}=64$ model shows a weaker initial increase in loss from 2k to 4k samples. So we qualitatively partly reproduce the sample-wise non-monotonicity, but our results differ from the paper in the exact positions of the peaks, and the absolute losses also do not match. The results are shown in Figure \ref{fig:translation-figure11b}.
+Our attempt to reproduce these results were partly successful, and we see that for our $d_{model}=80$ model, the test loss rises from 4k samples to 6k samples, and we need 12k samples before the loss is lower than at 4k (Figure~\ref{fig:translation-figure11b}). The $d_{model}=64$ model shows a weaker initial increase in loss from 2k to 4k samples (Figure~\ref{fig:translation-figure11b}). So we qualitatively partly reproduce the sample-wise non-monotonicity, but our results differ from the paper in the exact positions of the peaks, and the absolute losses also do not match. The results are shown in Figure \ref{fig:translation-figure11b}.
 
 
 
@@ -330,23 +375,34 @@ Therefore implementation details affected whether the phenomenon appeared, but w
 %% Limitations of our chosen approach
 %% Shorter horizon maybe? - Why did it / didn´t it affect the conclusions about reproducibility 
 \subsection{Effect of the reduced protocol}
-Training for at most a tenth of the original horizon lowers the EMC of every procedure we run, so interpolation thresholds appear at larger widths than in the paper. How much this matters depends on the claim. Statements about the existence and ordering of peaks survive. Statements about where curves for different settings meet, or how far a trajectory eventually descends, do not.
+The model-wise results indicate that our reduced protocol preserves some
+qualitative patterns but does not reproduce every setting equally well.
+The noisy ResNet18 sweeps show peaks and subsequent descents resembling
+the authors' measurements at the displayed 400-epoch horizon
+(Figure~\ref{app:matched-figure_04}). The augmented CNN sweeps provide less
+complete evidence: training error remains appreciable across much of the
+width range, and the second descent is only partially observed
+(Figures~\ref{app:matched-figure_05} and~\ref{app:matched-figure_12}). Shorter
+training is a plausible contributor, but our experiments do not isolate its
+effect from preprocessing, initialization and other implementation
+differences. The missing noise-free CIFAR-100 peak therefore remains
+inconclusive (Figure~\ref{app:matched-figure_07}).
 
-In the epoch-wise experiment the reduction truncates the trajectories rather than distorting them. All three regimes, and the $k=64$ peak at epoch 70, develop within the first 400 epochs. At epoch 400 our test errors lie within one point of the authors' for $k=3$ and $k=64$ (Table~\ref{tab:epochwise}). What the truncation removes is the tail of the second descent, which is slow: the authors' $k=64$ run improves by only 2.3 points between epochs 400 and 4,000. The horizon also decides
+In the epoch-wise experiment the reduction truncates the trajectories rather than distorting them. All three regimes, and the $k=64$ peak at epoch 70, develop within the first 400 epochs (Figure~\ref{fig:epochwise}). At epoch 400 our test errors lie within one point of the authors' for $k=3$ and $k=64$ (Table~\ref{tab:epochwise}). What the truncation removes is the tail of the second descent, which is slow: the authors' $k=64$ run improves by only 2.3 points between epochs 400 and 4,000 (Figure~\ref{fig:epochwise}). The horizon also decides
 which regime a width belongs to, because the EMC grows with training time. At 400 epochs our 20\%-noise threshold is
-$\hat{k}_{\mathrm{interp}}=16$, so $k=12$ has not yet interpolated, consistent with its intermediate role. The authors' $k=12$ error is flat between epochs 400 and 4,000 (34.1 to 34.6\%), which indicates that the U-curve is a stable regime rather than a truncated double descent.
+$\hat{k}_{\mathrm{interp}}=16$ (Figure~\ref{app:matched-figure_04}), so $k=12$ has not yet interpolated, consistent with its intermediate role. The authors' $k=12$ error is flat between epochs 400 and 4,000 (34.1 to 34.6\%), which indicates that the U-curve is a stable regime rather than a truncated double descent (Figure~\ref{fig:epochwise}).
 \\ \\
 In addition, reducing the horizon is not neutral across sample sizes. With a fixed number of updates a larger set is seen fewer times, so the reduction moves its threshold the most; the moving peak survives this, whereas the plateau, which depends on where the curves for different sizes meet, does
-not stay at the authors' widths. A reduced sample-wise reproduction should therefore give the largest set enough updates to fit, and shorten the smaller sets instead.
+not stay at the authors' widths (Figures~\ref{app:matched-figure_11a} and~\ref{app:matched-figure_12}). A reduced sample-wise reproduction should therefore give the largest set enough updates to fit, and shorten the smaller sets instead.
 
 \subsection{Limitations}
-All results rest on one seed per setting. Seed variance is expected to be largest near the interpolation threshold, where the paper attributes the peak to a single noise-sensitive interpolating model. Our data are consistent with this: at epoch 400 our errors are within one point of the authors' for $k=3$ and $k=64$, but 4.4 points lower for the near-critical $k=12$. The observed peak heights and the 1--3.5 percentage-point differences in the sample-wise experiments come from single runs, so we cannot determine whether they persist across random seeds. Although the published sample-wise panel averages five trials, we could not identify those trials in the released files.
+All results rest on one seed per setting. Seed variance is expected to be largest near the interpolation threshold, where the paper attributes the peak to a single noise-sensitive interpolating model. Our data are consistent with this: at epoch 400 our errors are within one point of the authors' for $k=3$ and $k=64$, but 4.4 points lower for the near-critical $k=12$ (Figure~\ref{fig:epochwise}; Table~\ref{tab:epochwise}). The observed peak heights and the 1--3.5 percentage-point differences in the sample-wise experiments come from single runs, so we cannot determine whether they persist across random seeds. Although the published sample-wise panel averages five trials, we could not identify those trials in the released files.
 
 Further limitations:
 \begin{itemize}
   \item Our width grids resolve peak locations only to the grid spacing, e.g.\ between widths 8, 12 and 16 for ResNet18.
   \item We use 10 and 20\% label noise instead of the 15\% of Figures~1 and~2, and one dataset per domain.
-  \item The early-stopping curves (C5) take the minimum over test evaluations, an oracle that overstates what validation-based stopping would achieve.
+  \item The early-stopping curves (C5; Figure~\ref{fig:opening}) take the minimum over test evaluations, an oracle that overstates what validation-based stopping would achieve.
   \item The exact Fairseq configuration, preprocessing and batching of the translation experiments could not be recovered.
 \end{itemize}
 Our results should therefore be read as a qualitative rather than an exact numerical reproduction.
@@ -356,9 +412,36 @@ Our results should therefore be read as a qualitative rather than an exact numer
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Conclusion}
 
-Our reproductions of the vision experiments overall were successful, visually we found that almost all figures closely resembled the ones from the paper as is visible  \ref{app:comparisons}
+For the central empirical findings, our reproduction provides qualitative
+but incomplete support. Model-wise double descent (C1) appears in the
+noisy vision sweeps and the translation width sweeps
+(Figures~\ref{app:matched-figure_04} and~\ref{fig:translation-figure3}),
+while the noise-free CIFAR-100 peaks remain unconfirmed
+(Figures~\ref{app:matched-figure_04} and~\ref{app:matched-figure_07}). For epoch-wise double descent (C3),
+we reproduce the three training-time regimes and a second descent at
+20\% label noise, but do not establish improvement below the first minimum
+(Figure~\ref{app:matched-figure_09}).
+For sample-wise non-monotonicity (C4), the translation sample-size sweep
+shows regions where more data hurts (Figure~\ref{fig:translation-figure11b}),
+whereas the CNN plateau is not reproduced at the authors' widths
+(Figures~\ref{app:matched-figure_11a} and~\ref{app:matched-figure_12}).
+The translation width sweep also fails to reproduce the region where
+4,000 samples outperform 18,000 (Figure~\ref{fig:translation-figure3}).
 
-Our reproductions of the translation experiments provide partial support for the paper's results. We reproduced the sample-wise non-monotonicity of Figure 11(b) and the model-wise double descent of Figure 3, but not the region where 4k samples outperform 18k samples. More importantly, our experiments showed that missing details about implementation, in this case especially the batching, can affect whether the reported phenomenon appears and can limit exact reproducibility.
+The supporting findings receive qualified support. The vision experiments
+show shifts of the critical region with label noise, augmentation and
+sample size (C2; Figures~\ref{app:matched-figure_04},
+\ref{app:matched-figure_05} and~\ref{app:matched-figure_12}).
+The minimum observed test-error envelope suppresses the peak in our
+opening comparison (Figure~\ref{fig:opening}), consistent with C5,
+although it uses test
+evaluations rather than validation-based stopping. Together, these results
+support the EMC framework's qualitative account across model size,
+training duration and sample size. Reduced vision training horizons,
+sparse grids, single-seed experiments and unresolved implementation details
+limit exact reproduction. In particular, the translation experiments show
+that batching choices can affect whether sample-wise non-monotonicity
+appears.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Reproducibility and contributions}
@@ -370,7 +453,9 @@ Appendices~\ref{app:coverage} and~\ref{app:protocol}.
 \subsection{Individual contribution}
 \textbf{Hans Peter Lyngsøe}
 
-Wrote the training code for the vision experiments along with scaffolding for running multiple experiments on the same gpu in parallel in order to fully utilize the hardware. Ran and conducted the experiments for the model-wise double descent experiments
+Wrote the training code for the vision experiments along with scaffolding for running multiple experiments on the same gpu in parallel in order to fully utilize the hardware. Ran and conducted the experiments for the model-wise double descent experiments. Wrote \autoref{sec:vision-setup} and \autoref{sec:modelwise}.
+Wrote a part of the Introduction, Conclusions, Discussion and t
+
 
 \textbf{Mathias Elmegaard Nielsen:}
 Epoch-wise double descent (paper Figures~9 and~10). Ran and analyzed the CIFAR-10 ResNet18 trajectories for widths
@@ -525,6 +610,15 @@ Evaluation cadence & Adam: 10 epochs; SGD: 1,250 updates & \href{https://gitlab.
 Run infrastructure & Our loop and checkpoints; up to four runs per B200 & Checkpointing, concurrency and GPU scheduling not stated in Appendix~B.2 or provided in the released files. & Our implementation\\
 \end{longtable}
 \clearpage
+\section{Text-length measurement}\label{app:text-length}
+We remove figures, tables, captions and references, then re-typeset the
+remaining content in the unchanged ISBI layout:
+\[
+N(D)=\operatorname{pages}\bigl(L(P(D))\bigr).
+\]
+We count main text separately from appendix prose; a partially filled
+final page counts as one page.
+
 \section{Replication figures: ours compared with the authors}\label{app:comparisons}
 This gallery places our vision replication results alongside
 measurements reconstructed from the authors' released data, and our
