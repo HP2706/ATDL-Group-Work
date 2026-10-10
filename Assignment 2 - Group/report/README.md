@@ -25,7 +25,7 @@ Organize around the findings being tested rather than numbered figures or histor
 1. **Abstract and introduction (0.5 page):** identify the paper, explain double descent, and state the three questions: behavior versus model size, training time, and sample size. Show the authors' released 10% data beside our 10% adaptation; retain the original 15% opening figure separately in the appendix.
 2. **Methodology and deviations (1 page):** describe datasets, architectures, width grids, fixed label-noise masks, augmentation, optimizers/schedules, evaluation, seeds, and horizons. Include a compact original-versus-ours protocol table. Explain how 229 training cells provide multiple figure views. State which code was reused or reimplemented, with its source.
 3. **Results (1.5 pages):** group by model-wise, epoch-wise, and sample-wise behavior. For each, state the paper's claim, show or reference a comparison, quantify our observation, and explain whether it supports that claim under the reduced protocol. Use Figures 4–7 for noise/augmentation/optimizer checks, Figures 9–10 for trajectories, and Figures 11(a)–12 for sample size. Ten charts are not ten independent experiments.
-4. **Discussion (0.6 page):** assess the effect of shorter training, sparse width grids, one seed, different noise rates, metric transformations, and uncertain authors' time coordinates. Distinguish inconclusive evidence from a contradiction. Do not claim that unrun translation experiments were reproduced.
+4. **Discussion (0.6 page):** assess the effect of shorter training, sparse width grids, one seed, different noise rates, metric transformations, and uncertain authors' time coordinates. Distinguish inconclusive evidence from a contradiction. Distinguish the reproduced IWSLT'14 Figures 3 and 11(b) from the unrun full-data translation sweeps in Figure 8.
 5. **Conclusion and individual contributions (0.4 page):** answer the replication questions at the measured scope; give each member's concrete work and the repository link.
 6. **References**, followed by the **figure appendix**. These are excluded from the four-page text allowance.
 
@@ -34,9 +34,10 @@ The current `main.tex` is a short factual working draft under this structure, no
 ## Figures and source distinctions
 
 - Main Figure 1: noise-matched released-data reconstruction versus ours, both at 10% noise, ten widths, and 400 displayed epochs.
-- Appendix decision table (`appendix-protocol.tex`): one row per core model, data, or training setting, with exact journal pages, appendix subsections, released filenames, and factual differences. The methodology references this table.
-- Appendix A: the full settings comparison with source pages and released filenames.
-- Appendix B: one gallery of ten paired replication charts, each comparing ours with the authors. No standalone or duplicate side-by-side galleries are included.
+- Appendix decision table (in `main.tex`): one row per core model, data, or training setting, with exact journal pages, appendix subsections, released filenames, and factual differences. The methodology references this table.
+- Appendix A: vision sweeps, translation coverage, and a figure-by-figure table with internal references to the appendix plots.
+- Appendix B: the full settings comparison with source pages and released filenames.
+- Appendix C: twelve comparison figures, including the IWSLT'14 experiments for paper Figures 3 and 11(b).
 
 The journal's opening figure uses **15% noise and 4,000 epochs**; our adaptation uses **10% noise and 400 epochs**. The existing matched Figure 1 chart uses the authors' released **10%** data, not their original opening figure. Keep those distinctions explicit.
 
@@ -44,19 +45,18 @@ The journal's opening figure uses **15% noise and 4,000 epochs**; our adaptation
 
 ## Source provenance lives outside the report
 
-[`../their-results/provenance/`](../their-results/provenance/README.md) contains public CSVs, extracted notebook source, grid/count checks, hashes, and provenance metadata from the September compute audit. It is **working provenance**, not report prose or a required appendix. It was moved out of `report/` on 3 October 2026. The manuscript does not import or need these files to compile. Preserve them to retain the verification history behind `EXPERIMENTS.md`; do not submit them with the PDF.
+[`../their-results/provenance/`](../their-results/provenance/README.md) contains public CSVs, extracted notebook source, grid/count checks, hashes, and provenance metadata from the September compute audit. It is **working provenance**, not report prose or a required appendix. It was moved out of `report/` on 3 October 2026. The manuscript does not import or need these files to compile. Preserve them to retain the verification history behind the report's appendix tables; do not submit them with the PDF.
 
 ## File roles
 
-- `main.tex`: report source, opened in the native LaTeX editor.
+- `main.tex`: complete report source, including all appendix tables and figures, opened in the native LaTeX editor.
 - `references.bib`: paper citation; use `\cite{nakkiran2021deepdouble}`.
-- `appendix-figures.tex`: the ten paired replication charts, included by `main.tex`; standalone galleries are excluded.
 - `experiment-cost-audit.tex`: the old cost/inventory sections removed from the active manuscript.
 - `draft-before-reorganization.tex`: exact snapshot of the edited draft before this reorganization, including its unfinished abstract.
 - `paper-selection-cost-report.tex`: earlier historical paper-selection comparison.
 - `../their-results/provenance/`: historical source provenance, outside the manuscript directory.
 
-The source is opened in the native editor. Its compiler currently cannot resolve this multi-file project (the local ISBI style, bibliography, figure assets, and appendix). The saved PDF is compiled successfully with the existing TeX installation: run `latexmk -pdf main.tex` from this directory. Open `main.pdf` to inspect that verified export.
+The source is opened in the native editor. Its compiler currently cannot resolve this multi-file project (the local ISBI style, bibliography, and figure assets). The saved PDF is compiled successfully with the existing TeX installation: run `latexmk -pdf main.tex` from this directory. Open `main.pdf` to inspect that verified export.
 
 ## Interpretation of targeted ablations
 
