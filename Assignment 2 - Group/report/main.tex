@@ -36,36 +36,13 @@ can hurt. The authors demonstrate these effects for CNNs, ResNets and Transforme
   \item[C5] Optimal early stopping suppresses double descent in many tested settings, but exceptions remain~\cite[Section~8, p.~15]{nakkiran2021deepdouble}.
 \end{enumerate}
 
-We treat C1, C3 and C4 as the central empirical results because they
-describe the model-wise, epoch-wise and sample-wise behavior that the EMC
-framework connects. C2 and C5 are supporting findings about shifts in the
-critical region and the effect of early stopping. This distinction guides
-our assessment of the reproduction.
+We assess C1, C3 and C4 as central findings, with C2 and C5 providing supporting evidence.
 
-Our contributions are twofold. First, we write an independent PyTorch training and evaluation codebase based on the best-effort interpretation of the paper. Second, we replicate the model-, epoch- and sample-wise vision experiments on CIFAR-10/100 and compare them directly with the authors' released measurements. We also re-implement the IWSLT'14 Transformer experiments of their Figures~3 and~11(b).
-Appendix~\ref{app:comparisons} collects paired plots comparing our results
-with the authors' results for each figure in the main paper, allowing direct
-visual comparison across the experimental settings.
-
-Among the central findings, C1 receives qualitative support in noisy vision
-and translation width sweeps (Figures~\ref{app:matched-figure_04}
-and~\ref{fig:translation-figure3}), while the noise-free CIFAR-100 peaks
-remain unconfirmed (Figures~\ref{app:matched-figure_04}
-and~\ref{app:matched-figure_07}). C3 is partially reproduced
-(Figure~\ref{app:matched-figure_09}); C4 has mixed support, with
-sample-wise non-monotonicity in translation but no matching CNN plateau
-(Figures~\ref{fig:translation-figure11b} and~\ref{app:matched-figure_11a}).
-Among the supporting findings, C2 receives qualitative support
-(Figures~\ref{app:matched-figure_04}, \ref{app:matched-figure_05}
-and~\ref{app:matched-figure_12}), and the opening comparison is consistent
-with C5 (Figure~\ref{fig:opening}).
-
+We implement training and evaluation for vision models and neural translation models, comparing our results with the authors' measurements. Appendix~\ref{app:comparisons} presents paired plots for each reproduced figure.
 
 \section{Background}\label{sec:background}
 A training procedure $\mathcal{T}$ maps a training set
-$S=\{(x_i,y_i)\}_{i=1}^{n}$ to a classifier $\mathcal{T}(S)$. It covers
-architecture, optimizer, learning-rate schedule, number of steps and
-augmentation. For a data distribution $\mathcal{D}$ and tolerance
+$S=\{(x_i,y_i)\}_{i=1}^{n}$ to a classifier $\mathcal{T}(S)$. For a data distribution $\mathcal{D}$ and error tolerance
 $\epsilon>0$, the EMC is
 \begin{equation}
   \mathrm{EMC}_{\mathcal{D},\epsilon}(\mathcal{T})
@@ -73,11 +50,9 @@ $\epsilon>0$, the EMC is
     [\mathrm{Error}_S(\mathcal{T}(S))] \le \epsilon\bigr\},
   \label{eq:emc}
 \end{equation}
-where $\mathrm{Error}_S$ is the error on the training set itself and the
-authors use $\epsilon=0.1$. Their generalized double-descent hypothesis distinguishes three regimes. If $\mathrm{EMC}\ll n$ (under-parameterized) or $\mathrm{EMC}\gg n$ (over-parameterized), any change that increases the EMC decreases test error. If $\mathrm{EMC}\approx n$ (critically parameterized), such a change may either increase or decrease it. The \emph{interpolation threshold} is the point where $\mathrm{EMC}=n$. Since the EMC cannot be computed directly, we follow the authors and estimate the threshold as the smallest width $\hat{k}_{\mathrm{interp}}$ whose final training error on the (possibly noisy) training labels is at most $\epsilon$.
+Where $\mathrm{Error}_S$ is the error on the training set itself. They distinguish three regimes. If $\mathrm{EMC}\ll n$ (under-parameterized) or $\mathrm{EMC}\gg n$ (over-parameterized), any change that increases the EMC decreases test error. If $\mathrm{EMC}\approx n$ (critically parameterized), such a change may either increase or decrease it. The \emph{interpolation threshold} is the point where $\mathrm{EMC}=n$. Since the EMC cannot be computed directly, we follow the authors and estimate the threshold as the smallest width $\hat{k}_{\mathrm{interp}}$ whose final training error on the (possibly noisy) training labels is at most $\epsilon$.
 
-Increasing width or training time raises the EMC and moves a model through the threshold. Increasing $n$, adding label noise or adding augmentation makes the training set harder to fit and shifts the threshold to larger models. Model-, epoch- and sample-wise double descent (C1, C3, C4) are thus one-dimensional slices through the same picture, and C2 describes how that picture shifts.
-The paper investigates these relationships by varying model size, training duration, and training-set size, each of which changes effective model complexity relative to the number of training samples.
+The EMC framework connects changes in width, training time and sample size to C1, C3 and C4. Greater width or longer training can increase EMC, while larger datasets, noise and augmentation can shift the interpolation threshold towards larger models (C2).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -117,12 +92,11 @@ and~\ref{fig:translation-figure11b}.
 \begin{figure*}[t]
 \centering
 \includegraphics[width=0.96\textwidth]{comparison/figure_01.png}
-\caption{Noise-matched adaptation of the opening figure. The original opening figure instead uses 15\% noise and
-4,000 epochs~\cite{nakkiran2021deepdouble}. For this figure we use 10\%-noise CIFAR-10 ResNet18 measurements above our 10\%-noise results.
+\caption{Noise-matched adaptation of the opening figure. The original opening figure uses 15\% noise and
+4,000 epochs~\cite{nakkiran2021deepdouble}. We use 10\%-noise CIFAR-10 ResNet18 measurements above our 10\%-noise results.
 Both panels use the same ten widths, 400 displayed epochs, and
 10\%-noise. Red curves show the
-minimum observed test error over the displayed evaluations, not
-validation-based early stopping.}
+minimum observed test error over the displayed evaluations.}
 \label{fig:opening}
 \end{figure*}
 
@@ -264,20 +238,9 @@ Peak locations and absolute losses differ from the authors'
 
 \section{Discussion and limitations}
 \subsection{Effect of the reduced protocol}
-The reduced training horizon preserves some qualitative patterns. Noisy ResNet18 width sweeps resemble the authors' displayed
-400-epoch results, while augmented CNNs retain appreciable training error
-and only a partial second descent across the displayed widths
-(Figures~\ref{app:matched-figure_04} and~\ref{app:matched-figure_05}).
-The missing clean CIFAR-100 peaks remain inconclusive because shorter
-training, sparse grids and implementation differences are not isolated
-(Figures~\ref{app:matched-figure_04} and~\ref{app:matched-figure_07}).
+Noisy ResNet18 sweeps agree qualitatively with the authors' displayed 400-epoch results, while augmented CNNs remain imperfectly fitted and show only partial second descent (Figures~\ref{app:matched-figure_04} and~\ref{app:matched-figure_05}). Missing clean CIFAR-100 peaks remain inconclusive because training duration, sparse grids and implementation differences are not isolated (Figure~\ref{app:matched-figure_07}).
 
-At epoch 400 our test errors lie within one percentage point of the authors'
-for $k=3$ and $k=64$ (Table~\ref{tab:epochwise}). The authors' $k=64$ run
-improves by only 2.3 points over the next 3,600 epochs
-(Figure~\ref{fig:epochwise}). The reduced horizon thus removes a slow tail
-of the second descent. Observing that descent supports C3 without
-establishing that longer training beats an early minimum.
+At epoch 400, our errors for $k=3,64$ are within one percentage point of the authors' (Table~\ref{tab:epochwise}). Their $k=64$ run improves another 2.3 points by epoch 4,000 (Figure~\ref{fig:epochwise}). Our observed second descent supports C3 without establishing improvement over the early minimum.
 
 The horizon also affects how a width is classified, because EMC grows with
 training time. At 400 epochs our 20\%-noise threshold is
@@ -299,33 +262,24 @@ and~\ref{app:matched-figure_12}). A targeted follow-up would extend
 training for the largest set, holding other settings fixed, and add widths
 around its shifted threshold.
 
-\subsection{Implementation and statistical uncertainty}
-The released vision model definitions and measurements enable comparisons,
-but the missing training pipeline leaves preprocessing and evaluation
-details unresolved (Table~\ref{tab:protocol}). For translation, the exact
-preprocessed data, subsets, seeds and batching configuration could not be
-recovered. The paper describes Adam, while the release describes SGD;
-we follow the paper. Perplexity and cross-entropy labels are also
-inconsistent, limiting interpretation of absolute loss differences
-(Table~\ref{tab:translation-protocol}). Our final length-based batching
-configuration exhibits sample-wise non-monotonicity, but the displayed
-comparison does not isolate batching's effect from other choices
-(Figure~\ref{fig:translation-figure11b}).
+\subsection{Implementation}
 
-Single-seed experiments cannot establish the stability of peak heights or
+We believe our codebase follows the authors' implementation, however since the codebase does not include the training code, we have to rely on the information from the paper, which sometimes we found to be quite sparse or even contradictory. For example in the translation task, the exact
+preprocessed data, subsets, seeds and batching configuration could not be
+recovered, moreover the paper describes using Adam, while the released codebase mentions using SGD. Thus we cannot exclude the possibility that some of the discrepancies between results are due to different training and evaluation settings, we include a table with all key training and evaluation decisions we made and how it compares to what is in the paper  (Table~\ref{tab:protocol},Table~\ref{tab:translation-protocol}).
+
+\subsection{Statistical uncertainty}
+
+For all experiments, we use a single seed for computational reasons. However the paper for many experiments relies on 5 independent seeds.  Thus a single-seed experiments cannot establish the stability of peak heights or
 small performance differences, and sparse grids limit threshold
 localization (Figures~\ref{app:matched-figure_04}
 and~\ref{app:matched-figure_11a}). We could not identify the five trials
 underlying the published CNN sample-wise panel; our comparison instead
-uses the released single-trial grid
-(Figure~\ref{app:matched-figure_11a}). Finally, the test-error envelope
-provides qualified support for C5 without demonstrating validation-based
-stopping (Figure~\ref{fig:opening}). These limitations favor qualitative
-rather than exact numerical conclusions.
+uses the released single-trial grid (Figure~\ref{app:matched-figure_11a}). 
 
 \section{Conclusion}
-The central findings receive qualitative but incomplete support: noisy
-width sweeps exhibit double descent (C1; Figures~\ref{app:matched-figure_04}
+The central findings receive qualitative but incomplete support: the
+width sweeps on noisy data exhibit double descent (C1; Figures~\ref{app:matched-figure_04}
 and~\ref{fig:translation-figure3}), the three epoch-wise regimes appear
 (C3; Figure~\ref{fig:epochwise}), and translation shows sample-wise
 non-monotonicity (C4; Figure~\ref{fig:translation-figure11b}). The CNN
