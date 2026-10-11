@@ -50,7 +50,7 @@ $\epsilon>0$, the EMC is
     [\mathrm{Error}_S(\mathcal{T}(S))] \le \epsilon\bigr\},
   \label{eq:emc}
 \end{equation}
-Where $\mathrm{Error}_S$ is the error on the training set itself. They distinguish three regimes. If $\mathrm{EMC}\ll n$ (under-parameterized) or $\mathrm{EMC}\gg n$ (over-parameterized), any change that increases the EMC decreases test error. If $\mathrm{EMC}\approx n$ (critically parameterized), such a change may either increase or decrease it. The \emph{interpolation threshold} is the point where $\mathrm{EMC}=n$. Since the EMC cannot be computed directly, we follow the authors and estimate the threshold as the smallest width $\hat{k}_{\mathrm{interp}}$ whose final training error on the (possibly noisy) training labels is at most $\epsilon$.
+Here, $\mathrm{Error}_S$ denotes training error. Following the authors' heuristic choice, we use $\epsilon=0.1$ to identify the empirical training-error threshold. They distinguish three regimes. If $\mathrm{EMC}\ll n$ (under-parameterized) or $\mathrm{EMC}\gg n$ (over-parameterized), any change that increases the EMC decreases test error. If $\mathrm{EMC}\approx n$ (critically parameterized), such a change may either increase or decrease it. The \emph{interpolation threshold} is the point where $\mathrm{EMC}=n$. Since the EMC cannot be computed directly, we follow the authors and estimate the threshold as the smallest width $\hat{k}_{\mathrm{interp}}$ whose final training error on the (possibly noisy) training labels is at most $\epsilon$.
 
 The EMC framework connects changes in width, training time and sample size to C1, C3 and C4. Greater width or longer training can increase EMC, while larger datasets, noise and augmentation can shift the interpolation threshold towards larger models (C2).
 
@@ -59,23 +59,19 @@ The EMC framework connects changes in width, training time and sample size to C1
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Methodology and experimental design}
 \subsection{Vision setup}\label{sec:vision-setup}
+The authors' public training histories show that several target effects emerge well before the full training horizon. We therefore shortened training to cover more experimental conditions within the same compute budget. This choice targets qualitative reproduction without assuming convergence; comparisons at intermediate training stages remain subject to uncertainty in the authors' logging intervals.
+
 We reuse the released width-scaled ResNet18 and five-layer CNN definitions
 and implement training and evaluation in PyTorch. CIFAR-10/100 sweeps use
 one seed, sparse width grids and selected label-noise rates of 0, 10 and
 20\%. Adam runs last 400 epochs and SGD runs 50,000 updates, one tenth of
 the stated horizons except for the CIFAR-100 CNN, which uses one twentieth.
+
 We evaluate clean test error and training error against fixed, possibly
 corrupted labels. Preprocessing, optimizer settings and differences from
 the original protocol, including width grids and sample sizes, are specified
 in Table~\ref{tab:protocol}. Appendix~\ref{app:coverage} maps the experiments
-to the reproduced figures.
-
-Within each width sweep, the noise sensitivity analysis varies label corruption
-while holding the dataset, architecture, optimizer, augmentation and training
-budget fixed. The augmentation ablation removes random cropping and flipping
-at fixed noise rate, widths and SGD update budget. Both comparisons test
-whether the training-error threshold and test-error peak shift, and whether
-a second descent remains visible.
+to the reproduced figures. 
 
 \subsection{Translation setup}\label{sec:translation-setup}
 We reproduce IWSLT'14 German--English experiments using a six-layer
@@ -306,7 +302,7 @@ Appendices~\ref{app:coverage} and~\ref{app:protocol}.
 
 \subsection{Individual contribution}
 \textbf{Hans Peter Lyngsøe:}
-Implemented the vision training code and experiment orchestration. Conducted the model-wise double-descent experiments and wrote \autoref{sec:vision-setup} and \autoref{sec:modelwise}. Contributed to the Introduction, Discussion and Conclusion.
+Implemented the vision training code and experiment orchestration. Conducted the model-wise double-descent experiments and wrote \autoref{sec:vision-setup} and \autoref{sec:modelwise}. Contributed to the Introduction, Discussion and the Conclusion.
 \\ \\
 \textbf{Mathias Elmegaard Nielsen:}
 Epoch-wise double descent (paper Figures~9 and~10). Ran and analyzed the CIFAR-10 ResNet18 trajectories for widths
@@ -325,7 +321,7 @@ horizon; wrote \autoref{sec:samplesize}, the sample-wise discussion and the revi
 \\ \\
 \textbf{Harald Franck:}
 Initial plan was to try to reproduce the plot of Figure 3 and 11(b) in the paper and investigate the reproducibility of those.
-Implemented and ran the translation experiments, investigated reproducibility issues, produced comparison plots, and wrote about this process. Also wrote the translation experiments results and discussion.
+Implemented and ran the translation experiments, investigated reproducibility issues, produced comparison plots, and wrote about this process. Also wrote the translation experiments results and parts of the discussion.
 
 \clearpage
 \section{Experimental coverage}\label{app:coverage}
