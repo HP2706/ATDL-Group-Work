@@ -7,8 +7,8 @@ with `latexmk` and `pdfinfo` on the shell's PATH. The script rebuilds the
 report, then creates two text-only PDFs in the gitignored `.text-length/`
 directory without editing `main.tex`:
 
-- `main-text.pdf`: title, abstract, main sections and contributions.
-- `all-text.pdf`: the same material plus appendix prose and headings.
+- `main-text.pdf`: title, abstract and main sections through the conclusion.
+- `all-text.pdf`: the same material plus appendix prose, contributions and headings.
 
 Both exclude figures, tables, captions and references, retain the ISBI font,
 spacing, margins and two-column layout, and preserve original citation and
@@ -37,27 +37,29 @@ For the replication track, use released code or reimplement the paper's methods;
 - Review the course information page's exam format, AI policy, and evaluation criteria.
 - Submit a PDF through Absalon by **11 October 2026, 23:59 Copenhagen time**.
 
-## Suggested narrative outline
+## Current narrative structure
 
-Organize around the findings being tested rather than numbered figures or historical compute planning. Target four pages of text, with approximately the following allocation:
+The introduction and background are preserved. Methodology gives the essential
+scope and deviations, with detailed settings in appendix tables. Results retain
+quantitative comparisons and direct plot references; discussion prioritizes
+interpretation and uncertainty. The conclusion distinguishes central findings
+(C1, C3, C4) from supporting findings (C2, C5).
 
-1. **Abstract and introduction (0.5 page):** identify the paper, explain double descent, and state the three questions: behavior versus model size, training time, and sample size. Show the authors' released 10% data beside our 10% adaptation; retain the original 15% opening figure separately in the appendix.
-2. **Methodology and deviations (1 page):** describe datasets, architectures, width grids, fixed label-noise masks, augmentation, optimizers/schedules, evaluation, seeds, and horizons. Include a compact original-versus-ours protocol table. Explain how 229 training cells provide multiple figure views. State which code was reused or reimplemented, with its source.
-3. **Results (1.5 pages):** group by model-wise, epoch-wise, and sample-wise behavior. For each, state the paper's claim, show or reference a comparison, quantify our observation, and explain whether it supports that claim under the reduced protocol. Use Figures 4–7 for noise/augmentation/optimizer checks, Figures 9–10 for trajectories, and Figures 11(a)–12 for sample size. Ten charts are not ten independent experiments.
-4. **Discussion (0.6 page):** assess the effect of shorter training, sparse width grids, one seed, different noise rates, metric transformations, and uncertain authors' time coordinates. Distinguish inconclusive evidence from a contradiction. Distinguish the reproduced IWSLT'14 Figures 3 and 11(b) from the unrun full-data translation sweeps in Figure 8.
-5. **Conclusion and individual contributions (0.4 page):** answer the replication questions at the measured scope; give each member's concrete work and the repository link.
-6. **References**, followed by the **figure appendix**. These are excluded from the four-page text allowance.
-
-The current `main.tex` is a short factual working draft under this structure, not a submission-ready manuscript. Before submission, supply the actual group/member metadata and contribution statements, expand the implementation details and interpretation, and finish interpreting each comparison. The 229-run count, 9,160 recorded rows, and quantitative examples in this draft were rechecked against the local Parquet data on 3 October 2026.
+Individual contributions and the repository link begin the appendix. Moving
+prose to the appendix does not automatically exempt it from the text limit,
+so the all-text measurement includes it. The current rendered checks give
+four pages for main text and five including appendix prose. The latter
+exceeds the four-page allowance if appendix prose is counted.
 
 ## Figures and source distinctions
 
 - Main Figure 1: noise-matched released-data reconstruction versus ours, both at 10% noise, ten widths, and 400 displayed epochs.
 - Appendix decision table (in `main.tex`): one row per core model, data, or training setting, with exact journal pages, appendix subsections, released filenames, and factual differences. The methodology references this table.
-- Appendix A: vision sweeps, translation coverage, and a figure-by-figure table with internal references to the appendix plots.
-- Appendix B: the full settings comparison with source pages and released filenames.
-- Appendix C: mathematical definition of the text-length measurement.
-- Appendix D: twelve comparison figures, including the IWSLT'14 experiments for paper Figures 3 and 11(b).
+- Appendix A: reproducibility information and individual contributions.
+- Appendix B: vision sweeps, translation coverage, and a figure-by-figure table with internal references to the appendix plots.
+- Appendix C: vision and translation settings comparisons, including source references and unresolved protocol details.
+- Appendix D: mathematical definition of the text-length measurement.
+- Appendix E: twelve comparison figures, including the IWSLT'14 experiments for paper Figures 3 and 11(b).
 
 The journal's opening figure uses **15% noise and 4,000 epochs**; our adaptation uses **10% noise and 400 epochs**. The existing matched Figure 1 chart uses the authors' released **10%** data, not their original opening figure. Keep those distinctions explicit.
 

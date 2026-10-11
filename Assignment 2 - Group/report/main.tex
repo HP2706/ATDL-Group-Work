@@ -14,20 +14,20 @@
   \end{figure}\clearpage
 }
 \title{Deep Double Descent: A Reduced Reproduction}
-\name{Group 15: Hans Peter Raaschou-Jensen, Harrald Franck, Mathias Elmegaard og Julian Barragan}
+\name{\shortstack{Group 15: Hans Peter Lyngsøe, Harald Franck, \\ Mathias Elmegaard Nielsen and Julian Barragan}}
 \address{Assignment 2: Replication Track \\ \url{https://github.com/HP2706/ATDL-Group-Work}}
 \begin{document}
 \maketitle
 
 \begin{abstract}
-We replicate a subset of the experiments in ``Deep Double Descent: Where Bigger Models and More Data Hurt'' by Nakkiran et al. Building on the authors' released results and codebase, we reproduce all vision experiments albeit at lower epoch size, and compare them with the authors' released measurements. We further re-implement the IWSLT'14 Transformer experiments. To fit our budget, we train for at most a tenth of the original horizon with one seed per setting (229 vision runs, 14.98 B200 GPU-hours). Model-wise double descent under label noise, and the shift of the interpolation threshold with noise, augmentation and sample size, are reproduced qualitatively. Epoch-wise double descent is replicated for sufficiently large models, while small and medium sized models follow a monotone and U-shaped test error trajectories. The CNN plateau, where more data does not help, does not appear at the authors' widths, which we attribute to the fixed update budget. The noise-free peaks reported for CIFAR-100 are not confirmed at our horizons. [Translation: one sentence missing?ok?] 
+We reproduce selected experiments from ``Deep Double Descent: Where Bigger Models and More Data Hurt'' by Nakkiran et al. We reuse the released vision model definitions, implement training and evaluation, and compare our CIFAR-10/100 results with the authors' released measurements. Vision experiments use one seed per setting and reduced training horizons: 400 Adam epochs or 50,000 SGD updates, corresponding to one tenth of the stated horizons, or one twentieth for the CIFAR-100 CNN. Noisy width sweeps qualitatively reproduce model-wise double descent and shifts of the interpolation threshold with label noise, augmentation and sample size. Small, intermediate and large ResNet18 models exhibit decreasing, U-shaped and double-descent test-error trajectories, respectively, although the large model's final error remains above its first minimum. The CNN plateau is not reproduced at the authors' widths; unequal training progress under the reduced update budget is a plausible explanation. Clean CIFAR-100 peaks remain unconfirmed. At the original training horizon, IWSLT'14 experiments show non-monotonic test loss with width and sample size, but do not reproduce the width-sweep region where 18,000 examples perform worse than 4,000. These results provide meaningful qualitative but incomplete support for the selected findings.
 \end{abstract}
 
 \section{Introduction}
 Classical learning theory predicts a U-shaped bias-variance trade-off, where larger models overfit beyond some complexity. Modern networks contradict this, generalising better as they grow far beyond the number of training samples. Which regime applies matters in practice. It affects whether to enlarge a model, train it longer, stop early or collect more data.
 \\ \\
 Nakkiran et al.~\cite{nakkiran2021deepdouble} reconcile the two views through the \emph{effective model complexity} (EMC) of a training procedure: the largest number of samples it can fit to near-zero training error (Section~\ref{sec:background}). They hypothesize that test error behaves atypically when the EMC is close to the number of training samples $n$. Varying the width, the training time or $n$ moves a model through this critical regime. The results are \emph{model-wise} and \emph{epoch-wise} double descent, and \emph{sample-wise} non-monotonicity, where more data
-can hurt. The authors demonstrate these effects for CNNs, ResNets and Transformers on CIFAR-10/100 and machine translation. We organize our reproduction around five empirical findings described in the paper, labelled C1--C5 below:
+can hurt. The authors demonstrate these effects for CNNs, ResNets and Transformers on CIFAR-10/100 and machine translation. We organize our reproduction around what we believe are the five main empirical findings described in the paper, labelled C1--C5 below:
 \begin{enumerate}
   \item[C1] Model-wise double descent exhibits a test-error peak near the interpolation threshold~\cite[Section~2, p.~6; Section~5]{nakkiran2021deepdouble}.
   \item[C2] Adding label noise or data augmentation, or increasing the training-set size, shifts the interpolation threshold and the associated test-error peak towards larger models~\cite[Section~5, p.~8]{nakkiran2021deepdouble}.
@@ -42,9 +42,9 @@ framework connects. C2 and C5 are supporting findings about shifts in the
 critical region and the effect of early stopping. This distinction guides
 our assessment of the reproduction.
 
-Our contributions are threefold. First, we write an independent PyTorch training and evaluation codebase based on the best-effort interpretation of the information in the paper. Second, we replicate the model-, epoch- and sample-wise vision experiments on CIFAR-10/100 and compare them directly with the authors' released measurements. We also re-implement the IWSLT'14 Transformer experiments of their Figures~3 and~11(b). Third, we report the compute cost of this reduced protocol.
+Our contributions are twofold. First, we write an independent PyTorch training and evaluation codebase based on the best-effort interpretation of the paper. Second, we replicate the model-, epoch- and sample-wise vision experiments on CIFAR-10/100 and compare them directly with the authors' released measurements. We also re-implement the IWSLT'14 Transformer experiments of their Figures~3 and~11(b).
 Appendix~\ref{app:comparisons} collects paired plots comparing our results
-with the authors' results for each reproduced figure, allowing direct
+with the authors' results for each figure in the main paper, allowing direct
 visual comparison across the experimental settings.
 
 Among the central findings, C1 receives qualitative support in noisy vision
@@ -83,148 +83,59 @@ The paper investigates these relationships by varying model size, training durat
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Methodology and experimental design}
-
 \subsection{Vision setup}\label{sec:vision-setup}
-\subsubsection{Reduced Training}
+We reuse the released width-scaled ResNet18 and five-layer CNN definitions
+and implement training and evaluation in PyTorch. CIFAR-10/100 sweeps use
+one seed, sparse width grids and selected label-noise rates of 0, 10 and
+20\%. Adam runs last 400 epochs and SGD runs 50,000 updates, one tenth of
+the stated horizons except for the CIFAR-100 CNN, which uses one twentieth.
+We evaluate clean test error and training error against fixed, possibly
+corrupted labels. Preprocessing, optimizer settings and differences from
+the original protocol, including width grids and sample sizes, are specified
+in Table~\ref{tab:protocol}. Appendix~\ref{app:coverage} maps the experiments
+to the reproduced figures.
 
-The authors publish extensive training and evaluation logs. This allowed us to understand how many epochs or optimization steps were needed before their results materialized. We found that plotting their results for the first 10\% of epochs we were able to get results that looked almost visually identical to what they reported. Thus to cover several experimental settings within our compute budget, we
-reduced Adam training from 4,000 to 400 epochs and CIFAR-10 SGD training
-from 500,000 to 50,000 updates. These are 10\% of the original experiment;
-the CIFAR-100 CNN run instead uses 5\% of the stated one-million SGD steps. 
-For all graphs we plot we are using the 
+Within each width sweep, the noise sensitivity analysis varies label corruption
+while holding the dataset, architecture, optimizer, augmentation and training
+budget fixed. The augmentation ablation removes random cropping and flipping
+at fixed noise rate, widths and SGD update budget. Both comparisons test
+whether the training-error threshold and test-error peak shift, and whether
+a second descent remains visible.
 
-\subsubsection{Model implementation}
-The original computer vision experiments used two architecture families: width-scaled
-ResNet18 and a five-layer CNN. We conduct experiments with both model families
-reusing the authors' model code for
-\href{https://gitlab.com/harvard-machine-learning/double-descent/-/blob/0d653296f870e6bf7ee82dc71b4f7b49d53fa85d/models/resnet18k.py}{ResNet18}
-and the
-\href{https://gitlab.com/harvard-machine-learning/double-descent/-/blob/0d653296f870e6bf7ee82dc71b4f7b49d53fa85d/models/mcnn.py}{five-layer CNN},
-rather than reimplemting the architectures. 
-
-Unofrtunately the authors' released repository did not come with out of the box training code, so we wrote our own PyTorch training code, data loading, evaluation,
-resumable checkpointing, and concurrency primitives that allow us to
-manage multiple training runs on the same GPU.
-
-Our loader scales pixels
-to $[0,1]$ without channel normalization, samples one fixed corruption
-mask per seed, and replaces selected labels with uniformly sampled
-incorrect classes. This noise procedure follows Section~4 of the
-paper, which specifies that label noise is sampled once rather than
-at each epoch~\cite{nakkiran2021deepdouble}. Subsets use a seeded
-permutation, implementing the paper's random subsampling setup.
-Augmentation, when enabled, uses four-pixel padding, a random
-$32\times32$ crop, and horizontal flipping, as specified in
-Appendix~B.2. 
-
-the paper and
-released model and plotting code do not establish whether the authors
-used channel normalization. So we choose a reasonable default for the fields Scaling pixels by $1/255$ is our default. We cannot verify that it matches
-the authors' preprocessing, and normalization could affect optimization
-and the resulting curves.
-
-We evaluate the training subset without augmentation against its fixed
-training labels and the full 10,000-image test split against clean
-labels. Mean cross-entropy and misclassification fractions are recorded
-every ten epochs for Adam and every 1,250 steps for SGD, for comparison
-with the authors' results.
-
-\subsubsection{Training and optimizers}
-We follow the training protocol from the paper closely. All reported runs use batch size 128 as the paper, cross-entropy loss, seed
-zero, FP32 training, and no weight decay.
-
-Adam runs use a constant
-learning rate $10^{-4}$ with PyTorch's default moments
-$(\beta_1,\beta_2)=(0.9,0.999)$ and $\epsilon=10^{-8}$.
-SGD uses no momentum and our explicitly implemented schedule
-\[
-  \eta_t=\frac{0.1}{\sqrt{1+\lfloor t/512\rfloor}},
-\]
-where $t$ is the number of completed updates. Which implements the
-paper's inverse-square-root learning rate schedule.
-
-\subsubsection{Hidden Dimension size}
-
-The original paper does a sweep of each dimension from 1-128. In order to save compute we sweep a much smaller grid of $\{2, 3, 4, 6, 8, 12, 16, 24, 32, 64\}$ for Resnet18 and $\{1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 64\}$ for CNN.
-
-For the full-data CNN trained with augmentation we use
-$\{1,\allowbreak 2,\allowbreak 3,\allowbreak 4,\allowbreak 6,\allowbreak
-8,\allowbreak 12,\allowbreak 16,\allowbreak 24,\allowbreak 32,\allowbreak
-36,\allowbreak 40,\allowbreak 48,\allowbreak 64,\allowbreak 96,\allowbreak
-128\}$.
-
-The reason behind the non uniform grid-selection comes down to certain figures relying on a specific width, that thus has to be added to the grid. Moreover we try to have a higher density for smaller widths, which is the area most intertsing for observing the double descent behaviour.
-
-We include a full comparison of our setup with the paper's stated
-protocol and released code in Appendix~\ref{app:protocol},
-Table~\ref{tab:protocol}
+\subsection{Translation setup}\label{sec:translation-setup}
+We reproduce IWSLT'14 German--English experiments using a six-layer
+encoder--decoder Transformer. The width sweep uses 25 embedding dimensions
+from 8 to 200 at 4,000 and 18,000 training pairs; the sample-size sweep uses
+widths 64 and 80 at 2,000 to 50,000 pairs. Both retain the stated
+80,000-update horizon. We use Adam with warmup and inverse-square-root
+decay, BPE preprocessing and length-based batches of up to 4,096 tokens.
+Table~\ref{tab:translation-protocol} records the full configuration and
+unresolved details of the authors' setup. We compare the resulting test-loss
+curves in Figures~\ref{fig:translation-figure3}
+and~\ref{fig:translation-figure11b}.
 
 \begin{figure*}[t]
 \centering
 \includegraphics[width=0.96\textwidth]{comparison/figure_01.png}
 \caption{Noise-matched adaptation of the opening figure. The original opening figure instead uses 15\% noise and
 4,000 epochs~\cite{nakkiran2021deepdouble}. For this figure we use 10\%-noise CIFAR-10 ResNet18 measurements above our 10\%-noise results.
-Both panels use the same ten widths, Results fir 400 epochs, and
+Both panels use the same ten widths, 400 displayed epochs, and
 10\%-noise. Red curves show the
 minimum observed test error over the displayed evaluations, not
 validation-based early stopping.}
 \label{fig:opening}
 \end{figure*}
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{Translation setup}
-\label{sec:translation-setup}
-
-\subsubsection{Model}
-
-We use the same Transformer implementation as the paper, namely the fairseq Transformer
-\href{https://github.com/facebookresearch/fairseq/tree/df2f84ce619edddb80e720a56abc74d5490fed99}{Fairseq v0.9.0}.
-Its six-layer encoder and decoder use eight attention heads, feed-forward
-width $4d_{model}$, sinusoidal positions, and post-normalization.
-
-\subsubsection{Experiment selection}
-For the translation experiments we choose to try to reproduce Figure 3 and Figure 11b in the paper. They both use the IWSLT'14 German $\rightarrow$ English dataset and the same transformer family. They contain complimentary experiments: Figure 3 varies $d_{model}$ while comparing 4k and 18k samples, and Figure 11b holds $d_{model}$ fixed at 64 and 80 and varies the sample size. Together they test the claim of "more data can hurt" from two directions, and they also test whether the phenomenons of model-wise double descent and sample-wise non-monotonicity in a different domain. 
-
-\subsubsection{Experimental setup and reproduction choices}
-The description of the experimental setup is limited, but the authors describe that they use the IWSLT'14 German $\rightarrow$ English dataset. They train a 6-layer encoder-decoder Transformer with 8 attention heads. The model size varies in the experiments with $d_{model}$, and the feed-forward dimension is $d_{ff}=4d_{model}$. They use 10\% label smoothing and no dropout, and they train for 80k gradient updates. The IWSLT text was preprocessed using Byte-Pair-Encodings, and they used the Fairseq sequence-modeling toolkit for the Transformer implementation. Training follows the optimization procedure of Vaswani et al.~\cite{vaswani2017attention}, with a linear warmup phase followed by inverse-square-root learning-rate decay using Adam. \\
-
-Because the experiments were not fully specified in the report nor in their code repository, so we had to make some choices. We used the optimization procedure of Vaswani et al. \cite{nakkiran2021deepdouble}, using Adam with $(\beta_1,\beta_2)=(0.9,0.98)$ and $\epsilon=10^{-9}$. We used 4000 warmup steps, and learning rate $lr=d_{model}^{-0.5}\cdot\min(step\_num^{-0.5},step\_num\cdot warmup\_steps^{-1.5})$. So the learning rate increases gradually during the warmup, and then decays proportional to the square root of the step number. \\
-For batches we used a max token budget of $4096$, rather than a fixed number of sentences. Batches are then formed from similarly sized sentences using a Fairseq-like length-based batching procedure. Therefore the number of sentences per batch vary with sentence length. \\
-
-For figure 3 we used 25 widths, evenly spaced from 8 to 200, so $d_{model}=\{8,16,...,192,200\}$, with 4k and 18k training samples. For figure 11b we used $d_{model}=\{64,80\}$ and $n=2k,4k...,48k,50k$. So our setup is Fairseq-like, but we do not know for sure if it is exactly the same as the authors. 
-
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{Deviations and compute?}
-Appendix~\ref{app:coverage} summarizes our vision sweeps, translation
-experiments, and coverage of the paper's figures.
-
-The seven jobs used 14.98 GPU-hours in total.
-%% Add transformer (NLP) experiment GPU-hours
-
-
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Results}
-%% Model-wise double descent (C1 and C2)
-\subsection{Model-wise Double Descent}\label{sec:modelwise}
-
-\subsubsection{Model size, label noise, and optimization}
-The model-wise experiments test how test error rises and then falls as
-model width increases near the interpolation threshold (C1; Figure~\ref{app:matched-figure_04}), and whether
-label noise and augmentation shift this region towards larger models
-(C2; Figures~\ref{app:matched-figure_04} and~\ref{app:matched-figure_05}).
+\subsection{Model-wise double descent}\label{sec:modelwise}
 Our ResNet18 sweeps reproduce a local test-error peak followed by a second
 descent under 10\% and 20\% label noise on both CIFAR-10 and CIFAR-100
-(Figure~\ref{app:matched-figure_04}). The corresponding noise-free curves
-decrease across the tested widths (Figure~\ref{app:matched-figure_04}). Increasing label noise also shifts the
-training-error threshold towards larger widths, with the test-error peak
-generally moving in the same direction (Figure~\ref{app:matched-figure_04}). These results qualitatively support
+(Figure~\ref{app:matched-figure_04}). The noise-free curves decrease with width; increasing label noise shifts
+the training-error threshold and generally the test-error peak towards
+larger widths (Figure~\ref{app:matched-figure_04}). These results qualitatively support
 C1 and the label-noise component of C2, although our sparse width grid limits
 how precisely the peak can be located relative to the threshold.
 
-The CNN results show that this pattern depends on the training setting.
 Without augmentation, the CIFAR-10 curves on noisy data show a pronounced peak
 followed by decreasing test error (Figure~\ref{app:matched-figure_05}). With
 augmentation, fitting the training labels requires larger widths, and the
@@ -234,33 +145,44 @@ displayed range: test error rises from 21.74\% at width 16 to 28.11\% at
 width 48, then falls slightly by width 64 after 50,000 updates
 (Figure~\ref{app:matched-figure_05}). This supports a shift in the critical
 region under augmentation (C2), while providing weaker evidence for a
-completed second descent (C1; Figures~\ref{app:matched-figure_05} and~\ref{app:matched-figure_12}). The noise-free CIFAR-100 CNN peak reported
+completed second descent (C1; Figure~\ref{app:matched-figure_05}). The noise-free CIFAR-100 CNN peak reported
 by the authors is not resolved in our reproduction
 (Figure~\ref{app:matched-figure_07}). For clean CIFAR-10, test error decreases
 with width under both SGD and Adam (Figure~\ref{app:matched-figure_06}).
+This qualitative agreement spans both training procedures, but their different
+budgets, 50,000 SGD updates versus 400 Adam epochs, prevent isolating the
+optimizer's effect.
 
-The minimum observed test-error envelope in the opening comparison
-(Figure~\ref{fig:opening}) largely suppresses the width-dependent peak,
-consistent with C5. This is an oracle comparison using test evaluations,
-however, and does not establish that validation-based early stopping would
-achieve the same result. An epoch- or step-matched comparison of the results visualized in Figures 1-12 of the original paper, alongside the auhtors results, can be found in Appendix~\ref{app:comparisons}.
+The minimum observed test-error envelope suppresses the opening comparison's
+peak, consistent with C5 (Figure~\ref{fig:opening}). This is an oracle
+assessment using test evaluations, not validation-based early stopping.
 
-%% Epoch-wise double descent (C3)
-\subsection{Epoch-wise Double Descent}
-\label{sec:epochwise}
-Nakkiran et al. argue that traning time acts like model size. As traning proceeds the EMC grows, so a fixed model can cross the interpolations threshold during training. For Resnet18 and CIFAR-10 with 20\% label noise (their Figure~9), this yields three regimes. A small model ($k=3$) never reaches the threshold, and its test error decreases monotonically. An intermediate model ($k=12$) only just reaches it and follows a classical U-curve. A large model ($k=64$) crosses it early, so its test error falls, rises and falls again, eventually below the first minimum: training longer corrects overfitting. Their Figure~10 shows that
-the peak grows with label noise and is absent without it.
+\subsection{Epoch-wise double descent}\label{sec:epochwise}
+We summarize each trajectory by its first minimum $E(t_1)$, subsequent
+peak $E(t_p)$ and final error $E(T)$. The weak form of the large-model
+claim requires $E(T)<E(t_p)$, i.e.\ a second descent; the strong form
+requires $E(T)<E(t_1)$. All three C3 regimes appear within our 400 epochs
+(Table~\ref{tab:epochwise}; Figure~\ref{fig:epochwise}). The $k=3$ error
+decreases monotonically to 28.9\%. The $k=12$ error reaches 20.7\% at
+epoch 80 and then rises to 29.7\% at epoch 400, still increasing. The
+$k=64$ error falls to 15.1\% at epoch 20, peaks at 26.1\% at epoch 70 and
+descends to 20.9\% at epoch 400. Thus the weak form holds, but the final
+error remains 5.8 percentage points above the first minimum
+(Figure~\ref{fig:epochwise}; Table~\ref{tab:epochwise}).
 
-We summarize each trajectory by its first minimum $E(t_1)$, the
-subsequent peak $E(t_p)$ and the final error $E(T)$. The weak form of the large-model claim requires $E(T)<E(t_p)$, i.e. a second descent. The strong form requires $E(T)<E(t_1)$. All three regimes appear within our 400 epochs (Table~\ref{tab:epochwise}, Figure~\ref{fig:epochwise}). The $k=3$ error decreases monotonically to 28.9\%. The $k=12$ error reaches 20.7\% at epoch 80 and then rises to 29.7\% at epoch 400, still increasing. The $k=64$ error falls to 15.1\% at epoch 20, peaks at 26.1\% at epoch 70 and descends to 20.9\% at epoch 400. Finally, the $k=64$ peak falls in the epoch range of the paper's ResNet peaks (Figure~\ref{fig:epochwise}). Thus, the weak form holds. However, the strong form does not hold as the final error is still 5.8 points above the first minimum. 
-
-The authors train for 4,000 epochs. Their released $k=64$ trajectory is at 21.9\% at epoch 400 and reaches 19.6\% at epoch 4,000 (Figure~\ref{fig:epochwise}; Table~\ref{tab:epochwise}). The second descent therefore continues well beyond our horizon, and the missing strong form is not supported as 20\% label noise in both ours and the authors experiments. The papers only evidence of the strong form comes from the 10\% runs (Fig. 10 in the paper).  C3 is therefore partially reproduced. The three regimes and the second descent are reproduced, while \textit{"training longer corrects overfitting"} is shown in its weak from for 20\% label noise, while the strong form for 10\% label noise is untested rather than contradicted. 
-
-The width-128 CNN arm of Figure~10 is shown in Appendix~\ref{app:matched-figure_10} for 0\% and 20\% label noise, which verifies the authors additional claim that the epoch-wise double descent phenomenon holds for different architectures in the presence of label noise. The clean CNN trajectory does not show epoch-wise double descent (Figure~\ref{app:matched-figure_10}). 
+The authors train for 4,000 epochs. Their released $k=64$ trajectory is at
+21.9\% at epoch 400 and reaches 19.6\% at epoch 4,000, so the second
+descent continues well beyond our horizon (Figure~\ref{fig:epochwise};
+Table~\ref{tab:epochwise}).
+The stronger result of finishing below the first minimum is demonstrated
+at 10\% noise in the paper's Figure~10~\cite{nakkiran2021deepdouble}; that
+condition is untested in our three-width ResNet comparison. Our width-128
+CNN trajectories likewise show a second descent with 20\% noise but not
+with clean labels (Figure~\ref{app:matched-figure_10}).
 
 \begin{table}[t]
 \centering
-\setlength{\tabcolsep}{4pt}
+\setlength{\tabcolsep}{3.5pt}
 \begin{tabular}{@{}rlcccc@{}}
 \toprule
 $k$ & Paper & $E(t_1)$ & $E(t_p)$ & $E(T)$ & A: 400 / 4{,}000 \\
@@ -274,7 +196,6 @@ $k$ & Paper & $E(t_1)$ & $E(t_p)$ & $E(T)$ & A: 400 / 4{,}000 \\
 \label{tab:epochwise}
 \end{table}
 
-
 \begin{figure*}[t]
 \centering
 \includegraphics[width=0.9\textwidth]{comparison/figure_09.png}
@@ -282,38 +203,27 @@ $k$ & Paper & $E(t_1)$ & $E(t_p)$ & $E(T)$ & A: 400 / 4{,}000 \\
 \label{fig:epochwise}
 \end{figure*}
 
+\subsection{Sample-wise non-monotonicity, CNN}\label{sec:samplesize}
+Increasing the sample size shifts both the training-error threshold and
+the test-error peak towards larger CNN widths (C2;
+Figures~\ref{app:matched-figure_11a} and~\ref{app:matched-figure_12}).
+Table~\ref{tab:samplewise} estimates the 10\% training-error crossing by
+linear interpolation between widths. Our thresholds increase from 17 to
+27 to 56, compared with 15, 23 and 34 in the authors' grid; the peaks move
+in the same direction (Figure~\ref{app:matched-figure_11a};
+Table~\ref{tab:samplewise}).
 
-
-%% Sample-wise non-monotonicity
-\subsection{Sample-wise, CNN}\label{sec:samplesize}
-Paper Figures 11(a) and 12 motivate the sample-size comparisons.
-In~\cite{nakkiran2021deepdouble} they argue that more samples have two
-effects on the test error; it falls overall, but the peak moves to larger
-widths, since fitting more samples requires a larger model. For CNNs they
-only claim that the two effects cancel near the threshold, such that
-4$\times$ more samples does not help, whereas more data hurting is shown
-for Transformers.
-
-The train error is what ties the peak to the sample size. Taking the
-interpolation threshold as the smallest width with train error at most
-0.1, the $\epsilon$ of their Definition~2.1, the threshold grows with the
-sample size in both the authors' grid and ours, and the test-error peak
-lies close to it (\autoref{tab:samplewise}). The moving peak is thus
-reproduced (C2; Figures~\ref{app:matched-figure_11a} and~\ref{app:matched-figure_12}).
-
-The plateau (C4) is not, at least not at the same widths. From 12,500 to 50,000
-samples the authors' test error falls by 1.9 points at width 32, whereas ours
-falls by 10.1, and by 3.3 at width 64, next to our 50,000-sample threshold (Figure~\ref{app:matched-figure_11a}; Table~\ref{tab:samplewise}). With
-a fixed budget of 50,000 updates the three sets get 512, 256 and 128 epochs, so
-the largest set is the furthest from fitting; its threshold therefore lies
-further right than the authors', and the plateau, if present, moves with it. Our
-12,500 and 25,000 grids have no widths between 32 and 64, so where the curves
-come closest is not measured. \autoref{app:matched-figure_11a}
-and~\autoref{app:matched-figure_12} show the curves.
-
-Appendix B.4 states 500K epochs for Figure 11(a), where Section 4 states
-500K gradient steps; read as steps, the authors' sets get 5,120 to 1,280
-epochs, ten times ours.
+The sample-wise experiment asks a different question from the moving
+peak: at a fixed width, does increasing the dataset improve test error?
+The authors' CNN curves contain a region where additional data provides
+little benefit (Figure~\ref{app:matched-figure_11a}).
+The CNN plateau (C4) is not reproduced at the authors' widths. Increasing
+sample size from 12,500 to 50,000 reduces their test error by 1.9 percentage
+points at width 32, compared with 10.1 points in our runs. At width 64,
+our reduction is 3.3 points (Figure~\ref{app:matched-figure_11a};
+Table~\ref{tab:samplewise}). The 12,500- and 25,000-sample grids have no
+widths between 32 and 64, limiting localization of any shifted plateau
+(Figures~\ref{app:matched-figure_11a} and~\ref{app:matched-figure_12}).
 
 \begin{table}[t]
 \centering
@@ -334,139 +244,127 @@ authors (A) and ours (O). Threshold: width where train error reaches 0.1,
 linearly interpolated. Peak: test-error maximum after the first minimum.
 Test error in \% at the common widths either side of the authors'
 50,000-sample threshold. Authors on their released 42-width grid, ours on
-the widths of \autoref{tab:runs}.}
+eleven widths $k\in\{1,2,3,4,6,8,12,\allowbreak16,24,32,64\}$.}
 \label{tab:samplewise}
 \end{table}
 
-\subsection{Translation results}
-\label{sec:translation-res}
+\subsection{Translation results}\label{sec:translation-res}
+The translation width sweeps exhibit peaks followed by decreasing loss,
+qualitatively supporting the width-dependent pattern in C1, but their peaks
+occur at smaller dimensions than the authors'. The 18,000-example curve
+remains below the 4,000-example curve throughout, so this experiment does
+not reproduce the reported region where more data hurts
+(Figure~\ref{fig:translation-figure3}).
 
-\subsubsection{Model-wise double descent}
-In the original paper, figure 3 showed that for both 4k and 18k samples, test-loss initially increased with $d_{model}$, but after peaking around $d_{model}=24$ for 4k samples, and $d_{model}=56$ for 18k samples, the test loss decreased with increased dimension continuing decreasing even at $d_{model}=200$, which fits with the authors broader claim that increasing sample size can shift the critical region towards larger models. The peak in test loss is also observed in our results, but earlier for both 4k and 18k samples. We were not able to reproduce their result where more data can actually hurt performance, as the 18k-sample curve remains below the 4k-sample curve across all tested dimensions, as seen in Figure \ref{fig:translation-figure3}. So we partly reproduce the results of model-wise double descent, but we do not reproduce the result of more data hurting performance (Figure~\ref{fig:translation-figure3}).
-
-
-
-\subsubsection{Sample-wise non-monotonicity}
-In Figure 11(b), the authors plot the result of an experiment where they instead vary the number of samples, from 2k to 50k, for two models with dimensions 64 and 80. The results in the paper show a non-monotonic region, where increasing the number of samples actually causes worse performance, and then continuing to increase samples beyond that point gives a monotone decrease in the loss. This result supports the authors claim that near the threshold, more training data does not help and can in fact hurt.
-
-Our attempt to reproduce these results were partly successful, and we see that for our $d_{model}=80$ model, the test loss rises from 4k samples to 6k samples, and we need 12k samples before the loss is lower than at 4k (Figure~\ref{fig:translation-figure11b}). The $d_{model}=64$ model shows a weaker initial increase in loss from 2k to 4k samples (Figure~\ref{fig:translation-figure11b}). So we qualitatively partly reproduce the sample-wise non-monotonicity, but our results differ from the paper in the exact positions of the peaks, and the absolute losses also do not match. The results are shown in Figure \ref{fig:translation-figure11b}.
-
-
-
-
-
-
-
+The sample-size sweep provides partial support for C4. At width 80, loss
+rises between 4,000 and 6,000 examples and falls below its 4,000-example
+value only at 12,000; width 64 shows a weaker increase from 2,000 to 4,000.
+Peak locations and absolute losses differ from the authors'
+(Figure~\ref{fig:translation-figure11b}).
 
 \section{Discussion and limitations}
-%% Reproducibility limitations
-%% Where did we strugle to replicate/reproduce experimental results
-% General Ambiguities
-\subsection{Ambiguities in the paper and released artefacts}
-One clear limitation in terms of reproducibility is the lack of a well-maintained codebase. The authors release their model definitions and raw measurements, which made the direct comparisons in this report possible, but the lack of a complete
-training pipeline lead to some general ambiguities which affected reproducibility.
-
-\subsubsection{Translation experiments}
-The high-level transformer setup was documented, but the exact training procedure was not recoverable. We therefore had to make some guesses and choices of our own. The authors stated that they use a Fairseq style setup, but it is not clear exactly which version or configuration they use. We were also unable to obtain their exact preprocessed files, so the preprocessing may be slightly different, although our data is processed using BPE as they also describe. Is is also unknown exactly which subsets of the data and seeds they used. There was inconsistency in the information about the optimizer between the paper and the authors' codebase. The paper mentions Adam and following the optimization procedure of Vaswani et al. which uses Adam, but the codebase specifies that the translation experiments used SGD. Here we chose to treat the paper as authoritative. It was also confusing exactly which metric they plot, as they write per-token perplexity in the caption of figure 3, but on the actual plot they write Cross-Entropy Test Loss. Since perplexity is the exponential of the cross-entropy, it seems like they did in fact plot cross-entropy, which we did as well. 
-The batching strategy turned out to be important for reproducibility. Switching from random greedy batching to a more Fairseq-like length-based batching changed the effective amount of training per update and made the sample-wise non-monotonicity in Figure 11(b) much clearer.
-Therefore implementation details affected whether the phenomenon appeared, but we can not necessarily say that they single handedly cause the discrepancy between the results.
-
-
-%% Limitations of our chosen approach
-%% Shorter horizon maybe? - Why did it / didn´t it affect the conclusions about reproducibility 
 \subsection{Effect of the reduced protocol}
-The model-wise results indicate that our reduced protocol preserves some
-qualitative patterns but does not reproduce every setting equally well.
-The noisy ResNet18 sweeps show peaks and subsequent descents resembling
-the authors' measurements at the displayed 400-epoch horizon
-(Figure~\ref{app:matched-figure_04}). The augmented CNN sweeps provide less
-complete evidence: training error remains appreciable across much of the
-width range, and the second descent is only partially observed
-(Figures~\ref{app:matched-figure_05} and~\ref{app:matched-figure_12}). Shorter
-training is a plausible contributor, but our experiments do not isolate its
-effect from preprocessing, initialization and other implementation
-differences. The missing noise-free CIFAR-100 peak therefore remains
-inconclusive (Figure~\ref{app:matched-figure_07}).
+The reduced training horizon preserves some qualitative patterns. Noisy ResNet18 width sweeps resemble the authors' displayed
+400-epoch results, while augmented CNNs retain appreciable training error
+and only a partial second descent across the displayed widths
+(Figures~\ref{app:matched-figure_04} and~\ref{app:matched-figure_05}).
+The missing clean CIFAR-100 peaks remain inconclusive because shorter
+training, sparse grids and implementation differences are not isolated
+(Figures~\ref{app:matched-figure_04} and~\ref{app:matched-figure_07}).
 
-In the epoch-wise experiment the reduction truncates the trajectories rather than distorting them. All three regimes, and the $k=64$ peak at epoch 70, develop within the first 400 epochs (Figure~\ref{fig:epochwise}). At epoch 400 our test errors lie within one point of the authors' for $k=3$ and $k=64$ (Table~\ref{tab:epochwise}). What the truncation removes is the tail of the second descent, which is slow: the authors' $k=64$ run improves by only 2.3 points between epochs 400 and 4,000 (Figure~\ref{fig:epochwise}). The horizon also decides
-which regime a width belongs to, because the EMC grows with training time. At 400 epochs our 20\%-noise threshold is
-$\hat{k}_{\mathrm{interp}}=16$ (Figure~\ref{app:matched-figure_04}), so $k=12$ has not yet interpolated, consistent with its intermediate role. The authors' $k=12$ error is flat between epochs 400 and 4,000 (34.1 to 34.6\%), which indicates that the U-curve is a stable regime rather than a truncated double descent (Figure~\ref{fig:epochwise}).
-\\ \\
-In addition, reducing the horizon is not neutral across sample sizes. With a fixed number of updates a larger set is seen fewer times, so the reduction moves its threshold the most; the moving peak survives this, whereas the plateau, which depends on where the curves for different sizes meet, does
-not stay at the authors' widths (Figures~\ref{app:matched-figure_11a} and~\ref{app:matched-figure_12}). A reduced sample-wise reproduction should therefore give the largest set enough updates to fit, and shorten the smaller sets instead.
+At epoch 400 our test errors lie within one percentage point of the authors'
+for $k=3$ and $k=64$ (Table~\ref{tab:epochwise}). The authors' $k=64$ run
+improves by only 2.3 points over the next 3,600 epochs
+(Figure~\ref{fig:epochwise}). The reduced horizon thus removes a slow tail
+of the second descent. Observing that descent supports C3 without
+establishing that longer training beats an early minimum.
 
-\subsection{Limitations}
-All results rest on one seed per setting. Seed variance is expected to be largest near the interpolation threshold, where the paper attributes the peak to a single noise-sensitive interpolating model. Our data are consistent with this: at epoch 400 our errors are within one point of the authors' for $k=3$ and $k=64$, but 4.4 points lower for the near-critical $k=12$ (Figure~\ref{fig:epochwise}; Table~\ref{tab:epochwise}). The observed peak heights and the 1--3.5 percentage-point differences in the sample-wise experiments come from single runs, so we cannot determine whether they persist across random seeds. Although the published sample-wise panel averages five trials, we could not identify those trials in the released files.
+The horizon also affects how a width is classified, because EMC grows with
+training time. At 400 epochs our 20\%-noise threshold is
+$\hat{k}_{\mathrm{interp}}=16$, so $k=12$ has not yet crossed the threshold
+(Figure~\ref{app:matched-figure_04}). The authors' $k=12$ error changes
+little between epochs 400 and 4,000 (34.1 to 34.6\%), providing no evidence
+of a delayed second descent within their longer horizon
+(Figure~\ref{fig:epochwise}; Table~\ref{tab:epochwise}).
 
-Further limitations:
-\begin{itemize}
-  \item Our width grids resolve peak locations only to the grid spacing, e.g.\ between widths 8, 12 and 16 for ResNet18.
-  \item We use 10 and 20\% label noise instead of the 15\% of Figures~1 and~2, and one dataset per domain.
-  \item The early-stopping curves (C5; Figure~\ref{fig:opening}) take the minimum over test evaluations, an oracle that overstates what validation-based stopping would achieve.
-  \item The exact Fairseq configuration, preprocessing and batching of the translation experiments could not be recovered.
-\end{itemize}
-Our results should therefore be read as a qualitative rather than an exact numerical reproduction.
+The fixed update budget also gives larger datasets fewer passes: our
+12,500-, 25,000- and 50,000-example CNN runs receive 512, 256 and 128 epochs.
+The larger set's threshold is displaced most relative to the authors'
+(Table~\ref{tab:samplewise}), so unequal progress towards fitting is a
+plausible explanation for the missing plateau (C4;
+Figures~\ref{app:matched-figure_11a} and~\ref{app:matched-figure_12}).
+The moving peak survives the reduction, but the plateau depends on where
+the sample-size curves meet (Figures~\ref{app:matched-figure_11a}
+and~\ref{app:matched-figure_12}). A targeted follow-up would extend
+training for the largest set, holding other settings fixed, and add widths
+around its shifted threshold.
 
-% The translation experiments were run with a single seed, so we cannot separate small discrepancies from random variation. In addition, some implementation details from the original setup, including the exact Fairseq version, preprocessing, and batching configuration, could not be recovered exactly. Our results should therefore be interpreted as a qualitative rather than exact numerical reproduction.
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Implementation and statistical uncertainty}
+The released vision model definitions and measurements enable comparisons,
+but the missing training pipeline leaves preprocessing and evaluation
+details unresolved (Table~\ref{tab:protocol}). For translation, the exact
+preprocessed data, subsets, seeds and batching configuration could not be
+recovered. The paper describes Adam, while the release describes SGD;
+we follow the paper. Perplexity and cross-entropy labels are also
+inconsistent, limiting interpretation of absolute loss differences
+(Table~\ref{tab:translation-protocol}). Our final length-based batching
+configuration exhibits sample-wise non-monotonicity, but the displayed
+comparison does not isolate batching's effect from other choices
+(Figure~\ref{fig:translation-figure11b}).
+
+Single-seed experiments cannot establish the stability of peak heights or
+small performance differences, and sparse grids limit threshold
+localization (Figures~\ref{app:matched-figure_04}
+and~\ref{app:matched-figure_11a}). We could not identify the five trials
+underlying the published CNN sample-wise panel; our comparison instead
+uses the released single-trial grid
+(Figure~\ref{app:matched-figure_11a}). Finally, the test-error envelope
+provides qualified support for C5 without demonstrating validation-based
+stopping (Figure~\ref{fig:opening}). These limitations favor qualitative
+rather than exact numerical conclusions.
+
 \section{Conclusion}
+The central findings receive qualitative but incomplete support: noisy
+width sweeps exhibit double descent (C1; Figures~\ref{app:matched-figure_04}
+and~\ref{fig:translation-figure3}), the three epoch-wise regimes appear
+(C3; Figure~\ref{fig:epochwise}), and translation shows sample-wise
+non-monotonicity (C4; Figure~\ref{fig:translation-figure11b}). The CNN
+plateau and clean CIFAR-100 peaks remain unresolved
+(Figures~\ref{app:matched-figure_11a} and~\ref{app:matched-figure_07}).
+Supporting findings include shifts of the critical region (C2;
+Figures~\ref{app:matched-figure_04}, \ref{app:matched-figure_05}
+and~\ref{app:matched-figure_12}) and suppression of the opening peak by
+oracle early stopping (C5; Figure~\ref{fig:opening}). The results support
+the EMC framework's qualitative predictions, subject to reduced horizons,
+single seeds and implementation uncertainty.
 
-For the central empirical findings, our reproduction provides qualitative
-but incomplete support. Model-wise double descent (C1) appears in the
-noisy vision sweeps and the translation width sweeps
-(Figures~\ref{app:matched-figure_04} and~\ref{fig:translation-figure3}),
-while the noise-free CIFAR-100 peaks remain unconfirmed
-(Figures~\ref{app:matched-figure_04} and~\ref{app:matched-figure_07}). For epoch-wise double descent (C3),
-we reproduce the three training-time regimes and a second descent at
-20\% label noise, but do not establish improvement below the first minimum
-(Figure~\ref{app:matched-figure_09}).
-For sample-wise non-monotonicity (C4), the translation sample-size sweep
-shows regions where more data hurts (Figure~\ref{fig:translation-figure11b}),
-whereas the CNN plateau is not reproduced at the authors' widths
-(Figures~\ref{app:matched-figure_11a} and~\ref{app:matched-figure_12}).
-The translation width sweep also fails to reproduce the region where
-4,000 samples outperform 18,000 (Figure~\ref{fig:translation-figure3}).
-
-The supporting findings receive qualified support. The vision experiments
-show shifts of the critical region with label noise, augmentation and
-sample size (C2; Figures~\ref{app:matched-figure_04},
-\ref{app:matched-figure_05} and~\ref{app:matched-figure_12}).
-The minimum observed test-error envelope suppresses the peak in our
-opening comparison (Figure~\ref{fig:opening}), consistent with C5,
-although it uses test
-evaluations rather than validation-based stopping. Together, these results
-support the EMC framework's qualitative account across model size,
-training duration and sample size. Reduced vision training horizons,
-sparse grids, single-seed experiments and unresolved implementation details
-limit exact reproduction. In particular, the translation experiments show
-that batching choices can affect whether sample-wise non-monotonicity
-appears.
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\section{Reproducibility and contributions}
+\clearpage
+\bibliographystyle{ISBI_template-master/IEEEbib}
+\bibliography{references}
+\clearpage
+\onecolumn
+\appendix
+\section{Reproducibility and contributions}\label{app:contributions}
 The assignment code and result organization are available at
-\href{https://github.com/HP2706/ATDL-Group-Work}{the group's GitHub repository}.
+\url{https://github.com/HP2706/ATDL-Group-Work}.
 Detailed experimental coverage and deviations are reported in
 Appendices~\ref{app:coverage} and~\ref{app:protocol}.
 
 \subsection{Individual contribution}
-\textbf{Hans Peter Lyngsøe}
-
-Wrote the training code for the vision experiments along with scaffolding for running multiple experiments on the same gpu in parallel in order to fully utilize the hardware. Ran and conducted the experiments for the model-wise double descent experiments. Wrote \autoref{sec:vision-setup} and \autoref{sec:modelwise}.
-Wrote a part of the Introduction, Conclusions, Discussion and t
-
-
+\textbf{Hans Peter Lyngsøe:}
+Implemented the vision training code and experiment orchestration. Conducted the model-wise double-descent experiments and wrote \autoref{sec:vision-setup} and \autoref{sec:modelwise}. Contributed to the Introduction, Discussion and Conclusion.
+\\ \\
 \textbf{Mathias Elmegaard Nielsen:}
 Epoch-wise double descent (paper Figures~9 and~10). Ran and analyzed the CIFAR-10 ResNet18 trajectories for widths
 3, 12 and 64 at 20\% label noise as well as the width-128 CIFAR-10 CNN trajectories at 0\% and 20\% label noise (paper figure 10c). Defined the first-minimum, peak and final-error criteria for the three regimes and compared them with the authors' released runs at epochs 400 and 4,000. Built \autoref{tab:epochwise} and \autoref{fig:epochwise}. Wrote the Introduction, Background and \autoref{sec:epochwise}, and the epoch-wise parts of the Discussion. Contributed to abstract and general discussion sections.
 \\ \\
 \textbf{Julian Barragan:} sample-wise non-monotonicity (paper Figures 11(a)
-and 12). Ran the 44 CIFAR-10 CNN subset runs at 12,500 and 25,000 samples;
+and 12). Ran the CIFAR-10 CNN subset experiments at 12,500 and 25,000 samples;
 compared them with the authors' released sample grid; built the comparison
 figures and \autoref{tab:samplewise}, locating the interpolation threshold and
-test-error peak for each sample size; traced the shifted plateau to the fixed
-update budget, which gives the larger sets fewer epochs; found that the
+test-error peak for each sample size; identified fewer training epochs for
+larger datasets under the fixed update budget as a plausible explanation
+for the missing plateau; found that the
 released grid holds a single trial whereas the published panel averages five,
 and that Appendix~B.4 and Section~4 of the paper disagree on the training
 horizon; wrote \autoref{sec:samplesize}, the sample-wise discussion and the revision of C2.
@@ -476,52 +374,19 @@ Initial plan was to try to reproduce the plot of Figure 3 and 11(b) in the paper
 Implemented and ran the translation experiments, investigated reproducibility issues, produced comparison plots, and wrote about this process. Also wrote the translation experiments results and discussion.
 
 \clearpage
-\bibliographystyle{ISBI_template-master/IEEEbib}
-\bibliography{references}
-\clearpage
-\onecolumn
-\appendix
 \section{Experimental coverage}\label{app:coverage}
-Table~\ref{tab:runs} summarizes the vision sweeps. The translation experiments
+The translation experiments
 use IWSLT'14 German--English: the model-size sweep uses 25 embedding
 widths $d_{\mathrm{model}}\in\{8,16,\ldots,200\}$ at 4,000 and 18,000
 training pairs; the sample-size sweep uses $d_{\mathrm{model}}\in\{64,80\}$
-and $n\in\{2{,}000,4{,}000,\ldots,50{,}000\}$. Both use 80,000 updates,
+and $n\in\{2{,}000,\allowbreak4{,}000,\allowbreak\ldots,50{,}000\}$. Both use 80,000 updates,
 Adam with warmup and inverse-square-root decay, and a 4,096-token batch
 budget (Section~\ref{sec:translation-setup}). Table~\ref{tab:coverage}
 links each reproduced experiment to its comparison figure in
 Appendix~\ref{app:comparisons} and distinguishes our coverage from the
-full published protocol. Saved training trajectories supply multiple
-plots; each plot does not represent a separate set of training runs.
+full published protocol.
 
-\begin{table}[htbp]
-\centering
-\begin{tabular}{@{}p{0.28\textwidth}p{0.23\textwidth}rrp{0.21\textwidth}@{}}
-\toprule
-Dataset/model and setting & Widths $k$ & Runs & Hours & Training horizon\\
-\midrule
-CIFAR-10 ResNet18, augmented & 2, 3, 4, 6, 8, 12, 16, 24, 32, 64 & 30 & 4.53 & 400 Adam epochs\\
-CIFAR-100 ResNet18, augmented & 2, 3, 4, 6, 8, 12, 16, 24, 32, 64 & 30 & 4.92 & 400 Adam epochs\\
-CIFAR-10 CNN, augmented & 1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 36, 40, 48, 64, 96, 128 & 48 & 1.45 & 50,000 SGD updates\\
-CIFAR-10 CNN, no augmentation & 1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 64 & 33 & 0.74 & 50,000 SGD updates\\
-CIFAR-10 CNN, no augmentation & 1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 64 & 33 & 2.13 & 400 Adam epochs\\
-CIFAR-100 CNN, clean, no augmentation & 1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 64 & 11 & 0.25 & 50,000 SGD updates\\
-CIFAR-10 CNN, augmented subsets & 1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 64 & 44 & 0.96 & 50,000 SGD updates\\
-\midrule
-Total & One seed per cell & 229 & 14.98 & Up to four runs/GPU\\
-\bottomrule
-\end{tabular}
-\caption{Completed sweeps, exact model widths, and measured UCloud job
-durations. Each width is run at label-noise probabilities 0, 10, and
-20\%, except the clean CIFAR-100 CNN sweep (0\% only) and the subset
-sweep. For the subset sweep, $p$ is the label-noise probability
-(10 or 20\%) and $n$ is the number of training examples (12,500 or
-25,000): 11 widths $\times$ 2 noise rates $\times$ 2 subset sizes
-yield 44 runs. Other runs use all 50,000 training examples.
-Durations are allocation wall times, rounded independently;
-overlapping model durations are not added to estimate GPU-hours.}
-\label{tab:runs}
-\end{table}
+
 
 \begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.08\textwidth}>{\raggedright\arraybackslash}p{0.49\textwidth}>{\raggedright\arraybackslash}p{0.37\textwidth}@{}}
 \caption{Coverage of the main paper's figures. Figure references point to our appendix comparisons. The final column describes differences or omitted conditions, rather than additional planned experiments.}\label{tab:coverage}\\
@@ -586,7 +451,7 @@ Setting & Our setup & Paper setting and source location & Difference\\
 \multicolumn{4}{l}{\textbf{Model}}\\
 Vision architectures & Released ResNet18 and five-layer CNN; widths $[k,2k,4k,8k]$ & Same architectures: p.~17, Appendix~B.1. Code: \href{https://gitlab.com/harvard-machine-learning/double-descent/-/blob/0d653296f870e6bf7ee82dc71b4f7b49d53fa85d/models/resnet18k.py}{\texttt{models/resnet18k.py}} and \href{https://gitlab.com/harvard-machine-learning/double-descent/-/blob/0d653296f870e6bf7ee82dc71b4f7b49d53fa85d/models/mcnn.py}{\texttt{models/mcnn.py}}. & Same definitions\\
 Initialization & Random, default PyTorch initialization & Default PyTorch initialization: p.~17, Appendix~B.2, ``Initialization''. Model files above instantiate PyTorch layers. & Same rule\\
-Width grids & Widths listed in Table~\ref{tab:runs} & Width sweeps: p.~17, Appendix~B.1; exact arrays in linked archives, e.g. \path{cifar10-resnet18k-50k-adam/ks} and \texttt{pct-cifar10-mcnn-}\allowbreak\texttt{50000-p0-sgd-big/ks}. \texttt{README.md} supplies archive links. & Fewer widths\\
+Width grids & ResNet18: $k\in\{2,3,4,6,8,12,\allowbreak16,24,32,64\}$. CNN: $k\in\{1,2,3,4,6,8,12,\allowbreak16,24,32,64\}$, with augmented full-data SGD sweeps also including $36,40,48,96,128$ & Width sweeps: p.~17, Appendix~B.1; exact arrays in linked archives, e.g. \path{cifar10-resnet18k-50k-adam/ks} and \texttt{pct-cifar10-mcnn-}\allowbreak\texttt{50000-p0-sgd-big/ks}. \texttt{README.md} supplies archive links. & Fewer widths\\
 \midrule
 \multicolumn{4}{l}{\textbf{Data}}\\
 Pixel preprocessing & Divide by 255; no channel normalization & Not stated in Section~4 (p.~8) or Appendix~B.2 (pp.~17--18). No released data-loader file. & Not stated\\
@@ -600,16 +465,41 @@ Train evaluation & Fixed training labels, without augmentation & Exact train-eva
 \multicolumn{4}{l}{\textbf{Training}}\\
 Loss & Cross-entropy & Cross-entropy: p.~17, Appendix~B.2, ``Loss function''. No released training loop. & Same loss\\
 Batch size & 128 & 128: p.~18, Appendix~B.2, ``Batch size''. No released loader. & Same size\\
-Adam & Constant LR $10^{-4}$; PyTorch defaults & Same settings: p.~17, Appendix~B.2, ``Optimization: Adam''. No released optimizer code. & Same settings\\
-SGD & LR 0.1, inverse-square-root; 512-step updates; momentum 0 & Same prescription: p.~18, Appendix~B.2, ``SGD'' and ``Learning rate schedule descriptions''. No released optimizer code. & Same prescription\\
+Adam & LR $10^{-4}$; $(\beta_1,\beta_2)=(0.9,0.999)$, $\epsilon=10^{-8}$ & Same settings: p.~17, Appendix~B.2, ``Optimization: Adam''. No released optimizer code. & Same settings\\
+SGD & $\eta_t=0.1/\sqrt{1+\lfloor t/512\rfloor}$; momentum 0 & Same prescription: p.~18, Appendix~B.2, ``SGD'' and ``Learning rate schedule descriptions''. No released optimizer code. & Same prescription\\
 Regularization & No weight decay or dropout & None unless stated otherwise: p.~17, Appendix~B.2, ``Regularization''. & Same setting\\
 Training horizon & Adam 400 epochs; SGD 50,000 updates & Adam 4,000 epochs; SGD 500,000 steps: p.~8, Section~4. CIFAR-100 CNN uses 1 million steps: Figure~20, p.~25, Appendix~E.2.1. & 10\% of stated horizon; 5\% for CIFAR-100 CNN\\
 Trials & One seed (0) per condition & Five trials for Figures~1, 7 and 11(a), bottom panel: p.~19, Appendix~B.4. Figure~1 averaging is in \texttt{intro\_resnet\_plot.ipynb}. & One trial rather than five\\
 Precision & FP32 & Arithmetic precision not stated in Section~4 or Appendix~B.2. No released training loop. & Not stated\\
 Evaluation cadence & Adam: 10 epochs; SGD: 1,250 updates & \href{https://gitlab.com/harvard-machine-learning/double-descent/-/blob/0d653296f870e6bf7ee82dc71b4f7b49d53fa85d/intro_ocean_dynamics.ipynb}{\texttt{intro\_ocean\_dynamics.ipynb}} labels ResNet indices plus one as epochs. CNN logging interval is not established by the paper or release. & No confirmed common cadence\\
-Run infrastructure & Our loop and checkpoints; up to four runs per B200 & Checkpointing, concurrency and GPU scheduling not stated in Appendix~B.2 or provided in the released files. & Our implementation\\
+Run infrastructure & Our training loop and checkpoints & Checkpointing, concurrency and GPU scheduling not stated in Appendix~B.2 or provided in the released files. & Our implementation\\
 \end{longtable}
 \clearpage
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.16\textwidth}>{\raggedright\arraybackslash}p{0.43\textwidth}>{\raggedright\arraybackslash}p{0.35\textwidth}@{}}
+\caption{Translation configuration and limits on matching the authors' setup. Paper settings refer to Nakkiran et al.~\cite{nakkiran2021deepdouble}; the optimizer prescription follows Vaswani et al.~\cite{vaswani2017attention}.}\label{tab:translation-protocol}\\
+\toprule
+Setting & Our setup & Original specification or uncertainty\\
+\midrule
+\endfirsthead
+\multicolumn{3}{l}{Table~\thetable\ (continued)}\\
+\toprule
+Setting & Our setup & Original specification or uncertainty\\
+\midrule
+\endhead
+\bottomrule
+\endlastfoot
+Architecture & Fairseq v0.9.0 Transformer; six encoder and six decoder layers, eight heads, feed-forward width $4d_{\mathrm{model}}$, sinusoidal positions, post-normalization & Transformer family specified; exact Fairseq version and full configuration not recoverable.\\
+Data & IWSLT'14 German--English, BPE preprocessing & Exact preprocessed files, subsets and seeds not recovered.\\
+Width sweep & $d_{\mathrm{model}}=8,16,\ldots,200$; 4,000 and 18,000 pairs & Selected dimensions and sample sizes match the Figure~3 design.\\
+Sample-size sweep & $d_{\mathrm{model}}\in\{64,80\}$; $n=2{,}000,4{,}000,\ldots,50{,}000$ & Reproduces the selected Figure~11(b) range.\\
+Loss and regularization & 10\% label smoothing, no dropout & Same stated settings; paper plot labels alternate between perplexity and cross-entropy.\\
+Optimizer & Adam, $(\beta_1,\beta_2)=(0.9,0.98)$, $\epsilon=10^{-9}$ & Paper specifies Adam following Vaswani et al.; release describes SGD. We follow the paper.\\
+Schedule & 4,000 warmup steps; $\eta_t=d_{\mathrm{model}}^{-1/2}\min(t^{-1/2},t\,4000^{-3/2})$ & Warmup and inverse-square-root decay follow Vaswani et al.; exact author configuration not recovered.\\
+Batching & Up to 4,096 tokens; length-based batches with variable sentence counts & Exact original batching strategy and token budget not recovered.\\
+Horizon & 80,000 gradient updates & Same stated horizon.\\
+\end{longtable}
+\clearpage
+
 \section{Text-length measurement}\label{app:text-length}
 We remove figures, tables, captions and references, then re-typeset the
 remaining content in the unchanged ISBI layout:
@@ -620,13 +510,8 @@ We count main text separately from appendix prose; a partially filled
 final page counts as one page.
 
 \section{Replication figures: ours compared with the authors}\label{app:comparisons}
-This gallery places our vision replication results alongside
-measurements reconstructed from the authors' released data, and our
-translation results alongside the published comparisons. Each caption identifies the shared settings
-and any differences in training horizon, trial count, or time coordinates.
-The Figure~1 comparison also appears in the main text. Released-data
-reconstructions are distinct from the original published artwork and
-are not additional experiments by our group~\cite{nakkiran2021deepdouble}.
+This section shows our replication results alongside
+measurements reconstructed from the authors' released data.
 
 \resultplot{comparison}{figure_01}{CIFAR-10 ResNet18 width sweeps (paper Figure~1). Both authors and ours use 10\%-noise CIFAR-10 ResNet18, the same ten widths and 400 displayed epochs, with one run per width. Authors' epochs follow the notebook convention; ours are recorded epochs. Test error uses the same expected noisy-test transformation.}{app:matched-figure_01}
 \resultplot{comparison}{figure_02}{Train and test heatmaps (paper Figure~2): authors' and our CIFAR-10 ResNet18 train/test heatmaps at 10\% noise, on the same ten widths and displayed horizon. Authors' epoch coordinates follow the released notebook convention; ours are recorded.}{app:matched-figure_02}
