@@ -1,0 +1,63 @@
+\documentclass{article}
+\makeatletter
+\def\input@path{{ISBI_template-master/}{Assignment 3 - Group/report/ISBI_template-master/}}
+\makeatother
+\usepackage{spconf}
+\usepackage{amsmath,amssymb,graphicx,booktabs}
+\usepackage[T1]{fontenc}
+\usepackage[hidelinks]{hyperref}
+\setlength{\parindent}{0pt}
+
+\title{Video-Conditioned 3D Object Reconstruction}
+\name{}
+\address{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\end{abstract}
+
+\section{Introduction}
+\subsection{Research Question and Hypothesis}
+\subsection{Contributions}
+
+\section{Background and Related Work}
+
+\section{Method}
+\subsection{Video Encoder}
+\subsection{Linear Adapter and SAM 3D Conditioning}
+\subsection{Training Objective}
+
+\section{Experimental Setup}
+\subsection{Datasets and Splits}
+\subsection{Single-Image and Multi-View Baselines}
+\subsection{Visibility Regions and Evaluation Metrics}
+
+\section{Results}
+\subsection{Reconstruction Quality}
+\subsection{Ablation Studies}
+
+\section{Discussion and Limitations}
+
+\section{Conclusion}
+
+\section{Initial Ideas}
+
+\section{Individual Contributions}
+
+\section{Papers to Read}
+\begin{enumerate}
+  \item \href{https://arxiv.org/abs/2511.16624}{\textbf{SAM 3D: 3Dfy Anything in Images}}: generator and conditioning interface.
+  \item \href{https://arxiv.org/abs/2603.14482}{\textbf{V-JEPA 2.1}}: candidate video encoder and course connection.
+  \item \href{https://arxiv.org/abs/2510.13454}{\textbf{VIST3A}}: representation stitching and linear adapters.
+  \item \href{https://arxiv.org/abs/2603.11633}{\textbf{MV-SAM3D}}: multi-view fusion baseline.
+  \item \href{https://arxiv.org/abs/2605.21472}{\textbf{Stream3D}}: streaming reconstruction baseline.
+  \item \href{https://arxiv.org/abs/2403.08768}{\textbf{3DFIRES}}: hidden-surface evaluation.
+  \item \href{https://arxiv.org/abs/1912.10589}{\textbf{Front2Back}}: front/back ambiguity and shape priors.
+  \item \href{https://arxiv.org/abs/2306.09109}{\textbf{NAVI}}: real captures and ground-truth geometry.
+\end{enumerate}
+
+\section{References}
+
+\end{document}
