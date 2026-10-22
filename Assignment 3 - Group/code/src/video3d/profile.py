@@ -25,6 +25,8 @@ def profile(config: ExperimentConfig) -> None:
     results: list[dict[str, float | int | str]] = []
     capacity = torch.cuda.get_device_properties(0).total_memory
     model = NativeSAM(model_config, config.data.frames, torch.device("cuda"))
+    model.train()
+    model.conditioning.encoder.eval()
     parameters = [p for p in model.parameters() if p.requires_grad]
     counts = {"total": sum(p.numel() for p in model.parameters()), "trainable": sum(p.numel() for p in parameters), "connector": sum(p.numel() for p in model.conditioning.projector.parameters()), "lora_targets": model.lora_targets}
     run_id = (config.training.group or ("profile-" + datetime.now().strftime("%Y-%m-%d-%H-%M-%S"))) + "-profile"

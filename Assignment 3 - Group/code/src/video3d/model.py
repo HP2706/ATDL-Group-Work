@@ -46,6 +46,14 @@ def load_component(config: Any, checkpoint: Path, prefix: str = "", state_key: s
     return model.eval().requires_grad_(False)
 
 
+def bf16_with_float_norms(model: nn.Module) -> None:
+    model.bfloat16()
+    # Upstream LayerNorm32 casts activations to FP32 before calling LayerNorm.
+    for module in model.modules():
+        if isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
+            module.float()
+
+
 class NativeSAM(nn.Module):
     """Owns upstream modules; delegates training loss and generation upstream."""
     def __init__(self, config: ModelConfig, frames: int, device: torch.device) -> None:
@@ -66,7 +74,7 @@ class NativeSAM(nn.Module):
         video_encoder, predictor = torch.hub.load(config.video_source, config.video_entrypoint, source="local", pretrained=True)
         del predictor
         video_encoder.requires_grad_(False).eval().bfloat16()
-        self.generator.bfloat16()
+        bf16_with_float_norms(self.generator)
         self.generator.reverse_fn.backbone.dtype = torch.bfloat16
         video_encoder.use_activation_checkpointing = True
         self.conditioning = VideoConditioning(video_encoder, config.video_width, config.condition_width, frames)

@@ -234,3 +234,26 @@ def test_visibility_accepts_mixed_navi_matrix_types(numpy_transform: bool, monke
     points = np.array([[0., 0., -1.], [0., 0., 1.], [3., 0., -1.]], dtype=np.float64)
     result = visibility(points, {"image_size": [4, 4], "filename": "frame.jpg"}, tmp_path)
     assert result.tolist() == [True, False, False]
+
+
+def test_upstream_multimodal_block_bf16_backward_preserves_float_norms() -> None:
+    from video3d.model import bf16_with_float_norms
+    source = os.environ.get("SAM3D_SOURCE")
+    if source is None:
+        pytest.skip("Set SAM3D_SOURCE to verify the upstream source contract")
+    os.environ["LIDRA_SKIP_INIT"] = "1"
+    sys.path.insert(0, source)
+    from sam3d_objects.model.backbone.tdfy_dit.modules.transformer.modulated import MOTModulatedTransformerCrossBlock
+    block = MOTModulatedTransformerCrossBlock(channels=64, ctx_channels=64, num_heads=4, latent_names=["shape", "pose"], use_checkpoint=True, qk_rms_norm=True, qk_rms_norm_cross=True).requires_grad_(False)
+    bf16_with_float_norms(block)
+    inject_lora(block, r"cross_attn\.shape\.(to_q|to_kv|to_out)", 2, 2)
+    context = torch.randn(2, 16, 64, dtype=torch.bfloat16, requires_grad=True)
+    latent = {"shape": torch.randn(2, 8, 64, dtype=torch.bfloat16), "pose": torch.randn(2, 4, 64, dtype=torch.bfloat16)}
+    with torch.autocast("cpu", dtype=torch.bfloat16):
+        output = block(latent, torch.randn(2, 64, dtype=torch.bfloat16), context)
+        loss = output["shape"].float().square().mean()
+    loss.backward()
+    assert torch.isfinite(loss)
+    assert context.grad is not None and context.grad.abs().sum() > 0
+    assert block.norm2["shape"].weight.dtype == torch.float32
+    assert block.cross_attn["shape"].to_out.b.grad is not None
