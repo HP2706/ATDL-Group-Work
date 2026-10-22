@@ -32,8 +32,8 @@ class DataConfig:
     image_size: int = 384
     seed: int = 42
     train_objects: int = 24
-    val_objects: int = 6
-    test_objects: int = 6
+    val_objects: int = 4
+    test_objects: int = 4
     clips_per_object: int = 2
     pilot_train_objects: int = 2
     pilot_val_objects: int = 2

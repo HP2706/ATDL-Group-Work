@@ -1,6 +1,6 @@
 # First-run specification: view coverage pilot
 
-Status: prepared for review; GPU job not submitted. All settings below are proposed for the first two-hour allocation. This is a smoke ablation to validate the pipeline and obtain initial signals, not a conclusive scientific comparison.
+Status: authorized and submitted as UCloud job 12428947 on 2026-10-22. Its preparation failed before training because only 32 objects have video. The retry uses the retained data and the remaining compute budget. This is a smoke ablation to validate the pipeline and obtain initial signals, not a conclusive scientific comparison.
 
 ## Models and trainable parameters
 
@@ -22,7 +22,7 @@ Counts other than the loaded encoder/combined totals were checked from pinned SA
 
 ## Data and prediction target
 
-NAVI v1.5, with seeded object-disjoint pools of 24 train / 6 validation / 6 test objects. The pilot activates two training and two validation objects, at most two video clips each; test objects are untouched. This dataset contains real object videos, not exclusively furniture.
+NAVI v1.5, with seeded object-disjoint pools of 24 train / 4 validation / 4 test video-capable objects. The pilot activates two training and two validation objects, at most two video clips each; test objects are untouched. This dataset contains real object videos, not exclusively furniture.
 
 Each input has 16 uniformly sampled masked frames, resized to 384×384, with no frame packing or padding. V-JEPA produces 8×24×24 = 4,608 video tokens; temporal pooling yields 576 projected tokens appended to native reference conditioning. The reference is the first selected frame.
 
