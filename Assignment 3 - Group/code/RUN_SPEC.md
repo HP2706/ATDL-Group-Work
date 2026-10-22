@@ -1,6 +1,6 @@
 # First-run specification: view coverage pilot
 
-Status: authorized and submitted as UCloud job 12428947 on 2026-10-22. Its preparation failed before training because only 32 objects have video. The retry uses the retained data and the remaining compute budget. This is a smoke ablation to validate the pipeline and obtain initial signals, not a conclusive scientific comparison.
+Status: completed on 2026-10-22 as UCloud job 12429369, source `d1cee366ecd246b8639efd63bf813f3408009aa9`. All A/B/C/D runs completed 25 updates and evaluation. See [validated results](RUN_RESULTS.md).
 
 ## Models and trainable parameters
 
