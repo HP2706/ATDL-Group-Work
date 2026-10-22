@@ -58,7 +58,8 @@ def visibility(points: np.ndarray, annotation: dict[str, Any], scene: Path) -> n
     depth = navi.read_depth_from_png(str(depth_path))
     inside = (px >= 0) & (px < width) & (py >= 0) & (py < height) & (clip[:, 3] > 0)
     sampled = depth[np.clip(py, 0, height - 1), np.clip(px, 0, width - 1)]
-    expected = -camera[:, 2]
+    # NAVI projection has clip.w = camera.z, so forward depth is positive Z.
+    expected = camera[:, 2]
     return inside & (np.abs(sampled - expected) < np.maximum(np.abs(expected) * 0.01, 1e-3))
 
 
