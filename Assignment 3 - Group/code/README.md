@@ -45,3 +45,11 @@ Checkpoints retain trainable weights, optimizer/scheduler, all RNG states, progr
 ## Verification status
 
 Lightweight contract tests exercise adapter gradients, upstream loss backpropagation, checkpoint/RNG restoration, split isolation, controls, mesh export, and offline W&B video/3D serialization. The remote GPU pilot completed all four configurations, including pretrained-model loading, preparation, profiling, training, mesh evaluation and W&B artifact uploads. See [validated pilot results](RUN_RESULTS.md); the adapted video models did not outperform the untouched image-only baseline. Preparation records VAE round-trip and visibility diagnostics and rejects degenerate geometry or completely invisible scan points.
+
+The mask-aware pooler rerun is also complete: [results and direct media links](RUN_RESULTS_POOLER.md). All four variants reduced fixed flow losses but regressed in measured mesh quality against the native baseline and earlier averaging pilot.
+
+## Visual comparison notebook
+
+Open [the executed comparison notebook](notebooks/compare_reconstructions.ipynb) to see the input video beside native SAM 3D and ground truth, followed by matching front/back views of earlier averaging B and new pooler A–D. Videos, plots and images are embedded in the saved notebook; no training is needed to inspect it. An optional Plotly cell supports mesh rotation and zoom.
+
+To execute the notebook again, install analysis dependencies with `uv sync --group analysis`. Its first cell downloads the pinned W&B comparison artifact only if the local asset bundle is missing. `notebooks/comparison_data.py` retrieves matched source assets, and `MODAL_PROFILE=mleagent .venv/bin/python notebooks/render_comparison.py` regenerates display previews on a bounded remote CPU job. Source GLBs remain intact; display copies are simplified to at most 20,000 faces.

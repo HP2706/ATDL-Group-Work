@@ -1,6 +1,6 @@
 # Mask-aware pooler rerun specification
 
-Status: authorized for execution on branch hp, using one small UCloud B200 MIG allocation with a two-hour provider cap. Source is committed and pushed before submission. The earlier completed specification is [preserved here](RUN_SPEC_INITIAL.md).
+Status: completed as UCloud job 12429715, source `32f534db266237125ea7d75be8dec51301509c88`. All four runs completed 25 updates, evaluation and verified media uploads; the batch exited zero and released its allocation. See [validated results](RUN_RESULTS_POOLER.md). The run used one small UCloud B200 MIG allocation with a two-hour provider cap. Source is committed and pushed before submission. The earlier completed specification is [preserved here](RUN_SPEC_INITIAL.md).
 
 Architecture: [mask-aware pooler](../../architecture.md). Reuse pinned upstream model/loss code and cached NAVI geometry/reference targets. New runtime input is full-scene RGB with aligned foreground masks, 16 frames at 384 square. Official V-JEPA attentive pooler: depth 1, 64 queries, width 768, 12 heads; 6,546,432 trainable parameters. Linear connector: 787,456. Replace native RGB tokens, retain mask tokens and disabled pointmap slots. Condition length 4852 instead of the prior appended length 8104.
 

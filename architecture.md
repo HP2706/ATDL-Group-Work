@@ -67,3 +67,7 @@ Random training losses differ in clips and diffusion noise and need not decrease
 W&B `eval/video/failed` is a scalar failure fraction, never a video. Direct panels under `final/<example>/` show `input_video`, `reference_rgb`, `reference_mask`, `ground_truth_mesh`, `native_sam3d_coarse_mesh`, `our_repeated_reference_mesh`, and `our_video_mesh`. Mesh panels use actual GLB surfaces. The comparison table labels its sampled geometry as point clouds; the SDK does not support GLB Object3D inside artifact-backed tables. Reconstruction artifacts pair downloadable GLBs, input MP4, reference/mask, occupancy logits, metrics and identifiers.
 
 `training_assets/<object>/` shows the actual ground-truth mesh and video used for training. The training dataset artifact also retains encoded geometry targets. These are separate from held-out final evaluation objects.
+
+## Validated pooler pilot
+
+The rerun completed all four 25-update variants and verified direct video/GLB media uploads. Fixed training-probe loss decreased from about 0.547 to 0.483 and average validation loss from about 0.950 to 0.920. Video Chamfer remained around 0.103, compared with 0.0354 for native image-only SAM 3D and 0.0611 for the best previous averaging variant. Lower flow loss did not translate into better reconstruction. Because three conditioning changes were coupled, this does not isolate an attentive-pooler effect. See [full results and run links](Assignment%203%20-%20Group/code/RUN_RESULTS_POOLER.md).
