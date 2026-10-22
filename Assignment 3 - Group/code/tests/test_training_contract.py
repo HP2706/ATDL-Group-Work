@@ -230,11 +230,13 @@ def test_visibility_accepts_mixed_navi_matrix_types(numpy_transform: bool, monke
     transform = np.eye(4, dtype=np.float64) if numpy_transform else torch.eye(4, dtype=torch.float64)
     projection = torch.eye(4, dtype=torch.float32)
     projection[3, 2], projection[3, 3] = 1.0, 0.0
-    navi = SimpleNamespace(camera_matrices_from_annotation=lambda annotation: (transform, projection), read_depth_from_png=lambda path: np.ones((4, 4), dtype=np.float32))
+    depth = np.zeros((4, 4), dtype=np.float32)
+    depth[2, 2], depth[3, 2] = 1.0, 1.0
+    navi = SimpleNamespace(camera_matrices_from_annotation=lambda annotation: (transform, projection), read_depth_from_png=lambda path: depth)
     monkeypatch.setitem(sys.modules, "data_util", navi)
-    points = np.array([[0., 0., 1.], [0., 0., -1.], [3., 0., 1.]], dtype=np.float64)
+    points = np.array([[0., 0., 1.], [0., 0.5, 1.], [0., 0., -1.], [3., 0., 1.]], dtype=np.float64)
     result = visibility(points, {"image_size": [4, 4], "filename": "frame.jpg"}, tmp_path)
-    assert result.tolist() == [True, False, False]
+    assert result.tolist() == [True, True, False, False]
 
 
 def test_upstream_multimodal_block_bf16_backward_preserves_float_norms() -> None:

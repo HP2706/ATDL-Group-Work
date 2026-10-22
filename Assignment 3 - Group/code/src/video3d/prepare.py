@@ -53,7 +53,8 @@ def visibility(points: np.ndarray, annotation: dict[str, Any], scene: Path) -> n
     ndc = clip[:, :3] / np.maximum(clip[:, 3:4], 1e-12)
     height, width = annotation["image_size"]
     px = np.round((ndc[:, 0] + 1) * width / 2).astype(int)
-    py = np.round((1 - ndc[:, 1]) * height / 2).astype(int)
+    # NAVI tutorial maps both NDC axes with (coordinate + 1) / 2.
+    py = np.round((1 + ndc[:, 1]) * height / 2).astype(int)
     depth_path = scene / "depth" / (Path(annotation["filename"]).stem + ".png")
     depth = navi.read_depth_from_png(str(depth_path))
     inside = (px >= 0) & (px < width) & (py >= 0) & (py < height) & (clip[:, 3] > 0)
@@ -71,7 +72,7 @@ def prepare(config: ExperimentConfig) -> None:
     sys.path.insert(0, "/work/dependencies/navi")
     root, output = Path(config.data.root), Path(config.data.prepared)
     output.mkdir(parents=True, exist_ok=True)
-    signature = {"schema_version": 1, "data": chz.asdict(config.data), "sam_weights": config.model.sam_weights, "sam_revision": config.model.sam_revision, "sam_commit": config.model.sam_commit, "coordinates": "z-up-aabb-unit-cube-surface64-v1"}
+    signature = {"schema_version": 1, "data": chz.asdict(config.data), "sam_weights": config.model.sam_weights, "sam_revision": config.model.sam_revision, "sam_commit": config.model.sam_commit, "coordinates": "z-up-aabb-unit-cube-surface64-v1", "visibility": "navi-positive-z-positive-image-y-v2"}
     metadata = output / "preparation.json"
     if (output / "manifest.jsonl").is_file():
         if not metadata.is_file() or json.loads(metadata.read_text())["signature"] != signature:
