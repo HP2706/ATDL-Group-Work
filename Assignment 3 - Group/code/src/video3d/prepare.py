@@ -44,6 +44,9 @@ def visibility(points: np.ndarray, annotation: dict[str, Any], scene: Path) -> n
     # Reuse NAVI's published camera/depth convention instead of guessing q/t axes.
     import data_util as navi
     transform, projection = navi.camera_matrices_from_annotation(annotation)
+    # NAVI mixes NumPy float64 transforms with Torch float32 intrinsics.
+    transform = np.asarray(transform, dtype=np.float64)
+    projection = np.asarray(projection, dtype=np.float64)
     homogeneous = np.concatenate([points, np.ones((len(points), 1))], axis=1)
     camera = (transform @ homogeneous.T).T
     clip = (projection @ camera.T).T

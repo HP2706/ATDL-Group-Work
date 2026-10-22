@@ -221,3 +221,16 @@ def test_sweep_rejects_incomplete_runs_and_resumes_completed_variants(tmp_path: 
     report = json.loads((tmp_path / "test-group/sweep.json").read_text())
     assert report["results"][0]["status"] == "already_completed"
     assert report["results"][1]["status"] == "incomplete"
+
+
+@pytest.mark.parametrize("numpy_transform", [False, True])
+def test_visibility_accepts_mixed_navi_matrix_types(numpy_transform: bool, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from types import SimpleNamespace
+    from video3d.prepare import visibility
+    transform = np.eye(4, dtype=np.float64) if numpy_transform else torch.eye(4, dtype=torch.float64)
+    projection = torch.eye(4, dtype=torch.float32)
+    navi = SimpleNamespace(camera_matrices_from_annotation=lambda annotation: (transform, projection), read_depth_from_png=lambda path: np.ones((4, 4), dtype=np.float32))
+    monkeypatch.setitem(sys.modules, "data_util", navi)
+    points = np.array([[0., 0., -1.], [0., 0., 1.], [3., 0., -1.]], dtype=np.float64)
+    result = visibility(points, {"image_size": [4, 4], "filename": "frame.jpg"}, tmp_path)
+    assert result.tolist() == [True, False, False]
