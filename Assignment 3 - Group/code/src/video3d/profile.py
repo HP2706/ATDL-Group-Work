@@ -19,7 +19,8 @@ def profile(config: ExperimentConfig) -> None:
     if not torch.cuda.is_available():
         raise RuntimeError("Profiling requires the remote GPU")
     config = chz.replace(config, provenance=capture_provenance(Path(__file__).resolve().parents[4]))
-    model_config = chz.replace(config.model, video_lora=True, sam_lora=True)
+    config = chz.replace(config, model=chz.replace(config.model, video_lora=True, sam_lora=True))
+    model_config = config.model
     rows = [row for row in read_manifest(Path(config.data.prepared) / "manifest.jsonl") if row.split == "train"]
     dataset = Clips(rows, config.data)
     results: list[dict[str, float | int | str]] = []
@@ -28,7 +29,7 @@ def profile(config: ExperimentConfig) -> None:
     model.train()
     model.conditioning.encoder.eval()
     parameters = [p for p in model.parameters() if p.requires_grad]
-    counts = {"total": sum(p.numel() for p in model.parameters()), "trainable": sum(p.numel() for p in parameters), "connector": sum(p.numel() for p in model.conditioning.projector.parameters()), "lora_targets": model.lora_targets}
+    counts = {"total": sum(p.numel() for p in model.parameters()), "trainable": sum(p.numel() for p in parameters), "connector": sum(p.numel() for p in model.conditioning.projector.parameters()), "pooler": sum(p.numel() for p in model.conditioning.pooler.parameters()) if model.conditioning.pooler is not None else 0, "lora_targets": model.lora_targets}
     run_id = (config.training.group or ("profile-" + datetime.now().strftime("%Y-%m-%d-%H-%M-%S"))) + "-profile"
     with ExitStack() as cleanup:
         run = wandb.init(project=config.training.project, entity=config.training.entity, group=config.training.group or run_id, id=run_id, name=run_id, job_type="profile", config=chz.asdict(config), resume="allow")
@@ -44,7 +45,7 @@ def profile(config: ExperimentConfig) -> None:
                 for _ in range(2):
                     optimizer.zero_grad(set_to_none=True)
                     with torch.autocast("cuda", dtype=torch.bfloat16):
-                        loss, _ = model.loss(video, reference, target)
+                        loss, _ = model.loss(video, reference, target, batch["foreground"].cuda())
                     loss.backward()
                     optimizer.step()
                 torch.cuda.synchronize()

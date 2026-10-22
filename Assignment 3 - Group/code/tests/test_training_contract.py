@@ -260,3 +260,140 @@ def test_upstream_multimodal_block_bf16_backward_preserves_float_norms() -> None
     assert context.grad is not None and context.grad.abs().sum() > 0
     assert block.norm2["shape"].weight.dtype == torch.float32
     assert block.cross_attn["shape"].to_out.b.grad is not None
+
+
+class DenseUnitEncoder(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self.scale = nn.Parameter(torch.ones(32))
+
+    def forward(self, video: torch.Tensor) -> torch.Tensor:
+        return video * self.scale
+
+
+def official_pooler(width: int = 32, queries: int = 4) -> nn.Module:
+    source = os.environ.get("VJEPA_SOURCE")
+    if source is None:
+        pytest.skip("Set VJEPA_SOURCE to test the upstream attentive pooler")
+    sys.path.insert(0, source)
+    from src.models.attentive_pooler import AttentivePooler
+    return AttentivePooler(num_queries=queries, embed_dim=width, num_heads=4, depth=1)
+
+
+def test_foreground_tubelets_preserve_temporal_and_spatial_order() -> None:
+    from video3d.model import foreground_tokens
+    masks = torch.zeros(1, 4, 16, 32)
+    masks[:, :2, :, :16] = 1
+    masks[:, 2:, :, 16:] = 1
+    assert foreground_tokens(masks, 0.5).tolist() == [[True, False, False, True]]
+    with pytest.raises(ValueError, match="No foreground"):
+        foreground_tokens(torch.zeros_like(masks), 0.5)
+
+
+def test_real_pooler_excludes_background_replaces_rgb_and_backpropagates() -> None:
+    pooler = official_pooler()
+    conditioning = VideoConditioning(DenseUnitEncoder(), 32, 16, frames=4, pooler=pooler, native_tokens_per_view=2)
+    video = torch.randn(2, 4, 32)
+    masks = torch.zeros(2, 4, 16, 32)
+    masks[0, :2, :, :16] = 1
+    masks[1, :, :, :] = 1  # Different foreground lengths, without padding tokens.
+    reference = torch.randn(2, 2056, 16)
+    output = conditioning(video, reference, masks)
+    assert output.shape == (2, 2056, 16)  # Four summaries + retained four mask tokens + 2048 zero slots.
+    assert torch.equal(output[:, 4:], reference[:, 4:])
+    changed_video, changed_reference = video.clone(), reference.clone()
+    changed_video[0, 1:] += 1000
+    changed_reference[:, :4] += 1000
+    assert torch.allclose(output, conditioning(changed_video, changed_reference, masks), atol=1e-6)
+    output[:, :4].square().mean().backward()
+    assert pooler.query_tokens.grad is not None and pooler.query_tokens.grad.abs().sum() > 0
+    assert conditioning.projector.weight.grad is not None
+    assert conditioning.encoder.scale.grad is not None
+    with pytest.raises(ValueError, match="aligned foreground"):
+        conditioning(video, reference)
+
+
+def test_full_scene_rgb_and_mask_receive_identical_letterboxing(tmp_path: Path) -> None:
+    from PIL import Image
+    from video3d.config import DataConfig
+    from video3d.data import Example, clip_inputs
+    rgb, mask = tmp_path / "rgb.png", tmp_path / "mask.png"
+    Image.new("RGB", (32, 16), (255, 0, 0)).save(rgb)
+    array = np.zeros((16, 32), dtype=np.uint8)
+    array[:, :16] = 255
+    Image.fromarray(array).save(mask)
+    row = Example(example_id="alignment", object_id="object", split="train", frames=[str(rgb)], masks=[str(mask)], video="v.mp4", target="t.pt", ground_truth_mesh="g.glb", reference_tokens="r.pt")
+    inputs = clip_inputs(row, DataConfig(frames=2, image_size=32, video_input="full_scene"))
+    assert inputs["foreground"].shape == (2, 32, 32)
+    assert inputs["foreground"][:, :8].sum() == 0
+    assert inputs["foreground"][:, 8:24, :16].all()
+    assert inputs["foreground"][:, :, 16:].sum() == 0
+    # Background appearance is retained in full-scene encoding.
+    mean = torch.tensor([0.485, 0.456, 0.406])[:, None, None, None]
+    std = torch.tensor([0.229, 0.224, 0.225])[:, None, None, None]
+    restored = inputs["video"] * std + mean
+    assert torch.allclose(restored[:, 0, 10, 25], torch.tensor([1., 0., 0.]), atol=1e-6)
+
+
+def test_pooler_checkpoint_restores_queries_and_outputs(tmp_path: Path) -> None:
+    pooler = official_pooler()
+    tokens = torch.randn(1, 8, 32)
+    expected = pooler(tokens).detach().clone()
+    atomic_torch(tmp_path / "pooler.pt", trainable_state(pooler))
+    with torch.no_grad():
+        pooler.query_tokens.add_(1)
+    restore_trainable(pooler, torch.load(tmp_path / "pooler.pt", weights_only=True))
+    assert torch.allclose(expected, pooler(tokens))
+
+
+def test_direct_final_glb_video_and_training_assets_are_serialized(tmp_path: Path) -> None:
+    import imageio.v2 as imageio
+    import trimesh
+    import wandb
+    from PIL import Image
+    from video3d.data import Example
+    from video3d.evaluate import log_object_inputs, log_training_assets
+    video, mesh, image, target = [tmp_path / name for name in ["input.mp4", "truth.glb", "frame.png", "target.pt"]]
+    imageio.mimwrite(video, np.zeros((2, 16, 16, 3), dtype=np.uint8), fps=4)
+    trimesh.creation.box().export(mesh)
+    Image.new("RGB", (16, 16), "white").save(image)
+    torch.save({"shape": torch.zeros(1)}, target)
+    row = Example(example_id="clip", object_id="object", split="train", frames=[str(image)], masks=[str(image)], video=str(video), ground_truth_mesh=str(mesh), target=str(target), reference_tokens="unused")
+    with wandb.init(mode="offline", project="direct-mesh-contract", dir=str(tmp_path)) as run:
+        log_training_assets(run, [row], 0)
+        log_object_inputs(run, row, "final/clip", 25)
+        run.log({"final/clip/native_sam3d_coarse_mesh": wandb.Object3D(str(mesh)), "final/clip/our_video_mesh": wandb.Object3D(str(mesh))}, step=25)
+        run_dir = Path(run.dir)
+    assert len(list((run_dir / "media" / "object3D").rglob("*.glb"))) == 4
+    assert len(list((run_dir / "media" / "videos").rglob("*.mp4"))) == 2
+
+
+def test_official_pooler_bf16_autocast_has_finite_gradients() -> None:
+    pooler = official_pooler()
+    with torch.autocast("cpu", dtype=torch.bfloat16):
+        result = pooler(torch.randn(1, 8, 32, dtype=torch.bfloat16))
+        loss = result.float().square().mean()
+    loss.backward()
+    assert torch.isfinite(result).all()
+    assert pooler.query_tokens.grad is not None and torch.isfinite(pooler.query_tokens.grad).all()
+
+
+def test_fixed_validation_uses_every_clip_and_restores_rng() -> None:
+    from typing import Any
+    from video3d.train import fixed_flow_loss
+
+    class Probe:
+        def __init__(self) -> None:
+            self.indices: list[int] = []
+
+        def loss(self, video: torch.Tensor, reference: torch.Tensor, targets: dict[str, torch.Tensor], foreground: torch.Tensor) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+            self.indices.append(int(video.item()))
+            return video.float().mean() + torch.rand(()), {}
+
+    samples: Any = [{"video": torch.tensor(i), "reference": torch.tensor(0), "target": {"shape": torch.tensor(0)}, "foreground": torch.tensor(1)} for i in range(3)]
+    probe: Any = Probe()
+    state = torch.get_rng_state()
+    first = fixed_flow_loss(probe, samples, 42, torch.device("cpu"))
+    assert torch.equal(state, torch.get_rng_state())
+    assert probe.indices == [0, 1, 2]
+    assert first == fixed_flow_loss(probe, samples, 42, torch.device("cpu"))

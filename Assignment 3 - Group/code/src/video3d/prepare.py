@@ -72,7 +72,9 @@ def prepare(config: ExperimentConfig) -> None:
     sys.path.insert(0, "/work/dependencies/navi")
     root, output = Path(config.data.root), Path(config.data.prepared)
     output.mkdir(parents=True, exist_ok=True)
-    signature = {"schema_version": 1, "data": chz.asdict(config.data), "sam_weights": config.model.sam_weights, "sam_revision": config.model.sam_revision, "sam_commit": config.model.sam_commit, "coordinates": "z-up-aabb-unit-cube-surface64-v1", "visibility": "navi-positive-z-positive-image-y-v2"}
+    prepared_data = chz.asdict(config.data)
+    del prepared_data["video_input"]  # Runtime pixel preprocessing does not change cached native features or geometry.
+    signature = {"schema_version": 1, "data": prepared_data, "sam_weights": config.model.sam_weights, "sam_revision": config.model.sam_revision, "sam_commit": config.model.sam_commit, "coordinates": "z-up-aabb-unit-cube-surface64-v1", "visibility": "navi-positive-z-positive-image-y-v2"}
     metadata = output / "preparation.json"
     if (output / "manifest.jsonl").is_file():
         if not metadata.is_file() or json.loads(metadata.read_text())["signature"] != signature:

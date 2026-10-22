@@ -16,7 +16,7 @@ import wandb
 from .adapters import restore_trainable, trainable_state
 from .config import ExperimentConfig
 from .data import Clips, read_manifest
-from .evaluate import evaluate
+from .evaluate import evaluate, log_training_assets
 from .model import NativeSAM
 from .storage import atomic_json, atomic_torch, append_log, rng_state, restore_rng
 
@@ -26,6 +26,22 @@ class StopRequest:
 
     def receive(self, signum: int, frame: Any) -> None:
         self.requested = True
+
+
+@torch.no_grad()
+def fixed_flow_loss(model: NativeSAM, dataset: Clips, seed: int, device: torch.device) -> float:
+    state = rng_state()
+    losses: list[float] = []
+    # Keep the upstream conditional training loss path (CFG sampling is inference
+    # only). The frozen video encoder remains in eval mode throughout training.
+    for index in range(len(dataset)):
+        torch.manual_seed(seed + index)
+        batch = default_collate([dataset[index]])
+        with torch.autocast(device.type, dtype=torch.bfloat16):
+            loss, _ = model.loss(batch["video"].to(device), batch["reference"].to(device), {key: value.to(device) for key, value in batch["target"].items()}, batch["foreground"].to(device))
+        losses.append(float(loss))
+    restore_rng(state)
+    return float(np.mean(losses))
 
 
 def train(config: ExperimentConfig) -> dict[str, Any]:
@@ -95,6 +111,12 @@ def train(config: ExperimentConfig) -> dict[str, Any]:
     with ExitStack() as cleanup:
         cleanup.enter_context(run)
         cleanup.callback(save)
+        log_training_assets(run, train_rows, step)
+        if step == 0:
+            initial = {"validation/flow_loss": fixed_flow_loss(model, Clips(val_rows, config.data), config.training.seed + 1000, torch.device("cuda")), "train/fixed_probe_flow_loss": fixed_flow_loss(model, Clips(train_rows[:1], config.data), config.training.seed + 2000, torch.device("cuda"))}
+            history.append({"step": 0, **initial})
+            run.log(initial, step=0)
+            run.summary.update({"initial_validation_flow_loss": initial["validation/flow_loss"], "validation_clip_count": len(val_rows)})
         save()
         metrics: dict[str, float] = {}
         while step < config.training.steps and not stop.requested and time.monotonic() - start < config.training.max_seconds:
@@ -112,7 +134,7 @@ def train(config: ExperimentConfig) -> dict[str, Any]:
                 video, reference = batch["video"].cuda(), batch["reference"].cuda()
                 targets = {key: value.cuda() for key, value in batch["target"].items()}
                 with torch.autocast("cuda", dtype=torch.bfloat16):
-                    loss, breakdown = model.loss(video, reference, targets)
+                    loss, breakdown = model.loss(video, reference, targets, batch["foreground"].cuda())
                 if not torch.isfinite(loss):
                     raise FloatingPointError("Non-finite upstream training loss")
                 (loss / config.training.accumulation).backward()
@@ -123,6 +145,8 @@ def train(config: ExperimentConfig) -> dict[str, Any]:
                 raise FloatingPointError("Non-finite trainable gradient norm")
             if step == 0:
                 groups = {"connector": model.conditioning.projector}
+                if model.conditioning.pooler is not None:
+                    groups["pooler"] = model.conditioning.pooler
                 if config.model.video_lora:
                     groups["video_lora"] = model.conditioning.encoder
                 if config.model.sam_lora:
@@ -136,16 +160,11 @@ def train(config: ExperimentConfig) -> dict[str, Any]:
             scheduler.step()
             step += 1
             update_in_progress = False
-            metrics = {"train/loss": loss_sum, "train/gradient_norm": gradient_norm, "train/lr": scheduler.get_last_lr()[0], "system/step_seconds": time.monotonic() - before, "system/peak_allocated_gb": torch.cuda.max_memory_allocated() / 1e9, "system/peak_reserved_gb": torch.cuda.max_memory_reserved() / 1e9}
+            metrics = {"train/loss": loss_sum, "train/gradient_norm": gradient_norm, "train/lr": scheduler.get_last_lr()[0], "system/step_seconds": time.monotonic() - before, "system/input_frames_per_second": config.data.frames * config.training.microbatch * config.training.accumulation / (time.monotonic() - before), "system/peak_allocated_gb": torch.cuda.max_memory_allocated() / 1e9, "system/peak_reserved_gb": torch.cuda.max_memory_reserved() / 1e9}
             if step % config.training.validate_every == 0:
-                state = rng_state()
-                torch.manual_seed(config.training.seed + 1000)
-                validation = default_collate([Clips(val_rows[:1], config.data)[0]])
-                with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16):
-                    val_loss, _ = model.loss(validation["video"].cuda(), validation["reference"].cuda(), {key: value.cuda() for key, value in validation["target"].items()})
-                metrics["validation/flow_loss"] = float(val_loss)
-                history.append({"step": step, "validation/flow_loss": float(val_loss)})
-                restore_rng(state)
+                metrics["validation/flow_loss"] = fixed_flow_loss(model, Clips(val_rows, config.data), config.training.seed + 1000, torch.device("cuda"))
+                metrics["train/fixed_probe_flow_loss"] = fixed_flow_loss(model, Clips(train_rows[:1], config.data), config.training.seed + 2000, torch.device("cuda"))
+                history.append({"step": step, "validation/flow_loss": metrics["validation/flow_loss"], "train/fixed_probe_flow_loss": metrics["train/fixed_probe_flow_loss"]})
             append_log(log_path, {"step": step, **metrics})
             run.log(metrics, step=step)
             if step % config.training.eval_every == 0:

@@ -4,9 +4,9 @@ Question: does additional visual coverage improve canonical object geometry over
 
 This is a short pipeline pilot, not a furniture benchmark or a segmentation training run. NAVI supplies real object videos, masks, camera/depth annotations, and aligned scans. Input masks are provided; the output is a coarse 3D occupancy/mesh reconstruction of the selected object.
 
-The implementation imports the pinned upstream SAM 3D generator, sparse-structure encoder/decoder, sampler, and `ShortCut.loss`. It does not reimplement them. A V-JEPA 2.1 encoder supplies temporally pooled spatial tokens through a learned 768→1024 linear connector. These tokens are appended to the frozen native reference-image conditioning. Optional rank-8 LoRA adapters affect video attention and SAM shape cross-attention.
+The implementation imports the pinned upstream SAM 3D generator, sparse-structure encoder/decoder, sampler, and `ShortCut.loss`. It does not reimplement them. A V-JEPA 2.1 encoder supplies video tokens to its official attentive pooler, restricted to foreground tubelets by aligned input masks. Its 64 summaries pass through a learned 768→1024 connector and replace native RGB conditioning while retaining native mask conditioning. See [architecture.md](../../architecture.md). Optional rank-8 LoRA adapters affect video attention and SAM shape cross-attention.
 
-| Variant | Connector | Video LoRA | SAM LoRA |
+| Variant | Pooler + connector | Video LoRA | SAM LoRA |
 |---|---|---|---|
 | A | train | frozen | frozen |
 | B | train | train | frozen |

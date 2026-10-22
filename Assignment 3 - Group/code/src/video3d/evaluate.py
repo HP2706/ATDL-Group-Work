@@ -9,7 +9,7 @@ from scipy.spatial import cKDTree
 import torch
 import wandb
 from .config import ExperimentConfig
-from .data import Example, clip_tensor
+from .data import Example, clip_inputs
 from .model import NativeSAM
 from .storage import atomic_json, atomic_torch, rng_state, restore_rng
 
@@ -40,10 +40,34 @@ def export_prediction(logits: torch.Tensor, directory: Path) -> tuple[np.ndarray
     return points, path
 
 
+def log_object_inputs(run: Any, example: Example, prefix: str, step: int) -> None:
+    # GLB must be logged directly: W&B Tables serialize via artifacts, which
+    # reject non-point-cloud Object3D media in the pinned SDK.
+    run.log({
+        f"{prefix}/input_video": wandb.Video(example.video, format="mp4"),
+        f"{prefix}/reference_rgb": wandb.Image(example.frames[0]),
+        f"{prefix}/reference_mask": wandb.Image(example.masks[0]),
+        f"{prefix}/ground_truth_mesh": wandb.Object3D(example.ground_truth_mesh),
+    }, step=step)
+
+
+def log_training_assets(run: Any, examples: list[Example], step: int) -> None:
+    artifact = wandb.Artifact(run.id + "-training-assets", type="dataset")
+    seen: set[str] = set()
+    for example in examples:
+        if example.object_id in seen:
+            continue
+        seen.add(example.object_id)
+        log_object_inputs(run, example, f"training_assets/{example.object_id}", step)
+        for source, name in [(example.video, "input.mp4"), (example.frames[0], "reference.png"), (example.masks[0], "mask.png"), (example.ground_truth_mesh, "ground_truth.glb"), (example.target, "encoded_target.pt")]:
+            artifact.add_file(source, name=f"{example.object_id}/{name}")
+    run.log_artifact(artifact)
+
+
 def evaluate(model: NativeSAM, examples: list[Example], config: ExperimentConfig, step: int, run: Any) -> dict[str, float]:
     import trimesh
     device = next(model.parameters()).device
-    table = wandb.Table(columns=["example_id", "object_id", "variant", "step", "input_video", "reference", "mode", "prediction", "ground_truth", "chamfer", "fscore_002", "artifact_name"])
+    table = wandb.Table(columns=["example_id", "object_id", "variant", "step", "input_video", "reference", "mode", "prediction_point_cloud", "ground_truth_point_cloud", "chamfer", "fscore_002", "artifact_name"])
     results: list[dict[str, Any]] = []
     previous_rng = rng_state()
     model.eval()
@@ -59,11 +83,15 @@ def evaluate(model: NativeSAM, examples: list[Example], config: ExperimentConfig
         truth_mesh = trimesh.load(example.ground_truth_mesh, force="mesh")
         truth, _ = trimesh.sample.sample_surface(truth_mesh, 4096, seed=42)
         reference = torch.load(example.reference_tokens, map_location=device, weights_only=True)[None]
+        prefix = f"final/{example.example_id}"
+        log_object_inputs(run, example, prefix, step)
         baseline_error: float | None = None
         for mode in ["native_image", "reference_repeated", "video"]:
             directory = Path(config.training.output) / config.run_id / "evaluation" / f"step-{step:06d}" / example.example_id / mode
             directory.mkdir(parents=True, exist_ok=True)
-            video = clip_tensor(example, config.data, repeated_reference=mode != "video")[None].to(device)
+            inputs = clip_inputs(example, config.data, repeated_reference=mode != "video")
+            video = inputs["video"][None].to(device)
+            foreground = inputs["foreground"][None].to(device)
             torch.manual_seed(config.training.seed)
             torch.cuda.manual_seed_all(config.training.seed)
             with torch.autocast("cuda", dtype=torch.bfloat16):
@@ -76,7 +104,7 @@ def evaluate(model: NativeSAM, examples: list[Example], config: ExperimentConfig
                         logits = model.generate_native_image(reference, config.training.inference_steps)
                         atomic_torch(cache, {"logits": logits.cpu()})
                 else:
-                    logits = model.generate(video, reference, config.training.inference_steps)
+                    logits = model.generate(video, reference, config.training.inference_steps, foreground)
             prediction, mesh_path = export_prediction(logits[0], directory)
             metrics = surface_metrics(prediction, truth)
             if example.occupancy:
@@ -103,8 +131,14 @@ def evaluate(model: NativeSAM, examples: list[Example], config: ExperimentConfig
                 artifact.add_file(example.visibility, name="visibility.npz")
             artifact.add_file(example.video, name="input.mp4")
             artifact.add_file(example.frames[0], name="reference.png")
+            artifact.add_file(example.masks[0], name="reference_mask.png")
             artifact.add_file(example.ground_truth_mesh, name="ground_truth.glb")
             run.log_artifact(artifact)
+            mesh_label = {"native_image": "native_sam3d_coarse_mesh", "reference_repeated": "our_repeated_reference_mesh", "video": "our_video_mesh"}[mode]
+            if mesh_path is not None:
+                run.log({f"{prefix}/{mesh_label}": wandb.Object3D(str(mesh_path))}, step=step)
+            else:
+                run.summary[f"{prefix}/{mesh_label}_failure"] = "No zero level set in predicted occupancy; no mesh exists."
             visual = wandb.Object3D(prediction) if len(prediction) else None
             table.add_data(example.example_id, example.object_id, config.variant, step, wandb.Video(example.video, format="mp4"), wandb.Image(example.frames[0]), mode, visual, wandb.Object3D(truth), metrics["chamfer"], metrics["fscore_002"], artifact_name)
             results.append(record)

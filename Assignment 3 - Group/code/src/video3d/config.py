@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
+from typing import Literal
 import subprocess
 import chz
 
@@ -18,6 +19,11 @@ class ModelConfig:
     video_entrypoint: str = "vjepa2_1_vit_base_384"
     video_width: int = 768
     condition_width: int = 1024
+    conditioning: Literal["mean_append", "mask_pooler"] = "mask_pooler"
+    pooler_queries: int = 64
+    pooler_depth: int = 1
+    foreground_threshold: float = 0.5
+    native_tokens_per_view: int = 1370
     rank: int = 8
     alpha: float = 8.0
     video_lora: bool = False
@@ -28,6 +34,7 @@ class ModelConfig:
 class DataConfig:
     root: str = "/work/data/navi"
     prepared: str = "/work/data/view_coverage"
+    video_input: Literal["masked_crop", "full_scene"] = "full_scene"
     frames: int = 16
     image_size: int = 384
     seed: int = 42

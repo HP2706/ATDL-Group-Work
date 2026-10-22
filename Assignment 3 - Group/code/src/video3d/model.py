@@ -17,20 +17,47 @@ VIDEO_SELECTOR = r"blocks\.\d+\.attn\.(qkv|proj)"
 SAM_SELECTOR = r"blocks\.\d+\.cross_attn\.shape\.(to_q|to_kv|to_out)"
 
 
+def foreground_tokens(foreground: torch.Tensor, threshold: float) -> torch.Tensor:
+    if foreground.ndim != 4 or foreground.shape[1] % 2 or foreground.shape[2] % 16 or foreground.shape[3] % 16:
+        raise ValueError("Foreground masks must match the two-frame, 16x16 tubelet grid")
+    coverage = torch.nn.functional.avg_pool3d(foreground[:, None].float(), kernel_size=(2, 16, 16), stride=(2, 16, 16)).flatten(1)
+    selected = coverage >= threshold
+    if not selected.any(dim=1).all():
+        raise ValueError("No foreground tubelet passes the configured threshold")
+    return selected
+
+
 class VideoConditioning(nn.Module):
-    def __init__(self, encoder: nn.Module, video_width: int, condition_width: int, frames: int) -> None:
+    def __init__(self, encoder: nn.Module, video_width: int, condition_width: int, frames: int, pooler: nn.Module | None = None, foreground_threshold: float = 0.5, native_tokens_per_view: int = 1370) -> None:
         super().__init__()
         self.encoder = encoder
         self.projector = nn.Linear(video_width, condition_width)
         self.frames = frames
+        self.pooler = pooler
+        self.foreground_threshold = foreground_threshold
+        self.native_tokens_per_view = native_tokens_per_view
 
-    def forward(self, video: torch.Tensor, reference: torch.Tensor) -> torch.Tensor:
+    def forward(self, video: torch.Tensor, reference: torch.Tensor, foreground: torch.Tensor | None = None) -> torch.Tensor:
         features = self.encoder(video)
         if not isinstance(features, torch.Tensor) or features.shape[-1] != self.projector.in_features:
             raise ValueError("Unexpected V-JEPA feature contract")
-        spatial = features.reshape(features.shape[0], self.frames // 2, -1, features.shape[-1]).mean(dim=1)
-        projected = self.projector(spatial.float())
-        return torch.cat([reference.to(projected.dtype), projected], dim=1)
+        if self.pooler is None:
+            spatial = features.reshape(features.shape[0], self.frames // 2, -1, features.shape[-1]).mean(dim=1)
+            projected = self.projector(spatial.float())
+            return torch.cat([reference.to(projected.dtype), projected], dim=1)
+        if foreground is None:
+            raise ValueError("Mask-aware pooling requires aligned foreground masks")
+        selected = foreground_tokens(foreground, self.foreground_threshold)
+        if selected.shape != features.shape[:2]:
+            raise ValueError("Foreground tubelets and V-JEPA tokens disagree")
+        if reference.shape[1] != 4 * self.native_tokens_per_view + 2048:
+            raise ValueError("Reference conditioning does not match the pinned native fuser layout")
+        # No padding: each sample's pooler sees only its selected object tokens.
+        summaries = torch.cat([self.pooler(features[index:index + 1, selected[index]]) for index in range(features.shape[0])], dim=0)
+        projected = self.projector(summaries.float())
+        # Replace both native RGB streams; retain both mask streams and zero pointmap slots.
+        retained = reference[:, 2 * self.native_tokens_per_view:]
+        return torch.cat([projected, retained.to(projected.dtype)], dim=1)
 
 
 def load_component(config: Any, checkpoint: Path, prefix: str = "", state_key: str | None = "state_dict") -> nn.Module:
@@ -77,7 +104,11 @@ class NativeSAM(nn.Module):
         bf16_with_float_norms(self.generator)
         self.generator.reverse_fn.backbone.dtype = torch.bfloat16
         video_encoder.use_activation_checkpointing = True
-        self.conditioning = VideoConditioning(video_encoder, config.video_width, config.condition_width, frames)
+        pooler: nn.Module | None = None
+        if config.conditioning == "mask_pooler":
+            from src.models.attentive_pooler import AttentivePooler
+            pooler = AttentivePooler(num_queries=config.pooler_queries, embed_dim=config.video_width, num_heads=12, depth=config.pooler_depth, use_activation_checkpointing=True)
+        self.conditioning = VideoConditioning(video_encoder, config.video_width, config.condition_width, frames, pooler=pooler, foreground_threshold=config.foreground_threshold, native_tokens_per_view=config.native_tokens_per_view)
         self.generator.reverse_fn.backbone.use_checkpoint = True
         for block in self.generator.reverse_fn.backbone.blocks:
             block.use_checkpoint = True
@@ -92,8 +123,8 @@ class NativeSAM(nn.Module):
             self.lora_targets["sam"] = inject_lora(self.generator.reverse_fn.backbone, SAM_SELECTOR, config.rank, config.alpha)
         self.to(device)
 
-    def loss(self, video: torch.Tensor, reference: torch.Tensor, targets: dict[str, torch.Tensor]) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
-        conditioning = self.conditioning(video, reference)
+    def loss(self, video: torch.Tensor, reference: torch.Tensor, targets: dict[str, torch.Tensor], foreground: torch.Tensor | None = None) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+        conditioning = self.conditioning(video, reference, foreground)
         return self.generator.loss(targets, conditioning)
 
     @torch.no_grad()
@@ -105,8 +136,8 @@ class NativeSAM(nn.Module):
         return self.decoder(latent)
 
     @torch.no_grad()
-    def generate(self, video: torch.Tensor, reference: torch.Tensor, steps: int) -> torch.Tensor:
-        return self.sample_condition(self.conditioning(video, reference), steps)
+    def generate(self, video: torch.Tensor, reference: torch.Tensor, steps: int, foreground: torch.Tensor | None = None) -> torch.Tensor:
+        return self.sample_condition(self.conditioning(video, reference, foreground), steps)
 
     @torch.no_grad()
     def generate_native_image(self, reference: torch.Tensor, steps: int) -> torch.Tensor:
