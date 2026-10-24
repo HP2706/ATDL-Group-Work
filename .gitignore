@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+data/
+dataset/
+third_party/
+.blender/
+*.pdf
+.claude/settings.local.json
+.claude/.cc-writes/
