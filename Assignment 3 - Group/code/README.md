@@ -1,5 +1,7 @@
 # Video view coverage pilot
 
+See the [research log](../RESEARCH_LOG.md) for the experiments tried, measured outcomes, limitations, and proposed follow-up.
+
 Question: does additional visual coverage improve canonical object geometry over one reference frame, especially on surfaces newly revealed by the video?
 
 This is a short pipeline pilot, not a furniture benchmark or a segmentation training run. NAVI supplies real object videos, masks, camera/depth annotations, and aligned scans. Input masks are provided; the output is a coarse 3D occupancy/mesh reconstruction of the selected object.

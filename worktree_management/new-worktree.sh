@@ -50,7 +50,7 @@ esac
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GIT_COMMON_DIR="$(git -C "$SCRIPT_DIR" rev-parse --path-format=absolute --git-common-dir)"
-PRIMARY_ROOT="$(git --git-dir="$GIT_COMMON_DIR" rev-parse --show-toplevel)"
+PRIMARY_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel)"
 WORKTREE_DIR="$PRIMARY_ROOT/.worktrees/$BRANCH"
 ENVIRONMENT_LIST="$PRIMARY_ROOT/worktree_management/environment-files.txt"
 CREATE_HOOK="$PRIMARY_ROOT/worktree_management/after-create.sh"
