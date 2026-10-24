@@ -10,6 +10,13 @@ PRIMARY_ROOT="$1"
 WORKTREE_DIR="$2"
 BRANCH="$3"
 
+for directory in "$WORKTREE_DIR/Assignment 3 - Group/code/data" "$WORKTREE_DIR/Assignment 3 - Group/code/results" "$WORKTREE_DIR/Assignment 3 - Group/code/dependencies"; do
+  if [[ -d "$directory" && -n "$(ls -A "$directory")" ]]; then
+    echo "Preserve cached/generated experiment artifacts before cleanup: $directory" >&2
+    exit 1
+  fi
+done
+
 # Add the exact inverse of after-create.sh here. Stop and remove only resources
 # whose validated names are deterministically owned by this worktree. This hook
 # runs before the worktree and its ignored environment files are removed.

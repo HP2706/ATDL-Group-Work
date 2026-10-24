@@ -43,3 +43,15 @@ __pycache__/
 AGENTS.md
 
 /.worktrees/
+
+# Video reconstruction experiments
+Assignment 3 - Group/code/.venv/
+Assignment 3 - Group/code/results/
+Assignment 3 - Group/code/data/
+Assignment 3 - Group/code/dependencies/
+wandb/
+*.pt
+*.ckpt
+.env*
+
+runtime.env

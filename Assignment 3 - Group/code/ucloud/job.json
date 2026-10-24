@@ -1,0 +1,13 @@
+{
+  "items": [{
+    "application": {"name": "terminal-ubuntu", "version": "Aug2026"},
+    "product": {"id": "gpu-nvidia-b200-1-mig.1g", "category": "gpu-nvidia-b200", "provider": "ucloud"},
+    "name": "view-coverage-hp-REPLACE-TIMESTAMP",
+    "replicas": 1,
+    "parameters": {"batchScript": {"type": "file", "path": "/12398691/hp-video/batch.sh", "readOnly": true}},
+    "resources": [{"type": "file", "path": "/12398691/hp-video", "readOnly": false}],
+    "timeAllocation": {"hours": 2, "minutes": 0, "seconds": 0},
+    "sshEnabled": false,
+    "allowDuplicateJob": false
+  }]
+}
