@@ -1,4 +1,4 @@
-# M0 checkpoint (2026-10-24)
+# M0 checkpoint (updated 2026-10-25)
 
 Resume by reading this file, then `docs/dataset_spec.md` (already updated with the agreed fixes).
 
@@ -6,8 +6,8 @@ Resume by reading this file, then `docs/dataset_spec.md` (already updated with t
 
 - **Environment:** uv venv (Python 3.11), `uv sync`. BlenderProc 2.8.0 with Blender 4.2.1 in `.blender/`; Cycles uses OptiX on the RTX 3060.
 - **Assets:** 50 GSO objects downloaded (`scripts/download_gso.py`, catalogue 1033) and preprocessed into `dataset/assets/eval/` (`python -m sam3dvid.assets --source gso --split eval --limit 50`).
-- **SA-1B:** `scripts/download_sa1b.py` and `scripts/build_bg_pools.py` are written. The tar extraction and pool building passed synthetic tests; the HTTP download code has never been run. **Blocked on `data/sa1b_links.txt`.**
-- **Clip:** one dev clip, `dataset/clips/eval/00000000`, rendered in about 65 s. It uses a synthetic grid background (pool in the session scratchpad) because SA-1B isn't there yet. It is not the M0 deliverable.
+- **SA-1B:** `sa_000000` downloaded. 11,186 images scanned, 9,062 landscape, split into a train pool of 7,258 and an eval pool of 1,804.
+- **Clip:** the M0 clip `dataset/clips/eval/00000000` (seed 0, SA-1B background) rendered in about 57 s; the folder is 20 MB with compressed depth. T7 sheet: `dataset/review/`; it still needs your sign-off.
 - **Tests:** `uv run pytest` runs 15 tests; all pass except one expected failure (xfail). T1, T2 (11 unit tests), T3, T4, T5 (regenerates the clip) and the format checks all pass. T7 tool: `python -m sam3dvid.review`.
 - **Git:** first commit made at this checkpoint.
 
@@ -32,13 +32,11 @@ Resume by reading this file, then `docs/dataset_spec.md` (already updated with t
    - add an IoU check between the rendered amodal mask and a silhouette rasterized from the GT pose.
 2. **Objects are small in frame.** Because the orbit distance scales with the scene radius and `ρ(N)` grows with N, multi-object clips have tiny objects (largest amodal mask in the dev clip is about 2% of the image). Measure the distribution over around 50 seeds and decide whether to keep the spec as is.
 3. **CPU time.** About 65 s per clip, with high CPU use (7 min of user time). OIDN probably runs on the CPU; also check samples/denoiser and the cost of the amodal passes.
-4. **DATASET.md** not written yet.
+4. **DATASET.md** not written yet. The consumer-facing format doc is `docs/data_format.md`.
 5. **Geometric filter:** scores are computed per asset (`meta.json` `filter_scores`); thresholds and the contact sheet come at M2.
 
 ## Next steps
 
-1. Once `data/sa1b_links.txt` exists, run `uv run python scripts/download_sa1b.py` and then `uv run python scripts/build_bg_pools.py`.
-2. Delete the dev clip: `rm -rf dataset/clips dataset/manifest.jsonl`.
-3. Run `uv run python -m sam3dvid.generate --config configs/m0.yaml --split eval --seeds 0`.
-4. Run `uv run pytest`, then `uv run python -m sam3dvid.review --num 1`, and inspect `dataset/review/`.
-5. Resolve open issues 1-3, then write DATASET.md. After that comes T6 with SAM 3D.
+1. Resolve open issues 1-3 (T1 strength, object size, render CPU time).
+2. Write DATASET.md.
+3. Run T6 with SAM 3D, then M1 (500 eval clips, about 10 GB, roughly 8-9 h at the current speed).

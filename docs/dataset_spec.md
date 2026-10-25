@@ -141,7 +141,7 @@ dataset/
     rgba_fg/000.png … 031.png    # uint8 RGBA, objects only, before compositing
     mask_visible/000.png …       # uint8 instance map: 0 = background, k = 1..N
     mask_amodal/obj{k}/000.png … # uint8 {0,255}
-    depth/000.npy …              # float32 H×W, OpenCV z-depth, NaN = background
+    depth/000.npz …              # compressed npz, key "depth": float32 H×W, OpenCV z-depth, NaN = background
     cameras.json
     objects.json
     meta.json

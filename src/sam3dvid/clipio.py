@@ -33,7 +33,7 @@ def write_clip(
         _png(out / "rgb" / f"{name}.png", rgb[t])
         _png(out / "rgba_fg" / f"{name}.png", rgba_fg[t])
         _png(out / "mask_visible" / f"{name}.png", visible[t])
-        np.save(out / "depth" / f"{name}.npy", depth[t].astype(np.float32))
+        np.savez_compressed(out / "depth" / f"{name}.npz", depth=depth[t].astype(np.float32))
     for k in range(amodal.shape[0]):
         d = out / "mask_amodal" / f"obj{k + 1}"
         d.mkdir(parents=True)
@@ -102,4 +102,5 @@ class Clip:
         return np.asarray(Image.open(self.path / "mask_amodal" / f"obj{k}" / f"{t:03d}.png")) > 0
 
     def depth(self, t: int) -> np.ndarray:
-        return np.load(self.path / "depth" / f"{t:03d}.npy")
+        with np.load(self.path / "depth" / f"{t:03d}.npz") as f:
+            return f["depth"]
