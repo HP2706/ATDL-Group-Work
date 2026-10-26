@@ -4,6 +4,8 @@ Trains a small gated cross-attention **fusion adapter** (~18M parameters) that l
 
 Docs: [data format v0.1](docs/data_format.md) · [research plan](docs/research_plan.md) · [adapter plan](docs/fusion_adapter_plan.md) · [SAM 3D internals](docs/sam3d_internals.md) (written by `inspect-sam3d`, P5)
 
+For the GPU setup on UCloud Terminal, see the [P5 UCloud setup guide](docs/p5_ucloud_setup.md).
+
 > Stub (P1). The full README comes in P8.
 
 ## Quickstart (local, CPU)
