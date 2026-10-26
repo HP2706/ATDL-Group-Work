@@ -7,7 +7,7 @@ Resume by reading this file, then `docs/dataset_spec.md` (already updated with t
 - **Environment:** uv venv (Python 3.11), `uv sync`. BlenderProc 2.8.0 with Blender 4.2.1 in `.blender/`; Cycles uses OptiX on the RTX 3060.
 - **Assets:** 50 GSO objects downloaded (`scripts/download_gso.py`, catalogue 1033) and preprocessed into `dataset/assets/eval/` (`python -m sam3dvid.assets --source gso --split eval --limit 50`).
 - **SA-1B:** `sa_000000` downloaded. 11,186 images scanned, 9,062 landscape, split into a train pool of 7,258 and an eval pool of 1,804.
-- **Clip:** the M0 clip `dataset/clips/eval/00000000` (seed 0, SA-1B background) rendered in about 57 s; the folder is 20 MB with compressed depth. T7 signed off by the user on 2026-10-26; M0 is complete apart from the deferred T6.
+- **Clip:** the M0 clip `dataset/clips/eval/00000000` (seed 0, SA-1B background) rendered in about 19 s; the folder is 20 MB with compressed depth. T7 signed off by the user on 2026-10-26; M0 is complete apart from the deferred T6.
 - **Tests:** `uv run pytest` runs 15 tests; all pass except one expected failure (xfail). T1, T2 (11 unit tests), T3, T4, T5 (regenerates the clip) and the format checks all pass. T7 tool: `python -m sam3dvid.review`.
 - **Git:** first commit made at this checkpoint.
 
