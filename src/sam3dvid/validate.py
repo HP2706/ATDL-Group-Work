@@ -5,6 +5,7 @@ from __future__ import annotations
 import cv2
 import numpy as np
 import trimesh
+from scipy.ndimage import minimum_filter
 
 from .config import Config
 from .conventions import CANONICAL_FROM_GLTF, object_matrix, project, transform_points
@@ -80,16 +81,75 @@ def projection_consistency(
     hit_dil = cv2.dilate(hit, kernel) > 0
     coverage = hit_dil[amodal].mean() if amodal.any() else 1.0
 
-    # 10k points leave most pixels with a single point, so a far-side point would often win the
-    # z-buffer unopposed; back-facing points are dropped first.
+    # 10k points leave most pixels with a single point, so a hidden point would often win the
+    # z-buffer unopposed. Back-facing points are dropped, and a pixel's point is also dropped when
+    # a point in its 3x3 neighbourhood is clearly nearer (hidden front faces in concavities).
     zbuf = np.full(h * w, np.inf)
     np.minimum.at(zbuf, px[front, 1] * w + px[front, 0], z[front])
     zbuf = zbuf.reshape(h, w)
-    sel = visible_k & np.isfinite(zbuf) & np.isfinite(depth)
+    occluder = minimum_filter(zbuf, size=3, mode="constant", cval=np.inf)
+    unoccluded = zbuf <= occluder + 0.02 * obj["s_wo"][0]
+    sel = visible_k & np.isfinite(zbuf) & np.isfinite(depth) & unoccluded
     depth_err = float(np.median(np.abs(zbuf[sel] - depth[sel]))) if sel.any() else float("nan")
     return {
         "points_in_amodal": float(in_mask),
         "amodal_coverage": float(coverage),
         "median_depth_err": depth_err,
         "depth_pixels": int(sel.sum()),
+    }
+
+
+def raycast_object(
+    mesh_o: trimesh.Trimesh, obj: dict, K: np.ndarray, T_cw: np.ndarray, width: int, height: int
+) -> tuple[np.ndarray, np.ndarray]:
+    """Exact silhouette (bool HxW) and z-depth (NaN off-object) of one posed mesh, without Blender.
+
+    One ray per pixel center, cast in the canonical object frame so the mesh BVH is built once.
+    Only pixels inside the projected vertex bounding box (plus 2 px) are traced.
+    """
+    T_co = T_cw @ object_matrix(obj["R_wo"], obj["t_wo"], obj["s_wo"])
+    uv, _ = project(K, transform_points(T_co, mesh_o.vertices))
+    u0, v0 = np.maximum(np.floor(uv.min(0)).astype(int) - 2, 0)
+    u1, v1 = np.minimum(np.ceil(uv.max(0)).astype(int) + 2, [width - 1, height - 1])
+    silhouette = np.zeros((height, width), bool)
+    depth = np.full((height, width), np.nan)
+    if u0 > u1 or v0 > v1:
+        return silhouette, depth
+    vv, uu = np.mgrid[v0 : v1 + 1, u0 : u1 + 1]
+    pix = np.stack([uu.ravel(), vv.ravel(), np.ones(uu.size)], axis=1)
+    dirs_c = pix @ np.linalg.inv(K).T
+    T_oc = np.linalg.inv(T_co)
+    origins = np.broadcast_to(T_oc[:3, 3], dirs_c.shape)
+    dirs_o = dirs_c @ T_oc[:3, :3].T
+    locations, index_ray, _ = mesh_o.ray.intersects_location(origins, dirs_o, multiple_hits=False)
+    z = transform_points(T_co, locations)[:, 2]
+    rows, cols = vv.ravel()[index_ray], uu.ravel()[index_ray]
+    silhouette[rows, cols] = True
+    depth[rows, cols] = z
+    return silhouette, depth
+
+
+def raycast_consistency(
+    mesh_o: trimesh.Trimesh, obj: dict, K: np.ndarray, T_cw: np.ndarray,
+    amodal: np.ndarray, visible_k: np.ndarray, depth: np.ndarray,
+) -> dict[str, float]:
+    """T1b metrics: silhouette agreement with the amodal mask, and depth error relative to object scale.
+
+    `boundary_mismatch` is the number of disagreeing pixels per amodal boundary pixel. Unlike IoU
+    it doesn't shrink with object size, so a sub-pixel offset is caught on large objects too.
+    """
+    h, w = amodal.shape
+    sil, z = raycast_object(mesh_o, obj, K, T_cw, w, h)
+    union = np.count_nonzero(sil | amodal)
+    iou = np.count_nonzero(sil & amodal) / union if union else 1.0
+    a = amodal.astype(np.uint8)
+    boundary = np.count_nonzero(a - cv2.erode(a, np.ones((3, 3), np.uint8)))
+    mismatch = np.count_nonzero(sil ^ amodal) / max(boundary, 1)
+    sel = visible_k & np.isfinite(z) & np.isfinite(depth)
+    err = np.abs(z[sel] - depth[sel]) / obj["s_wo"][0]
+    return {
+        "iou": float(iou),
+        "boundary_mismatch": float(mismatch),
+        "rel_depth_err_median": float(np.median(err)) if sel.any() else float("nan"),
+        "amodal_px": int(amodal.sum()),
     }

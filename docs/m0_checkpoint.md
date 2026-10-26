@@ -1,4 +1,4 @@
-# M0 checkpoint (updated 2026-10-25)
+# M0 checkpoint (updated 2026-10-26)
 
 Resume by reading this file, then `docs/dataset_spec.md` (already updated with the agreed fixes).
 
@@ -27,16 +27,14 @@ Resume by reading this file, then `docs/dataset_spec.md` (already updated with t
 
 ## Open issues
 
-1. **T1 is too weak on small objects.** A 5° rotation error passes T1 (`test_t1_detects_pose_errors`, xfail). Objects in the dev clip are only 2-5k px, so a 3-px dilation absorbs a 5° error, and 1% of the orbit radius (0.055) is loose. Options:
-   - tighten T1 (dilation 1 px, or a depth limit relative to object size);
-   - add an IoU check between the rendered amodal mask and a silhouette rasterized from the GT pose.
-2. **Objects are small in frame.** Because the orbit distance scales with the scene radius and `ρ(N)` grows with N, multi-object clips have tiny objects (largest amodal mask in the dev clip is about 2% of the image). Measure the distribution over around 50 seeds and decide whether to keep the spec as is.
+1. **T1 weakness:** resolved by T1b (ray-cast silhouette and depth; catches half-pixel errors).
+2. **Object size:** resolved. Tight framing plus orbit factor U(1.0, 1.4): median object 1.5% -> 2.5% of the frame, 3% of objects truncated in some frame.
 3. **CPU time:** resolved. BlenderProc's "INTEL" denoiser was a CPU compositor node; switched to OptiX, GPU only. 57 s -> 19 s per clip.
 4. **DATASET.md** not written yet. The consumer-facing format doc is `docs/data_format.md`.
 5. **Geometric filter:** scores are computed per asset (`meta.json` `filter_scores`); thresholds and the contact sheet come at M2.
 
 ## Next steps
 
-1. Resolve open issues 1-2 (T1 strength, object size).
+1. Done: T1b (ray-cast) added; tight framing with orbit factor U(1.0, 1.4).
 2. Write DATASET.md.
 3. Run T6 with SAM 3D, then M1 (500 eval clips, about 10 GB, roughly 8-9 h at the current speed).

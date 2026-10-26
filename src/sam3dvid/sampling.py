@@ -7,7 +7,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from .config import Config
-from .conventions import look_at_opencv, random_rotation
+from .conventions import look_at_opencv, object_matrix, random_rotation, transform_points
 
 HALF_DIAGONAL = np.sqrt(3) / 2
 
@@ -93,10 +93,18 @@ def sample_layout(rng: np.random.Generator, cfg: Config, asset_ids: list[str]) -
     ]
 
 
-def scene_extent(objects: list[ObjectPose]) -> tuple[np.ndarray, float]:
-    """Centroid c = mean(t_wo) and radius r = max_k(|t_k - c| + bounding radius_k)."""
+def scene_extent(objects: list[ObjectPose], points_o: list[np.ndarray]) -> tuple[np.ndarray, float]:
+    """Centroid c = mean(t_wo) and the radius around c of the posed objects' actual geometry.
+
+    `points_o` are canonical surface points per object (voxel centers); half a voxel diagonal is
+    added so the sphere contains the surface, not just the voxel centers.
+    """
     c = np.mean([o.t_wo for o in objects], axis=0)
-    r = max(np.linalg.norm(o.t_wo - c) + o.bounding_radius for o in objects)
+    r = max(
+        np.linalg.norm(transform_points(object_matrix(o.R_wo, o.t_wo, o.s_wo), x) - c, axis=1).max()
+        + o.s_wo[0] * HALF_DIAGONAL / 64
+        for o, x in zip(objects, points_o)
+    )
     return c, float(r)
 
 

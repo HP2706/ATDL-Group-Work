@@ -203,6 +203,20 @@ wheels = [
 ]
 
 [[package]]
+name = "embreex"
+version = "4.4.0.post1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/da/fa/b9dcee0f524ad88132b0946e5e685a5020ec448e1d4064c20f83f2c83412/embreex-4.4.0.post1-cp311-cp311-macosx_13_0_arm64.whl", hash = "sha256:3ed370224566681071f245bbc5104feebee1354097679ab69cb3a70c94633cb3", size = 5052315, upload-time = "2026-10-21T22:48:21.465Z" },
+    { url = "https://files.pythonhosted.org/packages/74/4b/bd4289786a0c3728568214d8651db79f00fc8358790628fce794006fea3a/embreex-4.4.0.post1-cp311-cp311-macosx_13_0_x86_64.whl", hash = "sha256:85d9b232805e95be845ee5d77ddea4e6b21c992b7e60fa7bdf4f578b84797a15", size = 13225284, upload-time = "2026-10-21T22:48:23.839Z" },
+    { url = "https://files.pythonhosted.org/packages/26/60/3d959f55100ce829620c132cc5c5413e71d2fbcc2ffdede251c269a5a9ef/embreex-4.4.0.post1-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:2cd0f7d5c6342e6247e31f700761689cae7829454d8c6de0c41e62124a023e1f", size = 14540499, upload-time = "2026-10-21T22:48:26.743Z" },
+    { url = "https://files.pythonhosted.org/packages/f7/c1/ed524ec57b4e621932da5b10ffea7a67b43ba1fdc6f4648154f0258ff601/embreex-4.4.0.post1-cp311-cp311-win_amd64.whl", hash = "sha256:3df27becf6a12b59f5a469bc5271622e26387d52a15880edd29aa564246e7176", size = 13124357, upload-time = "2026-10-21T22:48:29.515Z" },
+]
+
+[[package]]
 name = "executing"
 version = "2.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -990,6 +1004,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "blenderproc" },
+    { name = "embreex" },
     { name = "imageio", extra = ["ffmpeg"] },
     { name = "numpy" },
     { name = "open3d" },
@@ -1010,6 +1025,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "blenderproc", specifier = "==2.8.0" },
+    { name = "embreex", specifier = ">=4.4.0.post1" },
     { name = "imageio", extras = ["ffmpeg"], specifier = ">=2.35" },
     { name = "numpy", specifier = ">=1.26,<2.1" },
     { name = "open3d", specifier = ">=0.18" },

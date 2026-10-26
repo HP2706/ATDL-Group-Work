@@ -150,11 +150,10 @@ Enforced by construction:
 
 Checked by the test suite:
 
-- **Geometry**, on every eval clip, with 10k surface points per object and frame:
-  - at least 95% of projected points fall inside the amodal mask dilated by 3 px;
-  - the 3 px-dilated points cover at least 90% of the mask;
-  - the median depth error at visible pixels is below 1% of the orbit radius.
-  These tolerances are loose for small objects: they don't catch a 5 degree pose error. Tighter checks are planned.
+- **Geometry**, on every eval clip, object and frame: the GT-posed mesh is ray-cast independently of Blender (one ray per pixel center).
+  - The amodal mask matches the ray-cast silhouette to at most 0.05 mismatched pixels per boundary pixel (typically ≤ 0.007).
+  - Rendered depth matches the ray-cast depth to a median error of at most 5e-4 · s (typically 1e-5 · s).
+  - A half-pixel principal-point offset, a 5 degree rotation or a 0.1 · s shift all fail this check, so masks and depth agree with `K`, `T_cw` and the poses to sub-pixel accuracy.
 - **Determinism**, on one clip regenerated from its seed:
   - poses, masks and JSON are identical (except `meta.json` `timing` and `git_commit`);
   - depth matches to 1e-5 relative;
@@ -168,7 +167,8 @@ Checked by the test suite:
 | object rotation `R_wo` | uniform on SO(3) |
 | scale `s` | U(0.4, 1.0) |
 | object positions | uniform in a ball of radius N^(1/3), resampled until no overlap |
-| camera | looks at the centroid of the object centers, Z up, no roll; distance `r / tan(25 deg) * U(1.1, 1.6)`, where r is the scene's bounding radius |
+| camera | looks at the centroid of the object centers, Z up, no roll; distance `r / tan(25 deg) * U(1.0, 1.4)`, where r is the radius of the objects' actual geometry around that centroid |
+| object size in image | median 2.5% of the frame (N=1 larger, N=4 smaller); about 3% of objects are slightly cut off by the frame edge in some frames |
 | start azimuth / elevation | U(0, 360) / U(10, 45) deg (with drift, camera elevation spans 0-55 deg) |
 | arc span / elevation drift | U(10, 70) deg with random sign / U(-10, 10) deg |
 | camera timing | eased: `u(t) = (1 - cos(pi t / 31)) / 2`, so motion is slow at both ends |
@@ -214,7 +214,7 @@ print("voxel centers on amodal mask:", amodal_k[uv[inside, 1], uv[inside, 0]].me
 
 ## 9. Known limitations and things that may change
 
-- **Version 0.1.** The file format is stable. The sampling distributions in section 7 may still be tuned before M1: objects are currently small in multi-object clips, and the largest object in a test clip covers about 2% of the image.
+- **Version 0.1.** The file format is stable; the sampling distributions in section 7 are final for M1 unless the test runs reveal a problem.
 - **No de-lit texture target.** Texture ground truth is out of scope; `rgb` is lit.
 - **No SAM 3D converter yet.** The SAM 3D convention converter (`ours_to_sam3d`) and a SAM 3D baseline sanity check are pending.
 - **Train split not generated yet.** Its Objaverse asset filtering and pool size are still being decided; the format will be identical.

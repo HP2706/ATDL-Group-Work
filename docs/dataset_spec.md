@@ -88,11 +88,11 @@ Section 2 lists fixed decisions. Do not change them without asking the user. Sec
 - **Rotation:** uniform on SO(3).
 - **Scale:** isotropic `s ~ U(0.4, 1.0)`, applied to the canonical unit-cube mesh.
 - **Position:** uniform in a ball of radius `ρ(N)` around the world origin, with `ρ` growing with N so that even N = 4 objects at s = 1.0 fit (implementer picks `ρ(N)` and documents it; `ρ(1) = 1.0`). Reject placements whose bounding spheres (radius `s·√3/2`) overlap, so objects never interpenetrate. On overlap, resample **positions only**; rotations and scales are kept, so the scale distribution stays unbiased.
-- **Scene centroid:** `c = mean(t_wo)`. Scene radius `r = max_k(‖t_wo,k − c‖ + bounding radius_k)`.
+- **Scene centroid:** `c = mean(t_wo)`. Scene radius `r` = the largest distance from `c` to the posed objects' actual geometry (voxel centers plus half a voxel diagonal), not to their bounding-cube spheres, which overestimate the extent and made objects small in frame.
 
 ### 4.4 Camera trajectory
 
-- **Orbit radius:** `d = r / tan(FOV/2) · U(1.1, 1.6)`, constant over the clip.
+- **Orbit radius:** `d = r / tan(FOV/2) · U(1.0, 1.4)`, constant over the clip. Factors below ~1.1 let the scene sphere slightly exceed the frame; measured over 400 eval scenes, 3% of objects are truncated in at least one frame (1.7% of object-frames, 7% of clips), with a median 1% of the surface outside. Median object area is 2.5% of the image (was 1.5% with cube spheres and U(1.1, 1.6)).
 - **Start:** azimuth `φ₀ ~ U(0°, 360°)`, elevation `θ₀ ~ U(10°, 45°)` above the horizontal plane through `c`.
 - **Arc:** span `Δφ ~ U(10°, 70°)` with random sign; elevation drift `Δθ ~ U(−10°, 10°)`, linear in the eased parameter.
 - **Easing:** `u(t) = (1 − cos(π·t/31)) / 2` for t = 0…31.
@@ -183,7 +183,8 @@ dataset/
 - **T1 — Projection consistency.** For every object and frame, project 10k surface points sampled from the posed mesh with `K, T_cw`.
   - ≥ 95% must fall inside the 3-px-dilated amodal mask.
   - Amodal mask pixels covered by the **3-px-dilated** projected-point image ≥ 90%. (Undilated, 10k points cannot cover a mask of 40k+ pixels.)
-  - Depth: **z-buffer** the projected points (keep the nearest point per pixel), after dropping back-facing points (normal facing away from the camera; otherwise thin objects fail because many pixels only receive far-side points), then at pixels where this object is visible and has a point, the median |z-buffered point depth − rendered depth| must be < 1% of the orbit radius. (Without the z-buffer, the ~50% of points on the far side of the object dominate the median.)
+  - Depth: **z-buffer** the projected points (keep the nearest point per pixel), after dropping back-facing points (normal facing away from the camera) and points with a clearly nearer point in their 3×3 neighbourhood (hidden surfaces in concavities); otherwise thin and concave objects fail because many pixels only receive hidden points. Then at pixels where this object is visible and has a point, the median |z-buffered point depth − rendered depth| must be < 1% of the orbit radius. (Without the z-buffer, the ~50% of points on the far side of the object dominate the median.)
+- **T1b — Ray-cast consistency.** Independently ray-cast the GT-posed mesh (one ray per pixel center, Embree via trimesh) and compare with Blender's output: mismatched silhouette pixels per amodal boundary pixel ≤ 0.05, and median |ray-cast depth − rendered depth| at visible pixels ≤ 5·10⁻⁴ · s. Thresholds were calibrated on 576 correct object-frames (max 0.007 and 1·10⁻⁵). Negative controls must fail: a 5° rotation, a 0.1·s shift and a half-pixel principal-point shift. Unlike T1, this catches sub-pixel convention errors on objects of any size.
 - **T2 — Convention unit tests.** Hand-constructed poses with known projections. Round-trip Blender ↔ OpenCV camera conversion. Round-trip `ours_to_sam3d` ↔ inverse.
 - **T3 — Visibility rules.** Assert the Section 4.7 rules on every saved clip.
 - **T4 — Background coverage.** Assert there are no undefined background pixels in any frame.

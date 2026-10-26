@@ -15,6 +15,7 @@ dependencies = [
     "imageio[ffmpeg]>=2.35",
     "requests>=2.32",
     "tqdm>=4.66",
+    "embreex>=4.4.0.post1",
 ]
 
 [dependency-groups]

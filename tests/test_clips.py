@@ -7,10 +7,20 @@ from sam3dvid.background import covers, homography, relative_rotation, warp
 from sam3dvid.validate import (
     load_canonical_mesh,
     projection_consistency,
+    raycast_consistency,
     sample_surface,
     visibility_failures,
     visibility_stats,
 )
+
+# Calibrated on 576 correct object-frames (max 0.007 and 1e-5) against perturbed poses
+# (a half-pixel principal point shift gives at least 0.129 boundary mismatch).
+T1B_MAX_BOUNDARY_MISMATCH = 0.05
+T1B_MAX_REL_DEPTH_ERR = 5e-4
+
+
+def t1b_fails(m: dict) -> bool:
+    return m["boundary_mismatch"] > T1B_MAX_BOUNDARY_MISMATCH or not m["rel_depth_err_median"] <= T1B_MAX_REL_DEPTH_ERR
 
 
 @pytest.mark.sampled
@@ -76,25 +86,37 @@ def test_format(clip, cfg):
         np.testing.assert_allclose(T[3], [0, 0, 0, 1])
 
 
-@pytest.mark.xfail(strict=True, reason="open issue: T1 thresholds miss a 5 degree rotation on small objects")
-def test_t1_detects_pose_errors(clip):
-    """Negative control: T1 must fail when the GT pose is off by a small rotation or shift."""
-    k, t = 1, clip.num_frames // 2
-    points, normals = sample_surface(load_canonical_mesh(clip.asset_path(k, "mesh")), 10_000, seed=k)
-    obj = dict(clip.objects[k - 1])
-    a = np.radians(5.0)
-    tilt = np.array([[1, 0, 0], [0, np.cos(a), -np.sin(a)], [0, np.sin(a), np.cos(a)]])
-    args = (clip.K, clip.T_cw[t], clip.amodal(k, t), clip.visible(t) == k, clip.depth(t))
+@pytest.mark.sampled
+def test_t1b_raycast_consistency(clip):
+    """Blender's masks and depth must match an independent ray-cast of the GT-posed mesh."""
+    report = []
+    for k in range(1, clip.num_objects + 1):
+        mesh = load_canonical_mesh(clip.asset_path(k, "mesh"))
+        for t in range(clip.num_frames):
+            m = raycast_consistency(
+                mesh, clip.objects[k - 1], clip.K, clip.T_cw[t],
+                clip.amodal(k, t), clip.visible(t) == k, clip.depth(t),
+            )
+            if t1b_fails(m):
+                report.append(f"k={k} t={t} {m}")
+    assert not report, "\n".join(report[:10])
 
-    def fails(o):
-        m = projection_consistency(points, normals, o, *args)
-        return (
-            m["points_in_amodal"] < 0.95
-            or m["amodal_coverage"] < 0.90
-            or not m["median_depth_err"] < 0.01 * clip.meta["orbit_radius"]
-        )
 
-    assert not fails(obj)
-    assert fails({**obj, "R_wo": obj["R_wo"] @ tilt})
-    shift = 0.1 * obj["s_wo"][0] * np.linalg.inv(clip.T_cw[t][:3, :3])[:, 0]
-    assert fails({**obj, "t_wo": obj["t_wo"] + shift})
+@pytest.mark.sampled
+def test_t1b_detects_convention_errors(clip):
+    """Negative controls: a 5 deg rotation, a 0.1*s shift and a half-pixel principal point shift must fail."""
+    t = clip.num_frames // 2
+    for k in range(1, clip.num_objects + 1):
+        mesh = load_canonical_mesh(clip.asset_path(k, "mesh"))
+        obj = clip.objects[k - 1]
+        masks = (clip.amodal(k, t), clip.visible(t) == k, clip.depth(t))
+        check = lambda o, K=clip.K: t1b_fails(raycast_consistency(mesh, o, K, clip.T_cw[t], *masks))
+        a = np.radians(5.0)
+        tilt = np.array([[1, 0, 0], [0, np.cos(a), -np.sin(a)], [0, np.sin(a), np.cos(a)]])
+        shift = 0.1 * obj["s_wo"][0] * clip.T_cw[t][:3, :3].T[:, 0]
+        K_shift = clip.K.copy()
+        K_shift[0, 2] += 0.5
+        assert not check(obj)
+        assert check({**obj, "R_wo": obj["R_wo"] @ tilt}), f"k={k}: 5 deg rotation not detected"
+        assert check({**obj, "t_wo": obj["t_wo"] + shift}), f"k={k}: 0.1*s shift not detected"
+        assert check(obj, K_shift), f"k={k}: half-pixel principal point shift not detected"

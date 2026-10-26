@@ -23,7 +23,9 @@ class Config:
     placement_radius_base: float = 1.0
     max_placement_attempts: int = 20000
 
-    orbit_factor_range: tuple[float, float] = (1.1, 1.6)
+    # Applied to the tight scene radius (actual geometry, not bounding cubes). Below ~1.1 the
+    # scene sphere may exceed the frame: at (1.0, 1.4), 3% of objects are truncated in some frame.
+    orbit_factor_range: tuple[float, float] = (1.0, 1.4)
     start_elevation_range_deg: tuple[float, float] = (10.0, 45.0)
     arc_span_range_deg: tuple[float, float] = (10.0, 70.0)
     elevation_drift_range_deg: tuple[float, float] = (-10.0, 10.0)

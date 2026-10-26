@@ -66,10 +66,10 @@ def rng_for(seed: int, *stream: int) -> np.random.Generator:
     return np.random.Generator(np.random.PCG64(np.random.SeedSequence([seed, *stream])))
 
 
-def plan_attempt(cfg: Config, rng: np.random.Generator, asset_ids: list[str], bg_size: tuple[int, int]):
+def plan_attempt(cfg: Config, rng: np.random.Generator, asset_ids: list[str], centers: list[np.ndarray], bg_size: tuple[int, int]):
     """Layout, trajectory and arc resampling until the background covers every frame."""
     objects = sample_layout(rng, cfg, asset_ids)
-    center, radius = scene_extent(objects)
+    center, radius = scene_extent(objects, centers)
     traj = sample_trajectory(rng, cfg, center, radius)
     K = intrinsics(cfg.width, cfg.height, cfg.hfov_deg)
     K_bg = background_K(*bg_size, cfg.bg_hfov_deg)
@@ -139,7 +139,7 @@ def generate_clip(cfg: Config, split: str, seed: int, out_root: Path) -> dict:
     for attempt in range(cfg.max_retries):
         rng = rng_for(seed, 1, attempt)
         try:
-            objects, traj, frames, ref, arc_retries = plan_attempt(cfg, rng, asset_ids, bg_size)
+            objects, traj, frames, ref, arc_retries = plan_attempt(cfg, rng, asset_ids, centers, bg_size)
             precheck(cfg, K, frames, objects, centers)
         except (PlacementError, ClipRejected) as e:
             rejections.append({"attempt": attempt, "stage": "plan", "reason": str(e)})
