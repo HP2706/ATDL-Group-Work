@@ -31,7 +31,7 @@ Resume by reading this file, then `docs/dataset_spec.md` (already updated with t
    - tighten T1 (dilation 1 px, or a depth limit relative to object size);
    - add an IoU check between the rendered amodal mask and a silhouette rasterized from the GT pose.
 2. **Objects are small in frame.** Because the orbit distance scales with the scene radius and `ρ(N)` grows with N, multi-object clips have tiny objects (largest amodal mask in the dev clip is about 2% of the image). Measure the distribution over around 50 seeds and decide whether to keep the spec as is.
-3. **CPU time.** About 65 s per clip, with high CPU use (7 min of user time). OIDN probably runs on the CPU; also check samples/denoiser and the cost of the amodal passes.
+3. **CPU time:** resolved. BlenderProc's "INTEL" denoiser was a CPU compositor node; switched to OptiX, GPU only. 57 s -> 19 s per clip.
 4. **DATASET.md** not written yet. The consumer-facing format doc is `docs/data_format.md`.
 5. **Geometric filter:** scores are computed per asset (`meta.json` `filter_scores`); thresholds and the contact sheet come at M2.
 

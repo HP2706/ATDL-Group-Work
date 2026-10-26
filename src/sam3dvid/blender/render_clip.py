@@ -61,6 +61,9 @@ def main(scene_path, out_path):
         bproc.camera.add_camera_pose(np.array(M))
 
     bproc.renderer.set_render_devices(desired_gpu_device_type=["OPTIX", "CUDA"])
+    # BlenderProc also enables the CPU as a Cycles device; keep it free for parallel jobs.
+    for device in bpy.context.preferences.addons["cycles"].preferences.devices:
+        device.use = device.type != "CPU"
     bproc.renderer.set_output_format(enable_transparency=True)
     bproc.renderer.enable_depth_output(activate_antialiasing=False)
     bproc.renderer.enable_segmentation_output(map_by=["category_id"], default_values={"category_id": 0})

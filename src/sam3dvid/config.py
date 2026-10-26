@@ -36,7 +36,8 @@ class Config:
     ambient_strength_range: tuple[float, float] = (0.15, 0.35)
 
     cycles_samples: int = 64
-    denoiser: str = "INTEL"
+    # BlenderProc's "INTEL" is a CPU compositor node (~1.2 s/frame); "OPTIX" runs inside Cycles on the GPU.
+    denoiser: str = "OPTIX"
 
     min_visible_frac_of_image: float = 0.002
     min_visible_over_amodal: float = 0.10
