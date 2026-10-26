@@ -1,0 +1,123 @@
+# All defaults. Condition and env files may only override keys that exist here
+# (the config is in struct mode, so a typo is an error).
+# `???` = must be set before use (OmegaConf raises MissingMandatoryValue on access).
+
+condition: base          # filled in by config.load_config
+env: local               # filled in by config.load_config
+run_name: ${condition}_seed${seed}
+seed: 0
+fake_sam3d: false        # use FakeSam3D (tests, dry runs)
+
+# Set in configs/env/*.yaml only.
+paths:
+  data_root: ???             # dataset/ (format v0.1)
+  output_root: ???           # persistent: runs, checkpoints, results
+  scratch_root: ???          # fast local disk: checkpoints first, staged data
+  cache_root: ???            # latents, eval features
+  sam3d_repo: ???            # checkout of facebookresearch/sam-3d-objects
+  sam3d_checkpoint_dir: ???  # downloaded SAM 3D checkpoints
+  hf_home: ???               # Hugging Face cache
+
+data:
+  train_split: train
+  val_split: ???             # held-out Objaverse clips; location to be agreed with Julian
+  eval_split: eval
+  stage_to_scratch: false    # if true, the shell script copies the split to scratch_root first
+  num_workers: 4
+  frame_stride: 2            # S = {o, o+2, ..., o+30}
+  num_subset_frames: 16
+  clip_lengths: [1, 4, 8, 16]
+  clip_length_probs: [0.15, 0.15, 0.2, 0.5]
+  p_occluded_bias: 0.5       # train: P(sample r proportional to 1 - visible_frac)
+  min_visible_amodal_frac: 0.02
+  crop:
+    scale: 1.25              # side = max(scale * longest union bbox side, min_side)
+    min_side: 128
+    size: 256                # resize target (V-JEPA input)
+    jitter_center: 0.1       # train: centre +- 10 % of the side
+    jitter_scale: [0.9, 1.1] # train: side x U(0.9, 1.1)
+
+encoder:
+  kv_source: vjepa           # vjepa | dinov2_ref | dinov2_clip
+  vjepa:
+    source: ???              # torch.hub or HF port; decided in P5
+    name: ???                # V-JEPA 2.1 ViT-L/16 entry name; decided in P5
+    image_size: 256
+    layers: last             # last | hierarchical (stretch)
+    dtype: bfloat16
+  dinov2:                    # SAM 3D's own DINOv2 weights (C1/C2)
+    image_size: 224
+    pair_average: false
+
+adapter:
+  d_cond: 1024               # VERIFY with inspect-sam3d
+  d_vid: 1024                # 4096 if encoder.vjepa.layers = hierarchical
+  n_blocks: 2
+  heads: 16
+  ffn_ratio: 2.0
+  max_dt: 7
+  use_object_embedding: true
+  use_time_embedding: true
+  query_sets: ???            # conditioning token sets used as queries; set from docs/sam3d_internals.md
+
+sam3d:
+  hf_repo: facebook/sam-3d-objects
+  activation_checkpointing: true
+  phase_a_layout: ???        # noise | zero_shot; set from inspect item 7
+
+sampler:                     # one setting for all conditions
+  steps: ???                 # from inspect item 4
+  cfg_scale: ???
+
+target:
+  # Signed permutation matrix (one of the 24 cube rotations) applied to GT voxels
+  # before VAE encoding. Set from the frame-test (T4).
+  canonical_permutation: [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+
+loss:
+  rotation_weight: 0.0       # 0 = Phase A (shape only); 0.1 in Phase B
+  tau_dist: logit_normal     # fallback if SAM 3D has no default (inspect item 5)
+  tau_mean: 0.0
+  tau_std: 1.0
+
+optim:
+  lr: 1.0e-4
+  betas: [0.9, 0.999]
+  weight_decay: 0.01         # not applied to gates, embeddings, LayerNorm
+  warmup_steps: 500
+  min_lr: 1.0e-6
+  grad_clip: 1.0
+  ema_decay: 0.999
+  gate_lr_mult: 1.0          # raise to 10 if tanh(gates) stay ~0 after 2k steps
+
+train:
+  batch_size: 2              # per GPU, from the benchmark
+  effective_batch_size: 32   # via gradient accumulation
+  max_steps: ???             # from the benchmark
+  bf16: true
+  log_every: 10
+  ckpt_every: 1000
+  resume: auto               # auto | none | <path to ckpt>
+  benchmark_steps: 20
+
+val:
+  loss_every: 1000
+  loss_num_samples: 200
+  tau_grid: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+  sample_every: 5000
+  sample_num_objects: 100
+
+eval:
+  k: 16
+  reference_rules: [middle, most_occluded]
+  middle_frame: 16
+  shuffle_frames: false
+  wrong_video: false
+
+logging:
+  tensorboard: false
+
+generator:                   # external generator (Julian); template to be confirmed
+  repo: ???
+  clips_per_shard: ???
+  command: "python {generator_repo}/generate.py --split {split} --seed-start {seed_start} --num-clips {num_clips} --out {out_dir}"

@@ -1,0 +1,11 @@
+# Local machine. Relative paths are relative to the current working directory.
+paths:
+  data_root: ${oc.env:DATA_ROOT,data/dataset}
+  output_root: ${oc.env:OUTPUT_ROOT,outputs}
+  scratch_root: ${oc.env:SCRATCH_ROOT,scratch}
+  cache_root: ${oc.env:CACHE_ROOT,cache}
+  sam3d_repo: ${oc.env:SAM3D_REPO,third_party/sam-3d-objects}
+  sam3d_checkpoint_dir: ${oc.env:SAM3D_CHECKPOINT_DIR,checkpoints/sam3d}
+  hf_home: ${oc.env:HF_HOME,${oc.env:HOME}/.cache/huggingface}
+data:
+  num_workers: 0

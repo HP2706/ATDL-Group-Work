@@ -1,0 +1,10 @@
+# Extras on top of the SAM 3D Objects environment (which provides torch, pytorch3d, kaolin).
+omegaconf>=2.3
+numpy
+pillow
+scipy
+matplotlib
+tqdm
+pytest
+huggingface_hub
+# V-JEPA 2.1 loading: added in P5 once the hub/HF route is chosen.
