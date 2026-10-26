@@ -1,11 +1,11 @@
 # Data, outputs, caches, weights (never commit)
-data/
-outputs/
-scratch/
-cache/
-checkpoints/
-third_party/
-runs/
+/data/
+/outputs/
+/scratch/
+/cache/
+/checkpoints/
+/third_party/
+/runs/
 *.pt
 *.pth
 *.ckpt

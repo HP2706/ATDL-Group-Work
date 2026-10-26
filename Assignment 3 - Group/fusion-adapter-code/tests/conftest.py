@@ -16,3 +16,18 @@ def pytest_collection_modifyitems(config, items):
     for item in items:
         if "gpu" in item.keywords:
             item.add_marker(skip)
+
+
+@pytest.fixture(scope="session")
+def fake_root(tmp_path_factory):
+    """Path of a fake v0.1 dataset (train + eval, 2 clips each, 64x64)."""
+    from tests.fixtures.make_fake_dataset import make_fake_dataset
+    return make_fake_dataset(tmp_path_factory.mktemp("dataset"))
+
+
+@pytest.fixture
+def fake_cfg(fake_root):
+    """Local config pointing at the fake dataset, with a crop size that fits 64x64 frames."""
+    from vidsam3d.config import load_config
+    return load_config("c3", "local", [f"paths.data_root={fake_root}", "data.crop.min_side=16",
+                                       "data.crop.size=32"])
