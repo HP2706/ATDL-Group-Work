@@ -14,6 +14,22 @@ def cmd_check_env(cfg, args) -> None:
     check_env(cfg, network=not args.offline)
 
 
+def cmd_cache_latents(cfg, args) -> None:
+    """Encode GT voxels of a split with the (fake or real) SAM 3D VAE encoder."""
+    from vidsam3d.data.targets import cache_latents
+    from vidsam3d.models.sam3d import build_sam3d
+    from vidsam3d.utils import pick_device, setup_logging
+    setup_logging()
+    device = pick_device(cfg.device)
+    cache_latents(cfg, args.split, build_sam3d(cfg, device), device)
+
+
+def cmd_train(cfg, args) -> None:
+    """Train an adapter, or benchmark 20 steps."""
+    from vidsam3d.train import train
+    train(cfg, benchmark=args.benchmark)
+
+
 def not_implemented(phase: str):
     """Return a handler for a command that arrives in a later phase."""
     def handler(cfg, args) -> None:
@@ -40,15 +56,15 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=not_implemented("P5"))
 
     p = sub.add_parser("cache-latents", parents=[common], help="encode GT voxels with the SAM 3D VAE")
-    p.add_argument("--split", choices=["train", "eval"], required=True)
-    p.set_defaults(func=not_implemented("P5"))
+    p.add_argument("--split", required=True, help="train | eval | the val split name")
+    p.set_defaults(func=cmd_cache_latents)
 
     p = sub.add_parser("frame-test", parents=[common], help="canonical-frame test T4")
     p.set_defaults(func=not_implemented("P5"))
 
     p = sub.add_parser("train", parents=[common], help="train an adapter")
     p.add_argument("--benchmark", action="store_true", help="20 steps; report s/step and memory")
-    p.set_defaults(func=not_implemented("P4"))
+    p.set_defaults(func=cmd_train)
 
     p = sub.add_parser("eval", parents=[common], help="write per-sample results.jsonl")
     p.add_argument("--run", required=True, help="<run_dir> | zero-shot | best-frame")

@@ -167,7 +167,7 @@ def build_sample(clip: reader.Clip, k: int, r: int, offset: int, clip_len: int,
     info = {
         "clip_id": clip.clip_id, "k": k, "r": r, "clip_len": clip_len, "offset": offset,
         "frame_ids": frame_ids, "crop_window": window, "reference_rules": reference_rules or [],
-        "asset_id": obj["asset_id"], "source": obj["source"],
+        "asset_id": obj["asset_id"], "source": obj["source"], "voxels": obj["voxels"],
         "visible_frac": float(reader.visibility(clip, "visible_frac")[r, k - 1]),
         "amodal_px": int(reader.visibility(clip, "amodal_px")[r, k - 1]),
         "arc_span_deg": float(clip.meta["arc_span_deg"]), "num_objects": clip.num_objects,
@@ -217,14 +217,16 @@ class ClipDataset(Dataset):
     def __len__(self) -> int:
         return len(self.index)
 
-    def __getitem__(self, i: int) -> dict:
+    def __getitem__(self, i: int | tuple[int, int]) -> dict:
+        """Item i; train samplers may pass (i, epoch) so the draw depends only on the position."""
+        i, epoch = i if isinstance(i, tuple) else (i, self.epoch)
         item = self.index[i]
         clip = reader.load_clip(self.data_root, self.entries[item["clip_id"]])
         k, d = item["k"], self.data_cfg
         if not self.train:
             return build_sample(clip, k, item["r"], 0, self.clip_len, d,
                                 reference_rules=item["rules"])
-        rng = np.random.default_rng([self.seed, self.epoch, i])
+        rng = np.random.default_rng([self.seed, epoch, i])
         offset = int(rng.integers(0, 2))
         subset = frame_subset(offset, d.num_subset_frames, d.frame_stride)
         vis_k = reader.visibility(clip)[:, k - 1]

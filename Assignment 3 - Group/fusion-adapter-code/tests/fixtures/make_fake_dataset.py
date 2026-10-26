@@ -160,8 +160,10 @@ def write_clip(root: Path, split: str, seed: int, size: int, solids: dict) -> di
             "path": f"clips/{split}/{clip_id}"}
 
 
-def make_fake_dataset(root: str | Path, size: int = 64, splits=("train", "eval")) -> Path:
-    """Write the fake dataset to `root` and return the path."""
+def make_fake_dataset(root: str | Path, size: int = 64, splits=("train", "eval"),
+                      seeds: dict[str, list[int]] | None = None) -> Path:
+    """Write the fake dataset to `root` and return the path (`seeds` overrides SPLIT_SEEDS)."""
+    seeds = seeds or SPLIT_SEEDS
     root = Path(root)
     solids = {name: solid_shape(name) for name in COLORS}
     lines = []
@@ -174,7 +176,7 @@ def make_fake_dataset(root: str | Path, size: int = 64, splits=("train", "eval")
             (asset / "meta.json").write_text(json.dumps(
                 {"source": "gso", "source_name": name, "license": "test",
                  "num_voxels": int(surface(solid).sum())}))
-        lines += [write_clip(root, split, seed, size, solids) for seed in SPLIT_SEEDS[split]]
+        lines += [write_clip(root, split, seed, size, solids) for seed in seeds[split]]
     (root / "manifest.jsonl").write_text("".join(json.dumps(line) + "\n" for line in lines))
     (root / "config.yaml").write_text("generator: make_fake_dataset\n")
     return root

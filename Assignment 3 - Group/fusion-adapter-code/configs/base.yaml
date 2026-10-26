@@ -7,6 +7,7 @@ env: local               # filled in by config.load_config
 run_name: ${condition}_seed${seed}
 seed: 0
 fake_sam3d: false        # use FakeSam3D (tests, dry runs)
+device: auto             # auto | cuda | cpu
 
 # Set in configs/env/*.yaml only.
 paths:
@@ -83,7 +84,7 @@ loss:
 optim:
   lr: 1.0e-4
   betas: [0.9, 0.999]
-  weight_decay: 0.01         # not applied to gates, embeddings, LayerNorm
+  weight_decay: 0.01         # not applied to gates, biases, embeddings, LayerNorm
   warmup_steps: 500
   min_lr: 1.0e-6
   grad_clip: 1.0
@@ -97,6 +98,7 @@ train:
   bf16: true
   log_every: 10
   ckpt_every: 1000
+  keep_ckpts: 3              # ckpt_<step>.pt kept in output_root/<run_name>
   resume: auto               # auto | none | <path to ckpt>
   benchmark_steps: 20
 
