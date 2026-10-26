@@ -37,6 +37,6 @@ Resume by reading this file, then `docs/dataset_spec.md` (already updated with t
 
 ## Next steps
 
-1. Resolve open issues 1-3 (T1 strength, object size, render CPU time).
+1. Resolve open issues 1-2 (T1 strength, object size).
 2. Write DATASET.md.
 3. Run T6 with SAM 3D, then M1 (500 eval clips, about 10 GB, roughly 8-9 h at the current speed).
