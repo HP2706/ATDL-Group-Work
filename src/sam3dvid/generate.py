@@ -1,12 +1,16 @@
 """Clip generation: seed -> clip folder (spec Sections 4.3-4.7 and 5).
 
 Usage:
-    uv run python -m sam3dvid.generate --config configs/m0.yaml --split eval --seeds 0 [1 2 ...]
+    uv run python -m sam3dvid.generate --config configs/m0.yaml --split eval --seeds 0 [1 2 ...] [--overwrite]
+
+Existing clips are skipped unless --overwrite is given; rejected or crashed seeds are appended
+to <dataset_root>/failures.jsonl and the run continues.
 """
 
 from __future__ import annotations
 
 import argparse
+import fcntl
 import json
 import shutil
 import subprocess
@@ -229,11 +233,23 @@ def generate_clip(cfg: Config, split: str, seed: int, out_root: Path) -> dict:
 
 def update_manifest(out_root: Path, entry: dict) -> None:
     path = out_root / "manifest.jsonl"
-    entries = {}
-    if path.exists():
-        entries = {e["clip_id"]: e for e in map(json.loads, path.read_text().splitlines()) if e}
-    entries[entry["clip_id"]] = entry
-    path.write_text("".join(json.dumps(e) + "\n" for _, e in sorted(entries.items())))
+    # Several workers may finish clips at once. flock is unreliable on NFS/Lustre; the
+    # manifest can always be rebuilt from the clips' meta.json.
+    with open(out_root / "manifest.lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        entries = {}
+        if path.exists():
+            entries = {e["clip_id"]: e for e in map(json.loads, path.read_text().splitlines()) if e}
+        entries[entry["clip_id"]] = entry
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text("".join(json.dumps(e) + "\n" for _, e in sorted(entries.items())))
+        tmp.replace(path)
+
+
+def log_failure(out_root: Path, split: str, seed: int, error: Exception) -> None:
+    line = json.dumps({"split": split, "seed": seed, "error": type(error).__name__, "message": str(error)})
+    with open(out_root / "failures.jsonl", "a") as f:
+        f.write(line + "\n")
 
 
 def main() -> None:
@@ -241,15 +257,23 @@ def main() -> None:
     ap.add_argument("--config", default=None)
     ap.add_argument("--split", choices=["train", "eval"], required=True)
     ap.add_argument("--seeds", type=int, nargs="+", required=True)
+    ap.add_argument("--overwrite", action="store_true", help="regenerate clips that already exist")
     args = ap.parse_args()
     cfg = Config.load(args.config)
     out_root = Path(cfg.dataset_root)
     out_root.mkdir(parents=True, exist_ok=True)
     (out_root / "config.yaml").write_text(yaml.safe_dump(cfg.to_dict(), sort_keys=False))
     for seed in args.seeds:
-        entry = generate_clip(cfg, args.split, seed, out_root)
+        if not args.overwrite and (out_root / "clips" / args.split / f"{seed:08d}" / "meta.json").exists():
+            continue
+        try:
+            entry = generate_clip(cfg, args.split, seed, out_root)
+        except (ClipRejected, subprocess.CalledProcessError) as e:
+            log_failure(out_root, args.split, seed, e)
+            print(f"FAILED seed {seed}: {type(e).__name__}", flush=True)
+            continue
         update_manifest(out_root, entry)
-        print(json.dumps(entry))
+        print(json.dumps(entry), flush=True)
 
 
 if __name__ == "__main__":

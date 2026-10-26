@@ -9,3 +9,4 @@ third_party/
 *.pdf
 .claude/settings.local.json
 .claude/.cc-writes/
+logs/

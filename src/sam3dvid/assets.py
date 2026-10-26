@@ -10,6 +10,7 @@ import argparse
 import json
 import re
 import shutil
+import subprocess
 import tempfile
 from pathlib import Path
 
@@ -79,12 +80,15 @@ def gso_models(raw: Path, limit: int | None) -> list[Path]:
     return models[:limit] if limit else models
 
 
-def preprocess_gso(cfg: Config, raw: Path, split: str, limit: int | None) -> None:
+def preprocess_gso(cfg: Config, raw: Path, split: str, limit: int | None, chunk: int = 50) -> None:
     out_root = Path(cfg.dataset_root) / "assets" / split
     models = [m for m in gso_models(raw, limit) if not (out_root / asset_id_for(m.name) / "meta.json").exists()]
-    print(f"{len(models)} GSO models to process")
-    if not models:
-        return
+    print(f"{len(models)} GSO models to process", flush=True)
+    for i in range(0, len(models), chunk):
+        preprocess_gso_chunk(cfg, models[i : i + chunk], out_root)
+
+
+def preprocess_gso_chunk(cfg: Config, models: list[Path], out_root: Path) -> None:
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
         jobs = [
@@ -92,31 +96,42 @@ def preprocess_gso(cfg: Config, raw: Path, split: str, limit: int | None) -> Non
             for m in models
         ]
         (tmp / "jobs.json").write_text(json.dumps(jobs))
-        run_blenderproc("normalize_assets.py", str(tmp / "jobs.json"), install_path=cfg.blender_install_path)
+        try:
+            run_blenderproc("normalize_assets.py", str(tmp / "jobs.json"), install_path=cfg.blender_install_path)
+        except subprocess.CalledProcessError as e:
+            # Assets Blender finished before the crash are still post-processed below.
+            print(f"FAILED Blender chunk ({e.returncode}); keeping finished assets", flush=True)
 
     for m in models:
         out = out_root / asset_id_for(m.name)
         if not (out / "normalize.json").exists():
-            print(f"FAILED {m.name}: no Blender output")
+            print(f"FAILED {m.name}: no Blender output", flush=True)
             continue
-        indices = trellis_voxelize(out / "mesh.ply")
-        voxels = np.zeros((GRID,) * 3, bool)
-        voxels[tuple(indices.T)] = True
-        np.save(out / "voxels.npy", voxels)
-        mesh = trimesh.load(out / "mesh.ply", force="mesh", process=False)
-        meta = {
-            "asset_id": out.name,
-            "source": "gso",
-            "source_name": m.name,
-            "license": "CC-BY-4.0",
-            "normalization": json.loads((out / "normalize.json").read_text()),
-            "num_voxels": int(voxels.sum()),
-            "filter_scores": geometric_scores(mesh),
-        }
-        (out / "meta.json").write_text(json.dumps(meta, indent=1))
-        (out / "normalize.json").unlink()
-        (out / "mesh.ply").unlink()
-        print(f"ok {out.name}: {meta['num_voxels']} voxels")
+        try:
+            postprocess_gso(m, out)
+        except Exception as e:
+            print(f"FAILED {m.name}: {type(e).__name__}: {e}", flush=True)
+
+
+def postprocess_gso(m: Path, out: Path) -> None:
+    indices = trellis_voxelize(out / "mesh.ply")
+    voxels = np.zeros((GRID,) * 3, bool)
+    voxels[tuple(indices.T)] = True
+    np.save(out / "voxels.npy", voxels)
+    mesh = trimesh.load(out / "mesh.ply", force="mesh", process=False)
+    meta = {
+        "asset_id": out.name,
+        "source": "gso",
+        "source_name": m.name,
+        "license": "CC-BY-4.0",
+        "normalization": json.loads((out / "normalize.json").read_text()),
+        "num_voxels": int(voxels.sum()),
+        "filter_scores": geometric_scores(mesh),
+    }
+    (out / "meta.json").write_text(json.dumps(meta, indent=1))
+    (out / "normalize.json").unlink()
+    (out / "mesh.ply").unlink()
+    print(f"ok {out.name}: {meta['num_voxels']} voxels", flush=True)
 
 
 def main() -> None:
