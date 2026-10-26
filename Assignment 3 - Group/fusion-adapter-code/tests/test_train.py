@@ -13,7 +13,8 @@ from vidsam3d.data.samples import ClipDataset
 from vidsam3d.data.targets import apply_canonical_permutation, cache_latents, load_latent
 from vidsam3d.models.adapter import VideoFusionAdapter, build_adapter
 from vidsam3d.models.encoders import build_kv_encoder
-from vidsam3d.models.sam3d import FakeSam3D, apply_adapter, build_sam3d
+from vidsam3d.models.fake_sam3d import FakeSam3D
+from vidsam3d.models.sam3d import apply_adapter, build_sam3d
 from vidsam3d.train import StreamBatchSampler, lr_factor, param_groups, train, val_flow_loss
 from vidsam3d.utils import read_jsonl
 
@@ -131,10 +132,21 @@ def test_gradients_reach_conditioning_tokens_through_checkpointed_blocks():
     mask[:, 20:40, 10:30] = True
     cond = {k: v.clone().requires_grad_(True) for k, v in sam3d.condition(rgb, mask).items()}
     x = torch.randn(2, *sam3d.latent_shape)
-    v, _ = sam3d.velocity(x, torch.rand(2), cond, torch.randn(2, *sam3d.layout_shape))
+    layout = {k: torch.randn(2, *s) for k, s in sam3d.layout_shape.items()}
+    v, _ = sam3d.velocity(x, torch.rand(2), cond, layout)
     v.sum().backward()
     assert all(c.grad.abs().sum() > 0 for c in cond.values())
     assert all(p.grad is None for p in sam3d.parameters())
+
+
+def test_fake_shape_velocity_ignores_layout_input():
+    """Like SAM 3D's MoT (internals item 7): shape tokens do not attend to layout tokens."""
+    sam3d = FakeSam3D(d=D)
+    cond = {k: torch.randn(1, 4, D) for k in ("crop", "full", "mask")}
+    x, tau = torch.randn(1, *sam3d.latent_shape), torch.rand(1)
+    v1, l1 = sam3d.velocity(x, tau, cond, {"layout": torch.randn(1, 1, 8)})
+    v2, l2 = sam3d.velocity(x, tau, cond, {"layout": torch.randn(1, 1, 8)})
+    assert torch.allclose(v1, v2) and not torch.allclose(l1["layout"], l2["layout"])
 
 
 def test_apply_adapter_only_changes_query_sets():

@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 import torch
 
+from vidsam3d.config import load_config
 from vidsam3d.data import reader, samples
 from vidsam3d.data.samples import ClipDataset
 
@@ -134,3 +135,14 @@ def test_leakage_guard(fake_cfg):
         with pytest.raises(AssertionError):
             samples.check_no_leakage({**sample["inputs"], bad: 0})
     assert not set(sample["inputs"]) & {"amodal", "depth", "R_co", "t_co", "K", "cameras"}
+
+
+def test_val_split_lives_in_its_own_folders(tmp_path):
+    from tests.fixtures.make_fake_dataset import make_fake_dataset
+    root = make_fake_dataset(tmp_path, splits=("train", "val"))
+    cfg = load_config("c3", "local", [f"paths.data_root={root}", "data.crop.min_side=16",
+                                      "data.crop.size=32"])
+    assert cfg.data.val_split == "val"
+    ds = ClipDataset(cfg, cfg.data.val_split, train=False)
+    assert {x["clip_id"] for x in ds.index} == {"00000200", "00000201"}
+    assert (root / "clips/val").is_dir() and (root / "assets/val").is_dir()

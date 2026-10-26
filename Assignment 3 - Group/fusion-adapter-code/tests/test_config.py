@@ -91,4 +91,4 @@ def test_check_env_cli_runs(capsys):
 
 def test_unimplemented_command_exits_cleanly():
     with pytest.raises(SystemExit, match="not implemented"):
-        main(["frame-test", "--env", "local"])
+        main(["analyze", "--env", "local", "--results", "a.jsonl"])

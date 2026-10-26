@@ -8,3 +8,4 @@ paths:
   sam3d_repo: ${oc.env:SAM3D_REPO,${oc.env:PROJECT_DIR,/work/vidsam3d}/sam-3d-objects}
   sam3d_checkpoint_dir: ${oc.env:SAM3D_CHECKPOINT_DIR,${oc.env:PROJECT_DIR,/work/vidsam3d}/checkpoints/sam3d}
   hf_home: ${oc.env:HF_HOME,${oc.env:PROJECT_DIR,/work/vidsam3d}/hf_home}
+  vjepa2_repo: ${oc.env:VJEPA2_REPO,${oc.env:PROJECT_DIR,/work/vidsam3d}/vjepa2}

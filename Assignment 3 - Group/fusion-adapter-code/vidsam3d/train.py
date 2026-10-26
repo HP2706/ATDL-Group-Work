@@ -128,19 +128,24 @@ def adapted_condition(sam3d, encoder, adapter, batch: list[dict], cfg: DictConfi
                          list(cfg.adapter.query_sets), v["kv_padding_mask"])
 
 
-def layout_input(sam3d, mode: str, rgb, mask, tau, gen) -> torch.Tensor:
-    """Phase A layout tokens: pure noise, or SAM 3D's zero-shot layout noised with the same τ."""
-    noise = torch.randn((len(rgb), *sam3d.layout_shape), generator=gen, device=rgb.device)
+def layout_input(sam3d, mode: str, rgb, mask, tau, gen) -> dict:
+    """Phase A layout latents: pure noise, or SAM 3D's zero-shot layout noised with the same τ.
+
+    With the real model the choice cannot change v_shape (shape tokens do not attend to layout
+    tokens, docs/sam3d_internals.md item 7), so `noise` is the default.
+    """
+    noise = {k: torch.randn((len(rgb), *shape), generator=gen, device=rgb.device)
+             for k, shape in sam3d.layout_shape.items()}
     if mode == "noise":
         return noise
     if mode == "zero_shot":
         l1 = sam3d.zero_shot_layout(rgb, mask)
-        t = tau.view(-1, *[1] * (noise.dim() - 1))
-        return t * l1 + (1 - t) * noise
+        t = lambda x: tau.view(-1, *[1] * (x.dim() - 1))
+        return {k: t(n) * l1[k] + (1 - t(n)) * n for k, n in noise.items()}
     raise ValueError(f"unknown sam3d.phase_a_layout {mode!r}")
 
 
-def flow_loss(sam3d, cond: dict, x1, tau, x0, layout) -> torch.Tensor:
+def flow_loss(sam3d, cond: dict, x1, tau, x0, layout: dict) -> torch.Tensor:
     """Rectified flow matching: || (x1 - x0) - v(τ x1 + (1 - τ) x0) ||^2 (mean)."""
     t = tau.view(-1, *[1] * (x1.dim() - 1))
     v_shape, _ = sam3d.velocity(t * x1 + (1 - t) * x0, tau, cond, layout)

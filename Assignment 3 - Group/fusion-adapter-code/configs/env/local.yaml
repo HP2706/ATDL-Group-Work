@@ -7,5 +7,6 @@ paths:
   sam3d_repo: ${oc.env:SAM3D_REPO,third_party/sam-3d-objects}
   sam3d_checkpoint_dir: ${oc.env:SAM3D_CHECKPOINT_DIR,checkpoints/sam3d}
   hf_home: ${oc.env:HF_HOME,${oc.env:HOME}/.cache/huggingface}
+  vjepa2_repo: ${oc.env:VJEPA2_REPO,third_party/vjepa2}
 data:
   num_workers: 0

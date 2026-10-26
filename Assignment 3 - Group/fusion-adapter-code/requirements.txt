@@ -7,4 +7,5 @@ matplotlib
 tqdm
 pytest
 huggingface_hub
-# V-JEPA 2.1 loading: added in P5 once the hub/HF route is chosen.
+# V-JEPA 2.1 is loaded from the pinned facebookresearch/vjepa2 checkout (paths.vjepa2_repo);
+# its deps (timm, einops) are already in the SAM 3D environment.

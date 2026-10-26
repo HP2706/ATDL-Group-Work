@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import itertools
 import json
 import logging
 from pathlib import Path
@@ -9,6 +10,7 @@ from pathlib import Path
 import numpy as np
 import torch
 from omegaconf import DictConfig
+from scipy import ndimage
 
 from vidsam3d.data import reader
 from vidsam3d.metrics import voxel_iou
@@ -27,6 +29,23 @@ def apply_canonical_permutation(vox: np.ndarray, P) -> np.ndarray:
         if row[order[i]] < 0:
             out = np.flip(out, axis=i)
     return np.ascontiguousarray(out)
+
+
+def cube_rotations() -> list[np.ndarray]:
+    """The 24 rotations of the cube as signed permutation matrices (det = +1), identity first."""
+    mats = []
+    for perm in itertools.permutations(range(3)):
+        for signs in itertools.product((1, -1), repeat=3):
+            P = np.zeros((3, 3), dtype=int)
+            P[range(3), perm] = signs
+            if round(np.linalg.det(P)) == 1:
+                mats.append(P)
+    return mats
+
+
+def fill_voxels(vox: np.ndarray) -> np.ndarray:
+    """Solid occupancy from surface occupancy (fills enclosed cavities)."""
+    return ndimage.binary_fill_holes(vox)
 
 
 def latent_path(cache_root: str | Path, asset_id: str) -> Path:
@@ -49,9 +68,13 @@ def split_assets(data_root: str | Path, split: str) -> list[tuple[str, str]]:
 
 
 def target_voxels(data_root: str | Path, rel_path: str, cfg: DictConfig) -> np.ndarray:
-    """GT voxels in SAM 3D's canonical frame (after target.canonical_permutation)."""
-    return apply_canonical_permutation(reader.load_voxels(data_root, rel_path),
-                                       cfg.target.canonical_permutation)
+    """GT voxels as SAM 3D sees them: canonical_permutation applied, filled if voxel_fill=solid."""
+    vox = apply_canonical_permutation(reader.load_voxels(data_root, rel_path),
+                                      cfg.target.canonical_permutation)
+    if cfg.target.voxel_fill == "solid":
+        return fill_voxels(vox)
+    assert cfg.target.voxel_fill == "surface", f"unknown target.voxel_fill {cfg.target.voxel_fill!r}"
+    return vox
 
 
 @torch.no_grad()

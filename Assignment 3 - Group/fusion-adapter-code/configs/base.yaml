@@ -18,10 +18,11 @@ paths:
   sam3d_repo: ???            # checkout of facebookresearch/sam-3d-objects
   sam3d_checkpoint_dir: ???  # downloaded SAM 3D checkpoints
   hf_home: ???               # Hugging Face cache
+  vjepa2_repo: ???           # checkout of facebookresearch/vjepa2 (pinned commit, see scripts)
 
 data:
   train_split: train
-  val_split: ???             # held-out Objaverse clips; location to be agreed with Julian
+  val_split: val             # held-out Objaverse clips in their own split folders (clips/val, assets/val)
   eval_split: eval
   stage_to_scratch: false    # if true, the shell script copies the split to scratch_root first
   num_workers: 4
@@ -41,8 +42,8 @@ data:
 encoder:
   kv_source: vjepa           # vjepa | dinov2_ref | dinov2_clip
   vjepa:
-    source: ???              # torch.hub or HF port; decided in P5
-    name: ???                # V-JEPA 2.1 ViT-L/16 entry name; decided in P5
+    name: vjepa2_1_vit_large_384     # only V-JEPA 2.1 ViT-L/16 release (RoPE, runs at 256 px)
+    weights_url: https://dl.fbaipublicfiles.com/vjepa2   # pinned code points at localhost
     image_size: 256
     layers: last             # last | hierarchical (stretch)
     dtype: bfloat16
@@ -59,21 +60,23 @@ adapter:
   max_dt: 7
   use_object_embedding: true
   use_time_embedding: true
-  query_sets: ???            # conditioning token sets used as queries; set from docs/sam3d_internals.md
+  query_sets: ???            # names of the two RGB sets; printed by `inspect-sam3d` (internals item 1)
 
 sam3d:
   hf_repo: facebook/sam-3d-objects
   activation_checkpointing: true
-  phase_a_layout: ???        # noise | zero_shot; set from inspect item 7
+  phase_a_layout: noise      # shape tokens do not attend to layout tokens (internals item 7)
 
-sampler:                     # one setting for all conditions
-  steps: ???                 # from inspect item 4
-  cfg_scale: ???
+sampler:                     # one setting for all conditions (internals item 4, open question A)
+  mode: shortcut             # shortcut: distilled, d = 1/steps, no CFG | flow: d = 0 with CFG
+  steps: 4
+  cfg_scale: null            # flow mode only; null = the pipeline's ss_cfg_strength
 
 target:
   # Signed permutation matrix (one of the 24 cube rotations) applied to GT voxels
   # before VAE encoding. Set from the frame-test (T4).
   canonical_permutation: [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+  voxel_fill: surface        # surface (voxels.npy as is) | solid (fill interior); set from T5
 
 loss:
   rotation_weight: 0.0       # 0 = Phase A (shape only); 0.1 in Phase B

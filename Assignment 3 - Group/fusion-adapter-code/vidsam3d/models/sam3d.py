@@ -1,22 +1,29 @@
-"""SAM 3D Geometry wrapper (Stage 1 only) and FakeSam3D with the same interface.
+"""Frozen SAM 3D Objects Geometry model (Stage 1 only), wrapped without changing its source.
 
-Interface (both classes):
-  condition(rgb, mask)                 -> dict[name -> (B, N, d)] conditioning tokens (no grad)
-  velocity(x_tau, tau, cond, layout)   -> (v_shape, v_layout)
-  sample(cond, seeds, sampler_cfg)     -> (shape latent, layout); CFG null branch never adapted
-  encode_voxels(vox) / decode_latent(z) 64^3 bool <-> normalised shape latent
-  zero_shot_layout(rgb, mask)          -> layout used as x1 for the layout tokens in Phase A
-  latent_shape, layout_shape           per-sample tensor shapes
-`apply_adapter` (a plain function) replaces the query token sets with the adapter output.
+Interface (shared with FakeSam3D in fake_sam3d.py):
+  condition(rgb, mask)               -> dict[name -> (B, N, d)] conditioning token sets (no grad)
+  velocity(x_tau, tau, cond, layout) -> (v_shape, dict of v_layout); d = 0 (flow matching)
+  sample(cond, seeds, sampler_cfg)   -> (shape latent, layout dict); CFG null branch = zeros
+  encode_voxels(vox) / decode_latent(z)  64^3 bool <-> shape latent (no normalisation)
+  zero_shot_layout(rgb, mask)        -> layout dict sampled without the adapter
+  latent_shape, layout_shape         per-sample shapes; layout_shape is {name: shape}
+See docs/sam3d_internals.md for where each behaviour comes from in the SAM 3D code.
 """
 
 from __future__ import annotations
 
+import logging
+import os
+import sys
+from pathlib import Path
+
+import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from omegaconf import DictConfig
-from torch.utils.checkpoint import checkpoint
+from omegaconf import DictConfig, OmegaConf
+
+log = logging.getLogger("vidsam3d")
+STAGE2_MODELS = ("slat_generator", "slat_decoder_gs", "slat_decoder_gs_4", "slat_decoder_mesh")
 
 
 def apply_adapter(cond: dict, adapter: nn.Module, tokens, coverage, dt, query_sets,
@@ -30,136 +37,165 @@ def apply_adapter(cond: dict, adapter: nn.Module, tokens, coverage, dt, query_se
     return {**cond, **dict(zip(query_sets, out.split(sizes, dim=1)))}
 
 
+def import_sam3d(repo: str | Path) -> None:
+    """Make `sam3d_objects` importable without running its heavy package init."""
+    os.environ.setdefault("LIDRA_SKIP_INIT", "1")
+    repo = str(Path(repo).resolve())
+    assert Path(repo, "sam3d_objects").is_dir(), f"no sam3d_objects package in {repo}"
+    if repo not in sys.path:
+        sys.path.insert(0, repo)
+
+
 class Sam3DGeometry(nn.Module):
-    """Frozen SAM 3D Objects Geometry model. Implemented in P5 after `inspect-sam3d`."""
+    """The official InferencePipelinePointMap, reduced to its Stage-1 modules and frozen."""
 
-    def __init__(self, cfg: DictConfig):
+    def __init__(self, cfg: DictConfig, device: torch.device):
         super().__init__()
-        raise NotImplementedError("Sam3DGeometry arrives in P5 (see docs/sam3d_internals.md); "
-                                  "use --fake-sam3d for dry runs")
+        import_sam3d(cfg.paths.sam3d_repo)
+        from hydra.utils import instantiate
 
+        ckpt_dir = Path(cfg.paths.sam3d_checkpoint_dir)
+        pcfg = OmegaConf.load(ckpt_dir / "pipeline.yaml")
+        pcfg.workspace_dir, pcfg.device = str(ckpt_dir), str(device)
+        pcfg.rendering_engine, pcfg.compile_model = "pytorch3d", False
+        if pcfg.get("ss_encoder_ckpt_path") is None and (ckpt_dir / "ss_encoder.ckpt").is_file():
+            pcfg.ss_encoder_config_path, pcfg.ss_encoder_ckpt_path = "ss_encoder.yaml", "ss_encoder.ckpt"
+        self.pipeline_cfg = pcfg
+        self.pipeline = instantiate(pcfg)
+        for name in STAGE2_MODELS:                       # never run Texture & Refinement
+            if name in self.pipeline.models:
+                del self.pipeline.models[name]
+        self.pipeline.condition_embedders["slat_condition_embedder"] = None
+        torch.cuda.empty_cache()
 
-class FakeSam3D(nn.Module):
-    """Tiny frozen random transformer with the Sam3DGeometry interface (CPU, for tests)."""
-
-    QUERY_SETS = ["crop", "full"]
-
-    def __init__(self, d: int = 32, n_layers: int = 2, heads: int = 4, img: int = 32,
-                 patch: int = 8, activation_checkpointing: bool = False, seed: int = 0):
-        super().__init__()
-        self.img, self.patch = img, patch
-        self.latent_shape = (8, 4, 4, 4)    # (C, r, r, r): 8 = 2x2x2 sub-cells of an 8^3 grid
-        self.layout_shape = (1, 8)          # one layout token
-        self.activation_checkpointing = activation_checkpointing
-        with torch.random.fork_rng():       # fixed weights without touching the global RNG
-            torch.manual_seed(seed)
-            self.patch_embed = nn.Linear(3 * patch * patch, d)      # stands in for DINOv2
-            self.mask_embed = nn.Linear(patch * patch, d)
-            self.modality = nn.Parameter(torch.randn(3, d) * 0.5)   # crop, full, mask
-            self.latent_in, self.latent_out = nn.Linear(8, d), nn.Linear(d, 8)
-            self.layout_in, self.layout_out = nn.Linear(8, d), nn.Linear(d, 8)
-            self.tau_embed = nn.Sequential(nn.Linear(1, d), nn.SiLU(), nn.Linear(d, d))
-            self.pos = nn.Parameter(torch.randn(64, d) * 0.5)
-            self.layers = nn.ModuleList(
-                nn.TransformerEncoderLayer(d, heads, 2 * d, dropout=0.0, batch_first=True,
-                                           norm_first=True) for _ in range(n_layers))
+        self.embedder = self.pipeline.condition_embedders["ss_condition_embedder"]
+        self.generator = self.pipeline.models["ss_generator"]
+        self.decoder = self.pipeline.models["ss_decoder"]
+        self.encoder = self.pipeline.models["ss_encoder"]
+        self.backbone = self.generator.reverse_fn.backbone
+        self.dtype = self.pipeline.shape_model_dtype
+        self.device_ = torch.device(device)
+        self.sampler_cfg = cfg.sampler
         self.requires_grad_(False)
         self.eval()
+        for block in self.backbone.blocks:
+            block.use_checkpoint = bool(cfg.sam3d.activation_checkpointing)
+
+        assert self.embedder is not None, "pipeline has no ss_condition_embedder"
+        assert getattr(self.embedder, "compression_projection_multiplier", 0) == 0, \
+            "condition sets are fused along channels; cannot split them into token sets"
+        self.set_names = [name for _, info in self.embedder.embedder_list for name, _ in info]
+        mapping = self.backbone.latent_mapping
+        assert "shape" in mapping, f"no 'shape' latent in {list(mapping)}"
+        shape_of = lambda m: (m.pos_emb.shape[0], m.input_layer.in_features)
+        self.latent_shape = shape_of(mapping["shape"])
+        self.layout_shape = {k: shape_of(m) for k, m in mapping.items() if k != "shape"}
+        self._lengths: list[int] = []
+        for module in self.embedder.module_list:
+            module.register_forward_hook(lambda mod, inp, out: self._lengths.append(out.shape[1]))
+
+    def _autocast(self):
+        return torch.autocast(device_type="cuda", dtype=self.dtype)
 
     # ---- conditioning ----
 
-    def _patch_tokens(self, x: torch.Tensor) -> torch.Tensor:
-        """(B, C, img, img) -> (B, (img/patch)^2, C * patch^2) in raster order."""
-        return F.unfold(x, self.patch, stride=self.patch).transpose(1, 2)
-
     @torch.no_grad()
     def condition(self, rgb: torch.Tensor, mask: torch.Tensor) -> dict[str, torch.Tensor]:
-        """rgb (B, H, W, 3) uint8, mask (B, H, W) bool -> crop / full / mask token sets."""
-        img = rgb.permute(0, 3, 1, 2).float() / 255.0
-        full = F.interpolate(img, size=(self.img, self.img), mode="bilinear", align_corners=False)
-        crops = []
-        for b in range(len(img)):
-            ys, xs = torch.nonzero(mask[b], as_tuple=True)
-            patch = img[b:b + 1, :, ys.min():ys.max() + 1, xs.min():xs.max() + 1]
-            crops.append(F.interpolate(patch, size=(self.img, self.img), mode="bilinear",
-                                       align_corners=False))
-        m = F.interpolate(mask[:, None].float(), size=(self.img, self.img), mode="area")
-        return {"crop": self.patch_embed(self._patch_tokens(torch.cat(crops))) + self.modality[0],
-                "full": self.patch_embed(self._patch_tokens(full)) + self.modality[1],
-                "mask": self.mask_embed(self._patch_tokens(m)) + self.modality[2]}
-
-    def null_condition(self, cond: dict) -> dict:
-        """Unconditional branch for CFG (zeros); built from the unadapted structure only."""
-        return {name: torch.zeros_like(c) for name, c in cond.items()}
+        """rgb (B, H, W, 3) uint8, mask (B, H, W) bool -> named conditioning token sets."""
+        p = self.pipeline
+        tokens = []
+        for b in range(len(rgb)):
+            rgba = p.merge_image_and_mask(rgb[b].cpu().numpy(), mask[b].cpu().numpy().astype(np.uint8) * 255)
+            with p.device, self._autocast():
+                pointmap = p.compute_pointmap(rgba)["pointmap"]
+                inputs = p.preprocess_image(rgba, p.ss_preprocessor, pointmap=pointmap)
+                self._lengths.clear()
+                args, _ = p.get_condition_input(self.embedder, inputs, p.ss_condition_input_mapping)
+            tokens.append(args[0])
+        lengths = list(self._lengths)
+        assert len(lengths) == len(self.set_names) and sum(lengths) == tokens[0].shape[1], \
+            f"token-set split failed: {lengths} for {self.set_names}, total {tokens[0].shape[1]}"
+        return dict(zip(self.set_names, torch.cat(tokens).split(lengths, dim=1)))
 
     # ---- flow model ----
 
-    def velocity(self, x_tau, tau, cond, layout_in):
-        """x_tau (B, C, r, r, r), tau (B,), layout_in (B, 1, 8) -> (v_shape, v_layout)."""
-        B = x_tau.shape[0]
-        t = self.tau_embed(tau.float().view(B, 1, 1))
-        lat = self.latent_in(x_tau.flatten(2).transpose(1, 2)) + self.pos + t
-        lay = self.layout_in(layout_in) + t
-        c = torch.cat([cond[name] for name in sorted(cond)], dim=1)
-        h = torch.cat([c, lay, lat], dim=1)
-        for layer in self.layers:
-            if self.activation_checkpointing and torch.is_grad_enabled():
-                h = checkpoint(layer, h, use_reentrant=False)
-            else:
-                h = layer(h)
-        n_lat = lat.shape[1]
-        v_shape = self.latent_out(h[:, -n_lat:]).transpose(1, 2).reshape(x_tau.shape)
-        v_layout = self.layout_out(h[:, -n_lat - 1:-n_lat])
-        return v_shape, v_layout
+    def velocity(self, x_tau, tau, cond: dict, layout_in: dict):
+        """Backbone velocity at flow time τ ∈ [0, 1] with step size d = 0 (no CFG, no dropout)."""
+        t = tau.float() * self.generator.time_scale
+        kwargs = {"d": torch.zeros_like(t)} if self.backbone.is_shortcut_model else {}
+        out = self.backbone({"shape": x_tau, **layout_in}, t, torch.cat(list(cond.values()), 1), **kwargs)
+        v_shape = out.pop("shape")
+        return v_shape, out
 
     @torch.no_grad()
     def sample(self, cond: dict, seeds: list[int], sampler_cfg: DictConfig):
-        """Euler ODE from noise (one seed per sample) with classifier-free guidance."""
-        device = next(iter(cond.values())).device
-        x = torch.stack([torch.randn(self.latent_shape, generator=torch.Generator().manual_seed(s))
-                         for s in seeds]).to(device)
-        lay = torch.stack([torch.randn(self.layout_shape, generator=torch.Generator().manual_seed(s + 1))
-                           for s in seeds]).to(device)
-        null, steps, scale = self.null_condition(cond), int(sampler_cfg.steps), float(sampler_cfg.cfg_scale)
-        for i in range(steps):
-            tau = torch.full((len(seeds),), i / steps, device=device)
-            v_c, l_c = self.velocity(x, tau, cond, lay)
-            v_u, l_u = self.velocity(x, tau, null, lay)
-            x = x + (v_u + scale * (v_c - v_u)) / steps
-            lay = lay + (l_u + scale * (l_c - l_u)) / steps
-        return x, lay
+        """Stage-1 sampling with the pipeline's own generator; one seed per sample."""
+        gen, cfg_fn = self.generator, self.generator.reverse_fn
+        saved = gen.no_shortcut, cfg_fn.strength, cfg_fn.strength_pm, gen.inference_steps
+        if sampler_cfg.mode == "shortcut":               # distilled: d = 1/steps, no CFG
+            gen.no_shortcut, cfg_fn.strength, cfg_fn.strength_pm = False, 0, 0
+        elif sampler_cfg.mode == "flow":                 # d = 0 with CFG (null branch = zeros)
+            assert cfg_fn.unconditional_handling == "add_flag" and self.backbone.force_zeros_cond, \
+                "CFG null branch would not be zeros; see docs/sam3d_internals.md item 3"
+            gen.no_shortcut = True
+            cfg_fn.strength = self.pipeline.ss_cfg_strength if sampler_cfg.cfg_scale is None \
+                else float(sampler_cfg.cfg_scale)
+            cfg_fn.strength_pm = self.pipeline.ss_cfg_strength_pm
+        else:
+            raise ValueError(f"unknown sampler.mode {sampler_cfg.mode!r}")
+        gen.inference_steps = int(sampler_cfg.steps)
+        tokens = torch.cat(list(cond.values()), 1)
+        shapes = {"shape": (1, *self.latent_shape), **{k: (1, *s) for k, s in self.layout_shape.items()}}
+        outs = []
+        try:
+            for i, seed in enumerate(seeds):
+                with torch.random.fork_rng(devices=[self.device_]), self._autocast():
+                    torch.manual_seed(seed)
+                    outs.append(gen(shapes, self.device_, tokens[i:i + 1]))
+        finally:
+            gen.no_shortcut, cfg_fn.strength, cfg_fn.strength_pm, gen.inference_steps = saved
+        z = torch.cat([o["shape"] for o in outs]).float()
+        return z, {k: torch.cat([o[k] for o in outs]).float() for k in self.layout_shape}
 
     @torch.no_grad()
-    def zero_shot_layout(self, rgb: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
-        """Stand-in for SAM 3D's own zero-shot layout: zeros."""
-        return torch.zeros(len(rgb), *self.layout_shape, device=rgb.device)
+    def zero_shot_layout(self, rgb: torch.Tensor, mask: torch.Tensor) -> dict:
+        """Layout latents of plain SAM 3D on the reference frame (seed 0, eval sampler).
 
-    # ---- sparse-structure VAE stand-in ----
+        Not needed in Phase A: shape tokens do not attend to layout tokens (internals item 7).
+        """
+        _, layout = self.sample(self.condition(rgb, mask), [0] * len(rgb), self.sampler_cfg)
+        return layout
+
+    # ---- sparse-structure VAE ----
 
     @torch.no_grad()
     def encode_voxels(self, vox: torch.Tensor) -> torch.Tensor:
-        """(B, 64, 64, 64) bool -> (B, 8, 4, 4, 4): 8^3 occupancy fractions, space-to-depth by 2."""
-        occ = F.avg_pool3d(vox.float()[:, None], 8)                       # (B, 1, 8, 8, 8)
-        B = occ.shape[0]
-        z = occ.view(B, 4, 2, 4, 2, 4, 2).permute(0, 2, 4, 6, 1, 3, 5).reshape(B, 8, 4, 4, 4)
-        return 4 * z - 1
+        """(B, 64, 64, 64) bool -> (B, 4096, 8) encoder mean in the generator's token layout."""
+        assert self.encoder is not None, "no ss_encoder.ckpt in the checkpoint dir"
+        with self._autocast():
+            mean = self.encoder(vox.float()[:, None])["mean"]
+        return mean.float().flatten(2).transpose(1, 2)
 
     @torch.no_grad()
     def decode_latent(self, z: torch.Tensor) -> torch.Tensor:
-        """Inverse of encode_voxels, thresholded and upsampled to 64^3 (crude; fake only)."""
-        B = z.shape[0]
-        occ = ((z + 1) / 4).view(B, 2, 2, 2, 4, 4, 4).permute(0, 4, 1, 5, 2, 6, 3).reshape(B, 8, 8, 8)
-        vox = occ > 0.05
-        for dim in (1, 2, 3):
-            vox = vox.repeat_interleave(8, dim=dim)
-        return vox
+        """(B, 4096, 8) -> (B, 64, 64, 64) bool, thresholding decoder logits at 0 like the pipeline."""
+        with self._autocast():
+            logits = self.decoder(z.transpose(1, 2).reshape(len(z), 8, 16, 16, 16))
+        return logits[:, 0] > 0
+
+    def dino_backbone(self) -> nn.Module:
+        """SAM 3D's own DINOv2 (for the C1/C2 controls)."""
+        from sam3d_objects.model.backbone.dit.embedder.dino import Dino
+        for module in self.embedder.module_list:
+            if isinstance(module, Dino):
+                return module.backbone
+        raise AssertionError("no Dino embedder in the condition embedder")
 
 
 def build_sam3d(cfg: DictConfig, device: torch.device) -> nn.Module:
     """FakeSam3D if cfg.fake_sam3d, else the real (frozen) SAM 3D Geometry model."""
     if cfg.fake_sam3d:
-        model = FakeSam3D(d=cfg.adapter.d_cond,
-                          activation_checkpointing=cfg.sam3d.activation_checkpointing)
-    else:
-        model = Sam3DGeometry(cfg)
-    return model.to(device)
+        from vidsam3d.models.fake_sam3d import FakeSam3D
+        return FakeSam3D(d=cfg.adapter.d_cond,
+                         activation_checkpointing=cfg.sam3d.activation_checkpointing).to(device)
+    return Sam3DGeometry(cfg, device)

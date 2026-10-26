@@ -1,10 +1,14 @@
 """Frozen video/image encoders and per-token mask coverage.
 
 Token order everywhere is (t, h, w): time-major, then rows, then columns.
-VJEPAEncoder and DinoEncoder are added in P5 (they need the GPU environment).
+Every encoder exposes `encode(frames (B, K, 3, S, S) in [0, 1]) -> (B, N, d)` plus the attributes
+`image_size`, `patch` and `tubelet` (frames averaged per token: 2 for V-JEPA, 1 for DINOv2).
 """
 
 from __future__ import annotations
+
+import sys
+from pathlib import Path
 
 import torch
 import torch.nn as nn
@@ -86,9 +90,86 @@ class FakeEncoder(nn.Module):
         return self.proj(x).reshape(B, -1, self.proj.out_features)
 
 
+IMAGENET_MEAN = (0.485, 0.456, 0.406)
+IMAGENET_STD = (0.229, 0.224, 0.225)
+
+
+def imagenet_normalize(frames: torch.Tensor) -> torch.Tensor:
+    """(..., 3, H, W) in [0, 1] -> ImageNet-normalised (V-JEPA 2.1 and DINOv2 both use it)."""
+    mean = frames.new_tensor(IMAGENET_MEAN).view(3, 1, 1)
+    std = frames.new_tensor(IMAGENET_STD).view(3, 1, 1)
+    return (frames - mean) / std
+
+
+class VJEPAEncoder(nn.Module):
+    """Frozen V-JEPA 2.1 ViT-L/16 from the pinned facebookresearch/vjepa2 code, run in bf16.
+
+    K = 1 uses the image patch embedding (T = img_temporal_dim_size = 1); K > 1 uses tubelets of 2.
+    """
+
+    def __init__(self, cfg: DictConfig, device: torch.device):
+        super().__init__()
+        repo = str(Path(cfg.paths.vjepa2_repo).resolve())
+        assert Path(repo, "src", "hub", "backbones.py").is_file(), f"no vjepa2 checkout at {repo}"
+        if repo not in sys.path:
+            sys.path.insert(0, repo)
+        from src.hub import backbones
+        backbones.VJEPA_BASE_URL = cfg.encoder.vjepa.weights_url   # pinned code points at localhost
+        model, predictor = getattr(backbones, cfg.encoder.vjepa.name)(pretrained=True)
+        del predictor
+        if cfg.encoder.vjepa.layers == "hierarchical":
+            model.out_layers = list(model.hierarchical_layers)     # 4 levels -> 4 x 1024
+        else:
+            assert cfg.encoder.vjepa.layers == "last", cfg.encoder.vjepa.layers
+        assert model.patch_size == 16 and model.tubelet_size == 2, (model.patch_size, model.tubelet_size)
+        self.model = model.to(device).eval().requires_grad_(False)
+        self.image_size, self.patch, self.tubelet = int(cfg.encoder.vjepa.image_size), 16, 2
+
+    @torch.no_grad()
+    def encode(self, frames: torch.Tensor) -> torch.Tensor:
+        """(B, K, 3, S, S) in [0, 1] -> (B, T * (S/16)^2, 1024 or 4096)."""
+        x = imagenet_normalize(frames).permute(0, 2, 1, 3, 4)       # V-JEPA wants (B, 3, T, H, W)
+        with torch.autocast(device_type=x.device.type, dtype=torch.bfloat16):
+            out = self.model(x)
+        if isinstance(out, list):
+            out = torch.cat(out, dim=-1)
+        return out.float()
+
+
+class DinoEncoder(nn.Module):
+    """SAM 3D's own frozen DINOv2 at 224 px (16 x 16 patches), one token set per frame."""
+
+    def __init__(self, dino: nn.Module, image_size: int = 224):
+        super().__init__()
+        self.model = dino.eval().requires_grad_(False)
+        self.patch = int(self.model.patch_embed.patch_size[0])
+        self.image_size, self.tubelet = image_size, 1
+        assert image_size % self.patch == 0, (image_size, self.patch)
+
+    @torch.no_grad()
+    def encode(self, frames: torch.Tensor) -> torch.Tensor:
+        """(B, K, 3, S, S) in [0, 1] -> (B, K * (S/14)^2, d) patch tokens (no CLS / registers)."""
+        B, K = frames.shape[:2]
+        x = imagenet_normalize(frames.flatten(0, 1))
+        with torch.autocast(device_type=x.device.type, dtype=torch.bfloat16):
+            out = self.model.forward_features(x)["x_norm_patchtokens"]
+        return out.float().reshape(B, -1, out.shape[-1])
+
+
 def build_kv_encoder(cfg: DictConfig, sam3d: nn.Module, device: torch.device) -> nn.Module:
     """The frozen key/value encoder for cfg.encoder.kv_source (fake with cfg.fake_sam3d)."""
-    tubelet = 2 if cfg.encoder.kv_source == "vjepa" else 1
+    source = cfg.encoder.kv_source
     if cfg.fake_sam3d:
-        return FakeEncoder(cfg.adapter.d_vid, cfg.data.crop.size, tubelet=tubelet).to(device)
-    raise NotImplementedError("VJEPAEncoder / DinoEncoder arrive in P5")
+        return FakeEncoder(cfg.adapter.d_vid, cfg.data.crop.size,
+                           tubelet=2 if source == "vjepa" else 1).to(device)
+    if source == "vjepa":
+        encoder = VJEPAEncoder(cfg, device)
+    elif source in ("dinov2_ref", "dinov2_clip"):
+        assert source == "dinov2_ref" or cfg.encoder.dinov2.pair_average, "C2 needs pair_average"
+        encoder = DinoEncoder(sam3d.dino_backbone(), cfg.encoder.dinov2.image_size)
+    else:
+        raise ValueError(f"unknown encoder.kv_source {source!r}")
+    width = encoder.encode(torch.zeros(1, 1, 3, encoder.image_size, encoder.image_size,
+                                       device=device)).shape[-1]
+    assert width == cfg.adapter.d_vid, f"encoder width {width} != adapter.d_vid {cfg.adapter.d_vid}"
+    return encoder

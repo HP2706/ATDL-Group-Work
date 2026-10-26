@@ -20,7 +20,7 @@ from PIL import Image
 
 RES = 64          # voxel grid
 NUM_FRAMES = 32
-SPLIT_SEEDS = {"train": [0, 1], "eval": [100, 101]}
+SPLIT_SEEDS = {"train": [0, 1], "eval": [100, 101], "val": [200, 201]}
 COLORS = {"box": (220, 60, 40), "sphere": (40, 120, 230)}
 
 

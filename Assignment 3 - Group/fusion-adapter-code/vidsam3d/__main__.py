@@ -11,7 +11,7 @@ from vidsam3d.config import apply_process_env, load_config
 def cmd_check_env(cfg, args) -> None:
     """Print GPU, versions, paths and HF access."""
     from vidsam3d.check_env import check_env
-    check_env(cfg, network=not args.offline)
+    check_env(cfg, network=not args.offline, load_models=args.load_models)
 
 
 def cmd_cache_latents(cfg, args) -> None:
@@ -28,6 +28,18 @@ def cmd_train(cfg, args) -> None:
     """Train an adapter, or benchmark 20 steps."""
     from vidsam3d.train import train
     train(cfg, benchmark=args.benchmark)
+
+
+def cmd_inspect_sam3d(cfg, args) -> None:
+    """Print SAM 3D runtime internals and write them to docs/sam3d_internals.md (GPU)."""
+    from vidsam3d.inspect_sam3d import inspect_sam3d
+    inspect_sam3d(cfg)
+
+
+def cmd_frame_test(cfg, args) -> None:
+    """T4: find the canonical-frame permutation between our voxels and SAM 3D (GPU)."""
+    from vidsam3d.inspect_sam3d import frame_test
+    frame_test(cfg, num_objects=args.num_objects)
 
 
 def not_implemented(phase: str):
@@ -50,17 +62,19 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("check-env", parents=[common], help="check GPU, paths, HF access")
     p.add_argument("--offline", action="store_true", help="skip network checks")
+    p.add_argument("--load-models", action="store_true", help="also load SAM 3D and V-JEPA (GPU)")
     p.set_defaults(func=cmd_check_env)
 
     p = sub.add_parser("inspect-sam3d", parents=[common], help="write docs/sam3d_internals.md")
-    p.set_defaults(func=not_implemented("P5"))
+    p.set_defaults(func=cmd_inspect_sam3d)
 
     p = sub.add_parser("cache-latents", parents=[common], help="encode GT voxels with the SAM 3D VAE")
     p.add_argument("--split", required=True, help="train | eval | the val split name")
     p.set_defaults(func=cmd_cache_latents)
 
     p = sub.add_parser("frame-test", parents=[common], help="canonical-frame test T4")
-    p.set_defaults(func=not_implemented("P5"))
+    p.add_argument("--num-objects", type=int, default=30)
+    p.set_defaults(func=cmd_frame_test)
 
     p = sub.add_parser("train", parents=[common], help="train an adapter")
     p.add_argument("--benchmark", action="store_true", help="20 steps; report s/step and memory")
