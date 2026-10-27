@@ -11,6 +11,11 @@ CONDA_DIR=${CONDA_DIR:-$HOME/miniforge3}
 
 nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv
 
+# open3d and the renderers need OpenGL/EGL libraries that headless VM images leave out.
+sudo apt-get update -qq
+sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+    libgl1 libegl1 libglib2.0-0 libsm6 libxrender1 libxext6 libgomp1 >/dev/null
+
 if [ ! -x "$CONDA_DIR/bin/mamba" ]; then
     curl -fsSL -o /tmp/miniforge.sh \
         https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh
