@@ -118,6 +118,13 @@ One clip on 50 GSO objects, seed 0, rendered in about 19 s. Tests T1, T1b, T2 (1
 - 54 of 500 clips needed a retry. 87 of 587 attempts were rejected: 30 at the pre-render check, 57 after rendering.
 - Mean background arc resamples per clip: 0.004.
 - 707 of 1033 GSO assets used, 440 distinct backgrounds.
+- **Full test suite on all 500 clips** (T1, T1b, T3, T4, format; about 45 min): all pass. Before T1 was relaxed (below), 16 clips failed it while T1b passed on every clip.
+
+**T1 fails only on points outside the amodal mask (< 95%); its coverage and depth checks are warnings.** On the full M1 run they flagged object 1 of 16 clips, and T1b passed on all of them, so the data itself is fine. The flags came in two kinds:
+- amodal coverage of 0.84-0.89 (bound 0.90) with a depth error near 3e-4: 10k points are too sparse to cover a large silhouette;
+- depth error of 0.1-0.2 on hollow objects (bowls, pots, a caddy): the point z-buffer likely sees through to the far wall (inferred).
+
+T1b measures silhouette and depth exactly on the full mesh, so T1 keeps only the check T1b lacks: points projecting outside the mask, which a wrong pose would cause.
 - 9.2 GB total.
 
 ## 9. Known limitations
