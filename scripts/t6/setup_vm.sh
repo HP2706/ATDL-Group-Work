@@ -26,12 +26,16 @@ git fetch --depth 1 origin "$SAM3D_COMMIT" 2>/dev/null || true
 git checkout -q "$SAM3D_COMMIT"
 
 if ! conda env list | grep -q '^sam3d-objects '; then
-    "$CONDA_DIR/bin/mamba" env create -f environments/default.yml
+    "$CONDA_DIR/bin/mamba" env create -y -f environments/default.yml
 fi
-conda activate sam3d-objects
+# conda's activation scripts read unset variables.
+set +u; conda activate sam3d-objects; set -u
 
 if ! python -c "import sam3d_objects, pytorch3d, kaolin" 2>/dev/null; then
-    export PIP_EXTRA_INDEX_URL="https://pypi.ngc.nvidia.com https://download.pytorch.org/whl/cu121"
+    # setup.md also lists pypi.ngc.nvidia.com, which no longer resolves; pip then retries every
+    # package. The nvidia-pyindex dependency writes it into pip.conf files, so those are ignored too.
+    export PIP_EXTRA_INDEX_URL="https://download.pytorch.org/whl/cu121"
+    export PIP_CONFIG_FILE=/dev/null
     pip install -e '.[dev]'
     # pytorch3d's dependency on torch is broken upstream; installing it as a second step works around it.
     pip install -e '.[p3d]'

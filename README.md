@@ -28,7 +28,9 @@ Requires Linux, an NVIDIA GPU (the OptiX denoiser is NVIDIA-only) and [uv](https
 
 ```bash
 uv sync
-# Blender 4.2 is downloaded into .blender/ by BlenderProc on first use.
+# Blender 4.2 is downloaded into .blender/ by BlenderProc on first use. For GPUs it has no
+# kernels for (Blackwell, e.g. B200), unpack Blender 4.5 LTS into .blender/ and set
+# blender_custom_path: .blender/blender-4.5.15-linux-x64 in the config.
 
 uv run python scripts/download_gso.py                      # Google Scanned Objects -> data/raw/gso
 uv run python -m sam3dvid.assets --source gso --split eval # -> dataset/assets/eval

@@ -97,7 +97,10 @@ def preprocess_gso_chunk(cfg: Config, models: list[Path], out_root: Path) -> Non
         ]
         (tmp / "jobs.json").write_text(json.dumps(jobs))
         try:
-            run_blenderproc("normalize_assets.py", str(tmp / "jobs.json"), install_path=cfg.blender_install_path)
+            run_blenderproc(
+                "normalize_assets.py", str(tmp / "jobs.json"),
+                install_path=cfg.blender_install_path, custom_path=cfg.blender_custom_path,
+            )
         except subprocess.CalledProcessError as e:
             # Assets Blender finished before the crash are still post-processed below.
             print(f"FAILED Blender chunk ({e.returncode}); keeping finished assets", flush=True)

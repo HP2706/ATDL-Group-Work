@@ -106,7 +106,8 @@ def render(cfg: Config, scene: dict, workdir: Path) -> dict[str, np.ndarray]:
     scene_path.write_text(json.dumps(scene))
     run_blenderproc(
         "render_clip.py", str(scene_path), str(out_path),
-        install_path=cfg.blender_install_path, log_path=workdir / "blender.log",
+        install_path=cfg.blender_install_path, custom_path=cfg.blender_custom_path,
+        log_path=workdir / "blender.log",
     )
     with np.load(out_path) as data:
         return {k: data[k] for k in data.files}
@@ -212,7 +213,8 @@ def generate_clip(cfg: Config, split: str, seed: int, out_root: Path) -> dict:
             "light": light,
             "background": {"image_id": bg["image_id"], "width": bg_size[0], "height": bg_size[1],
                            "virtual_hfov_deg": cfg.bg_hfov_deg, "K_bg": K_bg.tolist()},
-            "render": {"seed": scene["render_seed"], "samples": cfg.cycles_samples, "denoiser": cfg.denoiser},
+            "render": {"seed": scene["render_seed"], "samples": cfg.cycles_samples, "denoiser": cfg.denoiser,
+                       "blender_version": str(out["blender_version"])},
             "visibility": {k: v.tolist() for k, v in stats.items()},
             "arc_retries": arc_retries,
             "rejections": rejections,

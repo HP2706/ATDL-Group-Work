@@ -85,7 +85,10 @@ def main(scene_path, out_path):
     for other in objects:
         other.hide(False)
 
-    np.savez_compressed(out_path, colors=colors, depth=depth, visible=visible, amodal=np.stack(amodal))
+    np.savez_compressed(
+        out_path, colors=colors, depth=depth, visible=visible, amodal=np.stack(amodal),
+        blender_version=np.array(bpy.app.version_string),
+    )
 
 
 main(sys.argv[1], sys.argv[2])
