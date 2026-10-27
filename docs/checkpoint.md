@@ -26,17 +26,15 @@ Resume by reading this file, then `CLAUDE.md`. Decisions and their reasons are i
 - MoGe scale ratio to our units is 0.29 (median); the layout stays poor even after global depth-scale alignment. Unaligned moge ICP-Rot (0.8 deg) is meaningless: ICP fails when the clouds are about 2.5 units apart.
 - Canonical voxel check is weak: identity ranks first but narrowly (IoU 0.266 vs 0.260) because of SAM 3D's yaw freedom; the +Z evidence above carries the frame conclusion.
 
-## Open at the checkpoint
+## Done since
 
-- **M1 full suite** (`logs/m1_tests.log`): 2994 passed, 16 failed, all `test_t1_projection_consistency` on object 1 of clips 11, 94, 112, 149, 185, 246, 253, 273, 311, 355, 392, 402, 411, 437, 475, 483. T1b (exact ray-cast) passes on all 500, `validate.py` is unchanged and the failing meshes predate their clips, so this is a weakness of the point-sampled T1, not bad data (inferred, the clips weren't viewed). Two modes: amodal coverage 0.84-0.89 vs the 0.90 threshold with depth error about 3e-4 (10k points too sparse), and depth error 0.1-0.2 on hollow objects (bowls, pots, caddy; the point z-buffer likely sees the far wall). Proposed: relax T1 (drop its coverage check in favour of T1b, or warn on concave objects). Needs the user's decision.
-- **Training export agent: finished, not reviewed, uncommitted.** `src/sam3dvid/export.py`, `export_reader.py`, `tests/test_export.py` (7 tests pass), `docs/data_format.md` Section 9 (old 9 renumbered to 10). 4.0 MB and about 0.5 s per clip on one worker, so about 40 GB per 10k clips. JPEG q95 with 4:4:4 chroma (`JPEG_SUBSAMPLING = 0`), because 4:2:0 gave 37.8-41.5 dB PSNR against the 40 dB test; 4:2:0 would be about 33 GB per 10k. Not tried: `--workers > 1`, reading with the `webdataset` library.
-- **Objaverse agent: stopped during its final full pytest run, not reviewed, uncommitted.** `scripts/download_objaverse.py`, `src/sam3dvid/assetfilter.py`, `blender/render_thumbs.py`, changes to `assets.py`, `normalize_assets.py`, `blenderrun.py`, `config.py`, `generate.py`, `tests/test_assets.py`; also `README.md`. Its own status is unknown: run `uv run pytest -q tests/test_assets.py tests/test_export.py` first (the full `-m "not slow"` suite takes about 45 min because of the 500 clips), then review the diff against the spec in `DATASET.md`/`docs/m2_handover.md`.
+- Both agents' work reviewed and committed (`5db9f92`, by the user). Objaverse scene filter on TRELLIS captions added (`cc72cba`): 67 of 100 test assets accepted (27 scenes, 6 geometric). All Objaverse licenses admitted (research use, user's decision).
+- M2 runbook has the Objaverse and export commands, plus two ordering rules: freeze the asset pool before rendering, export only after rendering.
+- T6 results and the converter are written into `DATASET.md` Section 7 and `docs/data_format.md`.
 
-## Next
+## Open
 
-1. Review and commit the two agents' work (by explicit paths).
-2. Decide on T1 (above).
-3. Write the T6 results and the converter into `DATASET.md` Section 7 and `docs/data_format.md`. Get T6 sign-off, then delete the VM.
-4. **Training-target implication (tell the model team):** training uses no pointmap input, so SAM 3D's pointmap comes from MoGe at metric scale, while our units are arbitrary (scale ratio 0.29). Translation and scale targets need a scale-invariant formulation. SAM 3D's own (`pose_target.py`, `translation_scale`) could not be read: `sam3d_objects/data/**` is still blocked by a `**/data/**` deny rule after the project settings change and a restart, so the rule may come from managed settings. Check `/permissions`.
-5. Finish the M2 handover: fill the Objaverse and export commands into `docs/m2_runbook.md`, then run the whole chain locally on a few train clips (assets -> smoke test -> render -> tests -> export).
-6. M2 itself runs on UCloud (colleague); the full render is gated on T6 sign-off.
+- **M1 full suite:** 16 clips fail only the point-sampled T1 (object 1; coverage 0.84-0.89 vs 0.90, or depth error 0.1-0.2 on hollow objects), while T1b passes on all 500. Proposed: relax T1. Needs the user's decision. `docs/m2_handover.md` still says the eval split "passes everything".
+- **T6 sign-off and VM deletion** (`gcloud compute instances delete sam3d-t6 --zone=europe-west4-a`): needs the user's go.
+- **Tell the model team** about scale-invariant targets (`DATASET.md` Section 7).
+- **Local end-to-end check** of the M2 chain on a few train clips (assets -> smoke test -> render -> tests -> export), then hand over to the colleague (UCloud; `docs/cluster_checklist.md` items still open).

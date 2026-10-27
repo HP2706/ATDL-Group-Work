@@ -103,7 +103,7 @@ s_co = s_wo
 x_c  = R_co @ (s_co * x_o) + t_co
 ```
 
-**This is our convention, not necessarily SAM 3D's.** SAM 3D's layout output may use PyTorch3D camera axes and a different canonical frame or scale. A tested converter `ours_to_sam3d` is still to come. Don't assume the two conventions are equal.
+**This is our convention, not SAM 3D's.** SAM 3D's layout uses PyTorch3D camera axes (x left, y up), row vectors and a wxyz quaternion: `x_cam = (s * x_o) @ R(q) + t`. Its canonical frame and scale are the same as ours. Convert with `sam3dvid.sam3d.ours_to_sam3d(R_co, t_co, s_co) -> (q, t, s)` and `sam3d_to_ours`, which were verified against SAM 3D's own outputs in test T6 (`DATASET.md` Section 7).
 
 ### 3.4 Scale
 
@@ -283,5 +283,5 @@ Shards are plain tars, so `webdataset` reads them too (keys are the clip ids).
 
 - **Version 0.1.** The file format is stable; the sampling distributions in section 7 are final for M1 unless the test runs reveal a problem.
 - **No de-lit texture target.** Texture ground truth is out of scope; `rgb` is lit.
-- **No SAM 3D converter yet.** The SAM 3D convention converter (`ours_to_sam3d`) and a SAM 3D baseline sanity check are pending.
-- **Train split not generated yet.** Its Objaverse asset filtering and pool size are still being decided; the format will be identical.
+- **No metric scale.** Scene units are arbitrary, whereas SAM 3D's MoGe pointmaps are metric (one of our units comes out at about 0.29 in MoGe's reconstruction, median over T6, varying per scene). Without a pointmap input, use scale-invariant translation and scale targets.
+- **Train split not generated yet** (M2). Its format will be identical; the assets are filtered Objaverse objects (`DATASET.md` Section 1).

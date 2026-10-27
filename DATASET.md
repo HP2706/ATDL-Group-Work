@@ -81,11 +81,24 @@ M1 numbers are in Section 8.
 
 ## 7. SAM 3D converter
 
-**`ours_to_sam3d` and its inverse: TBD, pending T6.** Known so far:
+**`sam3d.ours_to_sam3d` and `sam3d_to_ours`: only the camera axes and the rotation format change; the object frame and scale are the same as ours.** SAM 3D's layout maps canonical points as `x_cam = (s * x_local) @ R(q) + t` (row vectors, wxyz quaternion), in PyTorch3D camera axes (x left, y up, z forward) = `diag(-1, -1, 1)` of OpenCV. So `q = quat((F R_co)^T)`, `t = F t_co`, `s = s_co` with `F = diag(-1, -1, 1)`. Round trips and agreement with SAM 3D's posing formula are tested in `tests/test_sam3d_converter.py`.
 
-- SAM 3D's pointmaps are in PyTorch3D camera axes (x left, y up, z forward), i.e. `diag(-1, -1, 1)` of OpenCV camera coordinates.
-- Whether a fixed object-frame rotation or scale factor is also needed is undetermined. The canonical voxel check in T6 (no ICP, identity should win among the 24 axis-aligned rotations) is what settles it.
-- T6 scripts are in `scripts/t6/`, procedure in `docs/t6_runbook.md`.
+This was determined from SAM 3D's outputs, not its source (its pose code was not readable here). The evidence:
+- **Pose fit:** given the ground-truth pointmap, the converted prediction lands on our ground truth with a median translation error of 2% and a scale ratio of 1.11. A wrong axis or frame convention would show as errors of order 100%.
+- **Object frame:** our canonical +Z maps to SAM 3D's +Z for 27 of 50 objects, and the predicted yaws cluster at 0. The rest are flips and side axes of symmetric or ambiguous objects.
+- **The canonical voxel check is weak:** identity ranks first among the 24 axis rotations, but only narrowly (mean voxel IoU 0.266 against 0.260), because SAM 3D chooses its own yaw for each object.
+
+**T6 setup:** SAM 3D Objects (commit f91db411) on an A100 40 GB, frame 0 of eval clips 0-19, 50 objects. Each object runs twice: once with SAM 3D's own MoGe pointmap (`moge`), and once with our ground-truth depth as the pointmap (`gt_pointmap`), as in the paper's layout evaluation. Metrics follow App. D.3 (`python -m sam3dvid.t6 analyze`, report in `t6/report.json`); scripts are in `scripts/t6/`, the procedure in `docs/t6_runbook.md`.
+
+| | ADD-S | ADD-S@0.1 | 3D IoU | ICP-Rot | F1@0.01 | Chamfer |
+|---|---|---|---|---|---|---|
+| Ours, `gt_pointmap` | 0.064 | 0.88 | 0.548 | 14.5° | 0.187 | 0.058 |
+| Ours, `moge`, depth-scale aligned | 0.474 | 0.08 | 0.083 | 14.6° | 0.170 | 0.065 |
+| Paper (layout: ADT, Table 3; shape: SA-3DAO, Table 2) | 0.077 | 0.767 | 0.497 | 15.25° | 0.234 | 0.040 |
+
+- **Layout with the GT pointmap matches or beats the paper on every metric.** This confirms the converter and shows our renders are within SAM 3D's input distribution.
+- **Shape F1 is below the paper.** We sample 100k points where the paper uses 1M, and at that density the point spacing is close to the 0.01 threshold, which biases F1 low (inferred, unchecked). It is also a different object set.
+- **MoGe layouts are far off in our units.** MoGe predicts metric depth, our scenes have arbitrary units, and the median scale ratio is 0.29. Even after one global depth-scale factor, ADD-S stays at 0.47. **Consequence for training without a pointmap input:** translation and scale targets need a scale-invariant formulation, e.g. normalized by the depth of the scene or object.
 
 ## 8. Milestone results
 
@@ -115,7 +128,6 @@ One clip on 50 GSO objects, seed 0, rendered in about 19 s. Tests T1, T1b, T2 (1
 - **Selection bias from retries:** released clips lean towards less-occluded layouts (Section 3). No upper visibility cap is applied, so fully visible objects are common by design.
 - **Mixed Blender versions** change RGB by at most 2/255 and nothing else; check `meta.json` if exact RGB reproducibility matters. RGB is reproducible only up to renderer noise (T5).
 - **Hardware:** NVIDIA GPU required (OptiX).
-- **SAM 3D conventions unverified** until T6 (Section 7).
 - **Train split not generated yet** (M2).
 
 ## 10. Licenses
