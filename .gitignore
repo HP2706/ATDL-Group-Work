@@ -10,3 +10,8 @@ third_party/
 .claude/settings.local.json
 .claude/.cc-writes/
 logs/
+
+# T6 inputs contain SA-1B imagery; shared privately, never committed
+t6/inputs/
+t6/outputs/
+*.tar.gz
