@@ -22,7 +22,7 @@ Resume by reading this file, then `docs/dataset_spec.md` (already updated with t
 - **Placement ball radius:** `ρ(N) = N^(1/3)`. Overlaps resample positions only. A unit test checks that the scale mean stays 0.7.
 - **Retries:** N, assets, background and light are fixed per seed. Retries redraw only layout and camera, so rejections don't bias N or the asset mix.
 - **Pre-check:** z-buffered voxel splats at 128², with a slack of 0.7 on the thresholds.
-- **Render settings:** Cycles 64 samples, OIDN denoiser, Standard view transform; sun strength U(2, 5), ambient U(0.15, 0.35).
+- **Render settings:** Cycles 64 samples, OptiX denoiser on the GPU, Standard view transform; sun strength U(2, 5), ambient U(0.15, 0.35).
 - **T1 depth check:** drops back-facing points before z-buffering. Without that, the flat package in the dev clip fails because pixels only receive far-side points. Spec updated.
 
 ## Open issues
@@ -30,11 +30,11 @@ Resume by reading this file, then `docs/dataset_spec.md` (already updated with t
 1. **T1 weakness:** resolved by T1b (ray-cast silhouette and depth; catches half-pixel errors).
 2. **Object size:** resolved. Tight framing plus orbit factor U(1.0, 1.4): median object 1.5% -> 2.5% of the frame, 3% of objects truncated in some frame.
 3. **CPU time:** resolved. BlenderProc's "INTEL" denoiser was a CPU compositor node; switched to OptiX, GPU only. 57 s -> 19 s per clip.
-4. **DATASET.md** not written yet. The consumer-facing format doc is `docs/data_format.md`.
+4. **DATASET.md:** resolved; it records all implementer decisions. The consumer-facing format doc is `docs/data_format.md`.
 5. **Geometric filter:** scores are computed per asset (`meta.json` `filter_scores`); thresholds and the contact sheet come at M2.
 
 ## Next steps
 
 1. Done: T1b (ray-cast) added; tight framing with orbit factor U(1.0, 1.4).
-2. Write DATASET.md.
-3. Run T6 with SAM 3D, then M1 (500 eval clips, about 10 GB, roughly 8-9 h at the current speed).
+2. Done: DATASET.md; M1 (500 eval clips, 9.2 GB, 13.7 s/clip with two workers).
+3. T6 on a cloud A100 (`docs/t6_runbook.md`); M2 on the cluster (`docs/m2_runbook.md`).

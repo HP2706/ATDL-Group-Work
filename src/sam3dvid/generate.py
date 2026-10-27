@@ -2,6 +2,7 @@
 
 Usage:
     uv run python -m sam3dvid.generate --config configs/m0.yaml --split eval --seeds 0 [1 2 ...] [--overwrite]
+        [--dataset-root DIR]
 
 Existing clips are skipped unless --overwrite is given; rejected or crashed seeds are appended
 to <dataset_root>/failures.jsonl and the run continues.
@@ -260,8 +261,11 @@ def main() -> None:
     ap.add_argument("--split", choices=["train", "eval"], required=True)
     ap.add_argument("--seeds", type=int, nargs="+", required=True)
     ap.add_argument("--overwrite", action="store_true", help="regenerate clips that already exist")
+    ap.add_argument("--dataset-root", default=None, help="overrides dataset_root from the config")
     args = ap.parse_args()
     cfg = Config.load(args.config)
+    if args.dataset_root:
+        cfg.dataset_root = args.dataset_root
     out_root = Path(cfg.dataset_root)
     out_root.mkdir(parents=True, exist_ok=True)
     (out_root / "config.yaml").write_text(yaml.safe_dump(cfg.to_dict(), sort_keys=False))
