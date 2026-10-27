@@ -29,12 +29,12 @@ Resume by reading this file, then `CLAUDE.md`. Decisions and their reasons are i
 ## Done since
 
 - Both agents' work reviewed and committed (`5db9f92`, by the user). Objaverse scene filter on TRELLIS captions added (`cc72cba`): 67 of 100 test assets accepted (27 scenes, 6 geometric). All Objaverse licenses admitted (research use, user's decision).
+- T1 relaxed (`f57e5a1`): coverage and depth error warn, T1b checks both exactly; the M1 suite now passes.
 - M2 runbook has the Objaverse and export commands, plus two ordering rules: freeze the asset pool before rendering, export only after rendering.
 - T6 results and the converter are written into `DATASET.md` Section 7 and `docs/data_format.md`.
 
 ## Open
 
-- **M1 full suite:** 16 clips fail only the point-sampled T1 (object 1; coverage 0.84-0.89 vs 0.90, or depth error 0.1-0.2 on hollow objects), while T1b passes on all 500. Proposed: relax T1. Needs the user's decision. `docs/m2_handover.md` still says the eval split "passes everything".
 - **T6 sign-off and VM deletion** (`gcloud compute instances delete sam3d-t6 --zone=europe-west4-a`): needs the user's go.
 - **Tell the model team** about scale-invariant targets (`DATASET.md` Section 7).
 - **Local end-to-end check** of the M2 chain on a few train clips (assets -> smoke test -> render -> tests -> export), then hand over to the colleague (UCloud; `docs/cluster_checklist.md` items still open).
