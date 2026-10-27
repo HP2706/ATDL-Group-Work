@@ -5,7 +5,8 @@ import blenderproc as bproc  # must be the first line under blenderproc run
 # jobs.json is a list of {"source": <mesh file>, "out_dir": <dir>}. For each job this writes
 # mesh.glb (single object, identity transform, canonical frame), mesh.ply (TRELLIS voxelizer
 # input) and normalize.json (scale, offset, original bbox). `normalize_scene` and `scene_bbox`
-# are copied verbatim from TRELLIS dataset_toolkits/blender_script/render.py.
+# are copied verbatim from TRELLIS dataset_toolkits/blender_script/render.py
+# (https://github.com/microsoft/TRELLIS, Copyright (c) Microsoft Corporation, MIT License).
 
 import json
 import math
