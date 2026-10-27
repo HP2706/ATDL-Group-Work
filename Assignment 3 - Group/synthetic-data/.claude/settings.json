@@ -1,0 +1,30 @@
+{
+  "worktree": {
+    "bgIsolation": "none"
+  },
+  "env": {
+    "CLAUDE_MAY_PROCESS_FILES_IN_THIS_WORKSPACE": "TRUE"
+  },
+  "permissions": {
+    "blockReadsOutsideWorkingDirectories": true,
+    "deny": [
+      "Read(**/storage/**)",
+      "Read(./data/**)",
+      "Read(**/.env)"
+    ]
+  },
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "filesystem": {
+      "denyRead": [
+        "./storage",
+        "./**/storage",
+        "./data",
+        "./.env",
+        "./**/.env"
+      ]
+    }
+  }
+}
