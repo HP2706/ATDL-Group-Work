@@ -33,8 +33,13 @@ Resume by reading this file, then `CLAUDE.md`. Decisions and their reasons are i
 - M2 runbook has the Objaverse and export commands, plus two ordering rules: freeze the asset pool before rendering, export only after rendering.
 - T6 results and the converter are written into `DATASET.md` Section 7 and `docs/data_format.md`.
 
+- Local M2 chain checked on 5 train clips (seeds 1000000-1000004, Blender 4.5, `render_shard.sh`): all render, clip tests pass, export `--verify` exact, review sheets look right. Fixed `render_shard.sh` exiting 1 after a fully successful shard (`782a226`); added `export --verify N` (`92d950f`).
+- T6 signed off by the user; the VM is kept stopped for now (pd-standard disk, about $0.30 a day).
+
 ## Open
 
-- **T6 sign-off and VM deletion** (`gcloud compute instances delete sam3d-t6 --zone=europe-west4-a`): needs the user's go.
-- **Tell the model team** about scale-invariant targets (`DATASET.md` Section 7).
-- **Local end-to-end check** of the M2 chain on a few train clips (assets -> smoke test -> render -> tests -> export), then hand over to the colleague (UCloud; `docs/cluster_checklist.md` items still open).
+- Full suite on the committed tree: `logs/full_suite.log`.
+- Push to origin so the colleague can clone (ask the user first).
+- Tell the model team about scale-invariant targets (`DATASET.md` Section 7).
+- UCloud notes in `docs/m2_handover.md` and `docs/cluster_checklist.md` are for the colleague to fill in.
+- Delete the VM when the user says so: `gcloud compute instances delete sam3d-t6 --zone=europe-west4-a`.
