@@ -33,6 +33,8 @@ done
 status=0
 for pid in "${pids[@]}"; do wait "$pid" || status=1; done
 done_count=$(find "$DATASET_ROOT/clips/train" -maxdepth 2 -name meta.json 2>/dev/null | wc -l)
-failed=$(cat "$DATASET_ROOT/failures.jsonl" 2>/dev/null | wc -l)
+# failures.jsonl only exists once a seed has failed; under pipefail a missing file would abort here.
+failed=0
+[ -f "$DATASET_ROOT/failures.jsonl" ] && failed=$(wc -l < "$DATASET_ROOT/failures.jsonl")
 echo "finished: $done_count train clips in $DATASET_ROOT, $failed failed seeds logged in total"
 exit $status
