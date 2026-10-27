@@ -4,7 +4,8 @@ import blenderproc as bproc  # must be the first line under blenderproc run
 #
 # jobs.json is a list of {"source": <mesh file>, "out_dir": <dir>}. For each job this writes
 # mesh.glb (single object, identity transform, canonical frame), mesh.ply (TRELLIS voxelizer
-# input) and normalize.json (scale, offset, original bbox). `normalize_scene` and `scene_bbox`
+# input) and normalize.json (scale, offset, original bbox); a job that raises writes error.txt
+# instead. `normalize_scene` and `scene_bbox`
 # are copied verbatim from TRELLIS dataset_toolkits/blender_script/render.py
 # (https://github.com/microsoft/TRELLIS, Copyright (c) Microsoft Corporation, MIT License).
 
@@ -19,6 +20,11 @@ from mathutils import Vector
 
 
 def init_scene() -> None:
+    try:
+        # A previous job that failed in edit mode would break the deletions below.
+        bpy.ops.object.mode_set(mode="OBJECT")
+    except RuntimeError:
+        pass
     for obj in bpy.data.objects:
         bpy.data.objects.remove(obj, do_unlink=True)
     for collection in (bpy.data.meshes, bpy.data.materials, bpy.data.textures, bpy.data.images):
@@ -29,6 +35,8 @@ def init_scene() -> None:
 def load_object(path: str) -> None:
     ext = path.rsplit(".", 1)[-1].lower()
     if ext in {"glb", "gltf"}:
+        # Same call and arguments as TRELLIS dataset_toolkits/blender_script/render.py. The importer's
+        # default axis conversion maps glTF Y-up to Blender Z-up, which is the canonical frame.
         bpy.ops.import_scene.gltf(filepath=path, merge_vertices=True, import_shading="NORMALS")
     elif ext == "obj":
         # GSO OBJs are Z-up already (Gazebo convention), so import without an axis change.
@@ -149,6 +157,9 @@ def main(jobs_path: str) -> None:
             print(f"[normalize] ok {job['out_dir']}", flush=True)
         except Exception as e:
             print(f"[normalize] FAILED {job['out_dir']}: {e!r}", flush=True)
+            os.makedirs(job["out_dir"], exist_ok=True)
+            with open(os.path.join(job["out_dir"], "error.txt"), "w") as f:
+                f.write(repr(e))
 
 
 main(sys.argv[1])

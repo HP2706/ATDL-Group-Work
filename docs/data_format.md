@@ -212,7 +212,74 @@ inside = (uv >= 0).all(1) & (uv < 512).all(1)
 print("voxel centers on amodal mask:", amodal_k[uv[inside, 1], uv[inside, 0]].mean())
 ```
 
-## 9. Known limitations and things that may change
+## 9. Training export
+
+The model team does not train on the full format. A packed export holds RGB, visible masks, per-frame object poses and voxels only (no depth, amodal masks or `rgba_fg`). It is built from the clip folders with:
+
+```
+uv run python -m sam3dvid.export --dataset dataset --split train --out <dir> --clips-per-shard 100 [--workers N]
+```
+
+Export is deterministic (same input, byte-identical shards) and resumable: a shard that already exists is skipped, and files are written to a temp name and renamed. One `--out` directory holds one split.
+
+```
+<out>/
+  train-000000.tar ...    WebDataset shards, --clips-per-shard clips each, sorted by clip id
+  voxels_train.npz        asset_id -> packed voxels, only the assets the split uses
+  index.json              shards with clip ids and byte sizes, format version, conventions
+```
+
+### 9.1 Shards
+
+One sample per clip, keyed by clip id. A sample is 65 tar members:
+
+| Member | Content |
+|---|---|
+| `<clip_id>.rgb.000.jpg ... 031.jpg` | RGB frame, JPEG quality 95, 4:4:4 chroma (PSNR above 40 dB against the PNG) |
+| `<clip_id>.visible.000.png ... 031.png` | uint8 instance map, lossless, identical to `mask_visible`: 0 = background, k = object k |
+| `<clip_id>.json` | everything below |
+
+### 9.2 Sample JSON
+
+| Key | Meaning |
+|---|---|
+| `clip_id`, `split`, `seed`, `num_objects`, `generator_version`, `git_commit` | from `meta.json`; `blender_version` only when the clip's meta has it |
+| `K` | 3x3 intrinsics, same as `cameras.json` |
+| `T_cw` | `[32][4][4]` world -> camera, same as `cameras.json` |
+| `objects` | one entry per object, index `k - 1`, matching the mask ids (below) |
+| `visibility` | `visible_px`, `amodal_px`, `visible_frac`, each `[32][N]`, from `meta.json` |
+
+Each entry of `objects`:
+
+| Key | Shape | Meaning |
+|---|---|---|
+| `k`, `asset_id` | | mask id (1-based) and the key into the voxels file |
+| `R_wo`, `t_wo`, `s_wo` | 3x3, 3, 3 | world pose, as in `objects.json` |
+| `R_co`, `t_co`, `s_co` | `[32][3][3]`, `[32][3]`, `[32][3]` | per-frame camera-frame pose, computed with `pose_in_camera` (section 3.3) |
+
+Poses are in **our** convention, as everywhere in this document; the SAM 3D converter is applied at load time, not at export.
+
+### 9.3 Voxels
+
+`voxels_<split>.npz` maps `asset_id` to `np.packbits` of the flattened (C order) bool `(64,64,64)` grid, i.e. a `uint8[32768]`. Voxels belong to assets, not clips, so they are stored once.
+
+### 9.4 Reading
+
+`src/sam3dvid/export_reader.py` needs only numpy and PIL:
+
+```python
+from sam3dvid.export_reader import iter_samples, load_voxels
+
+for clip_id, rgb, visible, info in iter_samples("export/train/train-000000.tar"):
+    # rgb (32,512,512,3) uint8, visible (32,512,512) uint8, info = the JSON above
+    obj = info["objects"][0]
+    R_co, t_co, s_co = np.array(obj["R_co"]), np.array(obj["t_co"]), np.array(obj["s_co"])
+    voxels = load_voxels("export/train/voxels_train.npz", obj["asset_id"])   # bool (64,64,64)
+```
+
+Shards are plain tars, so `webdataset` reads them too (keys are the clip ids).
+
+## 10. Known limitations and things that may change
 
 - **Version 0.1.** The file format is stable; the sampling distributions in section 7 are final for M1 unless the test runs reveal a problem.
 - **No de-lit texture target.** Texture ground truth is out of scope; `rgb` is lit.

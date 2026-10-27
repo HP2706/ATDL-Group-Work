@@ -47,6 +47,24 @@ class Config:
     precheck_slack: float = 0.7
     max_retries: int = 20
 
+    # Geometric asset filter (paper App. B.1), applied to the train assets' filter_scores and
+    # num_voxels; see sam3dvid.assetfilter. Chosen on the contact sheets of 100 random assets
+    # (extent_min < 0.1 caught flat discs and specks; the rest of the thin objects were legitimate).
+    # An asset is rejected if any of:
+    #   extent_min < filter_extent_min              flat or point-like bounding box
+    #   normal_eig_min < filter_normal_eig_min      sheet: all normals (anti)parallel; thin rods also
+    #                                               score low (0.05 for a carrot), so keep this small
+    #   outlier_area_frac > filter_outlier_area_frac  most of the surface sits far from the largest part;
+    #                                               legit characters with detached limbs reach 0.7
+    #   num_voxels < filter_min_voxels              near-zero volume; this is where stray far-away
+    #                                               fragments show up, since normalization shrinks the
+    #                                               real object (specks had 12-144 voxels, the next
+    #                                               smallest asset 2169)
+    filter_extent_min: float = 0.1
+    filter_normal_eig_min: float = 0.03
+    filter_outlier_area_frac: float = 0.9
+    filter_min_voxels: int = 500
+
     dataset_root: str = "dataset"
     bg_pool_dir: str = "data/bg_pools"
     blender_install_path: str = ".blender"

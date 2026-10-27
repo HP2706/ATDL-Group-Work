@@ -24,6 +24,7 @@ import numpy as np
 import yaml
 
 from . import __version__
+from .assetfilter import accepted_assets
 from .background import background_K, covers, homography, relative_rotation, warp
 from .blenderrun import run_blenderproc
 from .clipio import write_clip
@@ -58,8 +59,7 @@ def git_commit() -> str | None:
 
 
 def asset_pool(cfg: Config, split: str) -> list[str]:
-    root = Path(cfg.dataset_root) / "assets" / split
-    return sorted(p.name for p in root.iterdir() if (p / "meta.json").exists())
+    return accepted_assets(cfg, split)
 
 
 def background_pool(cfg: Config, split: str) -> list[dict]:

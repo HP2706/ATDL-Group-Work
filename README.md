@@ -34,6 +34,9 @@ uv sync
 
 uv run python scripts/download_gso.py                      # Google Scanned Objects -> data/raw/gso
 uv run python -m sam3dvid.assets --source gso --split eval # -> dataset/assets/eval
+uv run python scripts/download_objaverse.py --limit 10000  # TRELLIS-500K Objaverse-XL (Sketchfab) -> data/raw/objaverse
+uv run python -m sam3dvid.assets --source objaverse --split train --workers 8  # -> dataset/assets/train
+uv run python -m sam3dvid.assetfilter --split train        # geometric filter contact sheets -> dataset/review
 uv run python scripts/download_sa1b.py --links data/sa1b_links.txt --archives sa_000000.tar
 uv run python scripts/build_bg_pools.py                    # -> data/bg_pools
 
