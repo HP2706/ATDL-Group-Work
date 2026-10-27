@@ -64,6 +64,16 @@ class Config:
     filter_normal_eig_min: float = 0.03
     filter_outlier_area_frac: float = 0.9
     filter_min_voxels: int = 500
+    # Objaverse also holds whole scenes (floor plans, houses on a ground plate, city blocks) that pass
+    # the geometric criteria. An asset is rejected if a TRELLIS-500K caption contains one of these
+    # whole words (case-insensitive); a toy house is an accepted false positive. "interior" is left
+    # out because vehicle captions use it.
+    filter_scene_words: list[str] = field(default_factory=lambda: [
+        "house", "houses", "two-story", "cottage", "cabin", "building", "buildings", "room", "rooms",
+        "bedroom", "bathroom", "kitchen", "apartment", "floor plan", "floorplan", "architecture",
+        "architectural", "city", "town", "village", "street", "landscape", "terrain", "island",
+        "diorama", "environment",
+    ])
 
     dataset_root: str = "dataset"
     bg_pool_dir: str = "data/bg_pools"

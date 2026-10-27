@@ -13,15 +13,20 @@ This documents every decision the spec (`docs/dataset_spec.md`, Section 9) leave
 
 **Aesthetic threshold: ≥ 5.5** for the Objaverse-XL subset of TRELLIS-500K. TRELLIS training configs re-filter at ≥ 4.5; we keep the stricter list value.
 
-**Geometric filter (paper App. B.1): thresholds TBD.** Scores (near-zero volume, normal variation, outlier fragments) are already computed per asset and stored in `meta.json` under `filter_scores`.
+**Geometric filter (paper App. B.1), train only.** Scores are computed at preprocessing and stored in `meta.json` under `filter_scores`. The thresholds live in `Config` and are applied when clips are generated (`assetfilter.accepted_assets`), so they can change without reprocessing. They were chosen on contact sheets of 100 Objaverse assets.
 
-| Criterion | Score | Threshold |
+| Criterion | Score | Reject if |
 |---|---|---|
-| Near-zero volume | TBD | TBD |
-| Minimal normal variation | TBD | TBD |
-| Spatial outlier fragments | TBD | TBD |
+| Near-zero volume | smallest bounding-box extent `extent_min`; occupied voxels `num_voxels` | `extent_min` < 0.1 or `num_voxels` < 500 |
+| Minimal normal variation | smallest eigenvalue of the area-weighted normal moment `normal_eig_min` | < 0.03 |
+| Spatial outlier fragments | area share of components far (> 0.25) from the largest one `outlier_area_frac` | > 0.9 |
 
-The contact sheet of 50 rejected and 50 accepted assets is TBD with the thresholds.
+- **Loose on purpose:** thin rods score low on normal variation (0.05 for a carrot), and characters with detached limbs reach an outlier share of 0.7. Stray far-away fragments show up as `num_voxels` instead, because normalization shrinks the real object: rejected specks had 12-144 voxels, and the next smallest asset 2169.
+- **Result:** 6 of 100 rejected (specks, a coin, a disc, a fractal).
+
+**Scene filter: reject Objaverse assets whose TRELLIS-500K captions contain a scene word (house, building, rooms, floor plan, landscape, terrain, diorama, ...; full list in `Config.filter_scene_words`).** About a quarter of the aesthetic-filtered Objaverse assets are whole scenes (floor plans, houses on ground plates, city blocks) that pass every geometric criterion but don't belong at object scale in a 1-4-object scene. Captions are already in the TRELLIS list, which makes this cheaper and more predictable than a geometric heuristic. On the 100 test assets it rejected 27, and the contact sheet showed all 27 to be scenes or buildings. "interior" is left out because it matched a car, and a toy house counts as an acceptable false positive. Overall, 67 of 100 assets are accepted.
+
+**Eval keeps every GSO asset:** neither filter is applied to it, so the eval pool and seeds 0-499 are unchanged.
 
 **Eval assets: all 1033 GSO objects in the catalogue**; 707 of them appear in the M1 clips. Objaverse licenses are per object and recorded in `meta.json`; see Section 10.
 
@@ -111,12 +116,12 @@ One clip on 50 GSO objects, seed 0, rendered in about 19 s. Tests T1, T1b, T2 (1
 - **Mixed Blender versions** change RGB by at most 2/255 and nothing else; check `meta.json` if exact RGB reproducibility matters. RGB is reproducible only up to renderer noise (T5).
 - **Hardware:** NVIDIA GPU required (OptiX).
 - **SAM 3D conventions unverified** until T6 (Section 7).
-- **Train split not generated yet:** the Objaverse filter thresholds are TBD and M2 waits for T6.
+- **Train split not generated yet** (M2).
 
 ## 10. Licenses
 
 - **GSO:** CC BY 4.0. Attribution to Google Research is required.
 - **SA-1B:** research license. Redistribution of the images is restricted, so we ship only image IDs and paths, never the photos. Composited `rgb` frames contain SA-1B pixels, so a released eval or train set inherits this restriction (our reading, not legal advice; to be confirmed before any distribution beyond the project group and examiner).
 - **TRELLIS:** MIT, Copyright (c) Microsoft Corporation, for the copied code in `src/sam3dvid/blender/normalize_assets.py`.
-- **Objaverse-XL:** per-object licenses, recorded in each asset's `meta.json`. Which licenses are admitted into the train set is TBD.
+- **Objaverse-XL:** per-object licenses, recorded in each asset's `meta.json` with author and source URL. **All licenses are admitted, because the dataset is for research only.** Of the 100 test assets, 78 are CC BY, 20 are non-commercial (BY-NC, BY-NC-SA) and 2 are CC0. Non-commercial and share-alike terms would matter for any wider release.
 - **BlenderProc and Blender** are used as tools. **SAM 3D Objects** is not included and is under its own license.

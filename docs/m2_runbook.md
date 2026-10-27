@@ -26,7 +26,19 @@ uv run python scripts/build_bg_pools.py
 
 The train/eval split of the backgrounds is a deterministic hash of the image id, so this reproduces exactly the pools used for M1 (7,258 train images).
 
-**Objaverse train assets.** *(Commands to be filled in when the Objaverse pipeline is merged.)*
+**Objaverse train assets.**
+
+```bash
+uv run python scripts/download_objaverse.py --limit 10000                       # -> data/raw/objaverse
+uv run python -m sam3dvid.assets --source objaverse --split train --workers 8   # -> dataset/assets/train
+uv run python -m sam3dvid.assetfilter --split train                             # -> dataset/review
+```
+
+- **Download:** a seeded subset of TRELLIS-500K's Objaverse-XL Sketchfab list (aesthetic score >= 5.5), with license, author and captions per object in `data/raw/objaverse/index.json`. It resumes, and a larger `--limit` extends a smaller one. The download size per GLB hasn't been measured; check `du -sh data/raw/objaverse/glbs` after the first few hundred.
+- **Preprocessing:** finished assets are skipped, so a killed run resumes. Assets that crash or hang Blender are logged to `dataset/assets/failed_train.jsonl` and skipped from then on.
+- **Filter:** it is applied when clips are generated, not at preprocessing, so changing a threshold needs no reprocessing. On 100 test assets, 67% were accepted: 27 were rejected as scenes (houses, floor plans, landscapes, found through the TRELLIS captions) and 6 on geometry. With `--limit 10000`, expect about 6,700 usable assets, each used about 3 times across 10,000 clips.
+- **Contact sheets:** `dataset/review/assets_train_{accepted,rejected}.png` show 50 random accepted and rejected assets each. Send them back with the counts the command prints.
+- **Freeze the pool before step 4.** A train seed draws from the sorted list of accepted assets, so adding assets or changing a filter threshold after rendering has started changes which assets every later seed gets. Download, preprocess and filter everything first; don't touch `dataset/assets/train` or the filter settings while clips are being rendered.
 
 ## 3. Smoke test (first thing on a new GPU type)
 
@@ -72,4 +84,13 @@ The first command runs T1/T1b on a 2% sample, and T3, T4 and the format checks o
 
 ## 6. Export training shards
 
-*(Command to be filled in when the shard exporter is merged.)* The export packs RGB (JPEG q95), visible masks, poses and voxels into WebDataset tar shards. Only the shards need to leave the cluster.
+```bash
+uv run python -m sam3dvid.export --dataset /scratch/m2/dataset --split train --out /scratch/m2/export/train \
+    --clips-per-shard 100 --workers 8
+```
+
+The export packs RGB (JPEG q95, 4:4:4), visible masks, per-frame camera-frame poses and the voxels of the used assets into WebDataset tar shards plus `index.json`; the format is in `docs/data_format.md` Section 9. Only the export directory needs to leave the cluster: about 4 MB per clip, so about 40 GB for 10,000 clips.
+
+- **Run it only after rendering and validation are finished.** Shards are cut from the sorted clip list, and an existing shard is skipped on resume, so exporting while clips are still missing produces shards whose contents don't match a later index.
+- **Round trip:** `uv run pytest -q tests/test_export.py` checks the reader against the source clips (on the local dataset).
+- **Not yet tried:** `--workers > 1`, and reading the shards with the `webdataset` library itself.

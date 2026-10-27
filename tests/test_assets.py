@@ -50,6 +50,8 @@ def test_rejection_reasons_and_pool(tmp_path):
     good = {"extent_min": 0.5, "normal_eig_min": 0.2, "outlier_area_frac": 0.1, "num_voxels": 5000}
     assert rejection_reasons(good, cfg) == []
     assert rejection_reasons({**good, "extent_min": 0.01, "num_voxels": 10}, cfg) == ["thin", "small"]
+    assert rejection_reasons({**good, "captions": ["A modern House with a garden."]}, cfg) == ["scene"]
+    assert rejection_reasons({**good, "captions": ["A mushroom", "a warehouse-style crate"]}, cfg) == []
     for split in ("train", "eval"):
         for name, scores in {"a": good, "b": {**good, "normal_eig_min": 0.0}}.items():
             d = tmp_path / "assets" / split / name

@@ -5,7 +5,7 @@ Usage:
         [--seed 0] [--min-aesthetic 5.5] [--workers 8]
 
 The candidate list is TRELLIS-500K's ObjaverseXL_sketchfab.csv (HuggingFace dataset
-JeffreyXiang/TRELLIS-500K; columns sha256, file_identifier, aesthetic_score), filtered to
+JeffreyXiang/TRELLIS-500K; columns sha256, file_identifier, aesthetic_score, captions), filtered to
 aesthetic_score >= --min-aesthetic. The GLB files are Objaverse 1.0 objects from the HuggingFace
 dataset allenai/objaverse, located through its object-paths.json.gz; this is the same route as
 TRELLIS's datasets/ObjaverseXL.py (objaverse.xl), minus the GitHub subset. A downloaded file whose
@@ -100,6 +100,17 @@ def uid_of(file_identifier: str) -> str:
     return file_identifier.rstrip("/").rsplit("/", 1)[-1]
 
 
+def parse_captions(raw: str) -> list[str]:
+    """Captions as a list: a JSON list is parsed, any other non-empty string becomes a one-item list."""
+    if not raw:
+        return []
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError:
+        return [raw]
+    return [str(c) for c in value] if isinstance(value, list) else [str(value)]
+
+
 def read_candidates(csv_path: Path, object_paths: dict[str, str], min_aesthetic: float) -> list[dict]:
     """Rows of the TRELLIS CSV with aesthetic_score >= min_aesthetic whose GLB exists in Objaverse 1.0."""
     csv.field_size_limit(1 << 30)  # the captions column can be large
@@ -117,6 +128,7 @@ def read_candidates(csv_path: Path, object_paths: dict[str, str], min_aesthetic:
                     "sha256": row["sha256"],
                     "aesthetic_score": float(row["aesthetic_score"]),
                     "source_url": row["file_identifier"],
+                    "captions": parse_captions(row.get("captions", "")),
                 }
             )
     return rows

@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import json
 import random
+import re
 import subprocess
 import tempfile
 from pathlib import Path
@@ -41,14 +42,28 @@ def rejection_reasons(scores: dict[str, float], cfg: Config) -> list[str]:
         reasons.append("outlier")
     if scores["num_voxels"] < cfg.filter_min_voxels:
         reasons.append("small")
+    if scene_word(scores.get("captions", []), cfg):
+        reasons.append("scene")
     return reasons
 
 
+def scene_word(captions: list[str], cfg: Config) -> str | None:
+    """The first of `cfg.filter_scene_words` found as a whole word in the captions, if any."""
+    text = " ".join(captions).lower()
+    for word in cfg.filter_scene_words:
+        if re.search(rf"\b{re.escape(word)}\b", text):
+            return word
+    return None
+
+
 def load_scores(cfg: Config, split: str) -> dict[str, dict[str, float]]:
-    """filter_scores plus num_voxels per asset id."""
+    """filter_scores plus num_voxels and captions (empty for GSO) per asset id."""
     root = Path(cfg.dataset_root) / "assets" / split
     metas = (json.loads(p.read_text()) for p in sorted(root.glob("*/meta.json")))
-    return {m["asset_id"]: {**m["filter_scores"], "num_voxels": m["num_voxels"]} for m in metas}
+    return {
+        m["asset_id"]: {**m["filter_scores"], "num_voxels": m["num_voxels"], "captions": m.get("captions", [])}
+        for m in metas
+    }
 
 
 def accepted_assets(cfg: Config, split: str) -> list[str]:
@@ -90,7 +105,8 @@ def contact_sheet(cfg: Config, entries: list[tuple[str, dict, list[str]]], thumb
             rgba = np.load(path).astype(np.float32)
             rgb = rgba[..., :3] * rgba[..., 3:] / 255 + np.array(BACKGROUND) * (1 - rgba[..., 3:] / 255)
             sheet.paste(Image.fromarray(rgb.astype(np.uint8)).resize((THUMB, THUMB), Image.LANCZOS), (x, y))
-        draw.text((x + 3, y + THUMB), f"{asset_id[:8]} {','.join(reasons)}", fill=(0, 0, 0), font=font)
+        word = scene_word(scores["captions"], cfg)
+        draw.text((x + 3, y + THUMB), f"{asset_id[:8]} {','.join(reasons)}{f' ({word})' if word else ''}", fill=(0, 0, 0), font=font)
         label = f"ext {scores['extent_min']:.2f} eig {scores['normal_eig_min']:.2f} out {scores['outlier_area_frac']:.2f} vox {scores['num_voxels']}"
         draw.text((x + 3, y + THUMB + 16), label, fill=(60, 60, 60), font=font)
     return sheet
@@ -102,6 +118,7 @@ def thresholds(cfg: Config) -> dict[str, float]:
         "reject_if_normal_eig_min_below": cfg.filter_normal_eig_min,
         "reject_if_outlier_area_frac_above": cfg.filter_outlier_area_frac,
         "reject_if_num_voxels_below": cfg.filter_min_voxels,
+        "reject_if_caption_has_word": cfg.filter_scene_words,
     }
 
 
@@ -128,9 +145,10 @@ def main() -> None:
     }
     thumb_dir = out / f"thumbs_{args.split}"
     render_thumbnails(cfg, args.split, shown["rejected"] + shown["accepted"], thumb_dir)
+    numeric = {k: v for k, v in thresholds(cfg).items() if k != "reject_if_caption_has_word"}
     for name, ids in shown.items():
         entries = [(a, scores[a], reasons[a]) for a in ids]
-        title = f"{args.split} {name} ({len(ids)} of {len(rejected) if name == 'rejected' else len(accepted)}); thresholds {thresholds(cfg)}"
+        title = f"{args.split} {name} ({len(ids)} of {len(rejected) if name == 'rejected' else len(accepted)}); thresholds {numeric}"
         contact_sheet(cfg, entries, thumb_dir, title).save(out / f"assets_{args.split}_{name}.png")
 
     summary = {
@@ -140,8 +158,11 @@ def main() -> None:
         "num_accepted": len(accepted),
         "num_rejected": len(rejected),
         "accept_rate": len(accepted) / max(len(scores), 1),
-        "rejected_by_reason": {k: sum(k in r for r in reasons.values()) for k in ("thin", "flat", "outlier", "small")},
-        "shown": {name: {a: {"scores": scores[a], "reasons": reasons[a]} for a in ids} for name, ids in shown.items()},
+        "rejected_by_reason": {k: sum(k in r for r in reasons.values()) for k in ("thin", "flat", "outlier", "small", "scene")},
+        "shown": {
+            name: {a: {"scores": {k: v for k, v in scores[a].items() if k != "captions"}, "reasons": reasons[a], "scene_word": scene_word(scores[a]["captions"], cfg)} for a in ids}
+            for name, ids in shown.items()
+        },
     }
     (out / f"assets_{args.split}_filter.json").write_text(json.dumps(summary, indent=1))
     print(json.dumps({k: v for k, v in summary.items() if k != "shown"}, indent=1))

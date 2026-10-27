@@ -7,7 +7,8 @@ Usage:
 Sources read `--raw` (default data/raw/<source>), as filled by scripts/download_gso.py and
 scripts/download_objaverse.py. Finished assets (meta.json present) are skipped; assets that crash,
 hang or fail in Blender are logged to <dataset_root>/assets/failed_<split>.jsonl and skipped until
-`--retry-failed`.
+`--retry-failed`. `--refresh-meta` rewrites the source fields (license, captions, ...) of finished
+assets from the current index without reprocessing them.
 """
 
 from __future__ import annotations
@@ -148,6 +149,7 @@ def objaverse_assets(raw: Path, limit: int | None) -> list[Asset]:
             "aesthetic_score": o["aesthetic_score"],
             "name": o["name"],
             "author": o["author"],
+            "captions": o.get("captions", []),
         }
         # GLBs are self-contained, so Blender reads them in place.
         assets.append(Asset(uid, lambda staging, p=(raw / "glbs" / f"{uid}.glb").resolve(): p, meta))
@@ -197,6 +199,17 @@ def preprocess(
     ok = sum((out_root / a.asset_id / "meta.json").exists() for a in todo)
     dt = time.monotonic() - t0
     print(f"{ok} of {len(todo)} assets done in {dt:.0f} s ({dt / max(len(todo), 1):.1f} s per asset)", flush=True)
+
+
+def refresh_meta(cfg: Config, assets: list[Asset], split: str) -> None:
+    out_root = Path(cfg.dataset_root) / "assets" / split
+    n = 0
+    for a in assets:
+        path = out_root / a.asset_id / "meta.json"
+        if path.exists():
+            path.write_text(json.dumps({**json.loads(path.read_text()), **a.meta}, indent=1))
+            n += 1
+    print(f"refreshed {n} of {len(assets)} meta.json files", flush=True)
 
 
 def preprocess_chunk(
@@ -287,10 +300,14 @@ def main() -> None:
     ap.add_argument("--workers", type=int, default=1, help="parallel Blender processes")
     ap.add_argument("--stall-timeout", type=float, default=600, help="seconds without a finished asset before Blender is killed")
     ap.add_argument("--retry-failed", action="store_true")
+    ap.add_argument("--refresh-meta", action="store_true")
     args = ap.parse_args()
     raw = args.raw or Path("data/raw") / args.source
     split = args.split or ("eval" if args.source == "gso" else "train")
     assets = (gso_assets if args.source == "gso" else objaverse_assets)(raw, args.limit)
+    if args.refresh_meta:
+        refresh_meta(Config.load(args.config), assets, split)
+        return
     preprocess(
         Config.load(args.config), assets, split, chunk=args.chunk or (50 if args.source == "gso" else 20),
         workers=args.workers, stall_timeout=args.stall_timeout, retry_failed=args.retry_failed,
