@@ -8,7 +8,8 @@ convention (docs/data_format.md section 3). Read the result with `sam3dvid.expor
     uv run python -m sam3dvid.export --dataset dataset --split train --out export/train \
         --clips-per-shard 100 --workers 8
 
-One `--out` directory holds one split: `index.json` has a fixed name.
+One `--out` directory holds one split: `index.json` has a fixed name. `--verify N` then reads the
+first N clips back and compares them with the source clips (finished shards are not rewritten).
 """
 
 from __future__ import annotations
@@ -209,6 +210,36 @@ def export(
     return index
 
 
+def verify(dataset: Path, split: str, out: Path, num: int) -> None:
+    """Read the first `num` exported clips back and check them against the source clips.
+
+    Raises AssertionError on a mismatch: masks must be bit-exact, poses and voxels equal, RGB PSNR > 40 dB.
+    """
+    from .export_reader import iter_samples, load_voxels
+
+    index = json.loads((out / "index.json").read_text())
+    voxels = np.load(out / index["voxels_file"])
+    checked = 0
+    for shard in index["shards"]:
+        for cid, rgb, visible, js in iter_samples(out / shard["name"]):
+            clip = Clip(dataset / "clips" / split / cid)
+            for t in range(clip.num_frames):
+                assert np.array_equal(visible[t], clip.visible(t)), f"{cid} t={t}: visible mask differs"
+                mse = np.mean((rgb[t].astype(float) - clip.rgb(t)[..., :3]) ** 2)
+                assert mse == 0 or 10 * np.log10(255**2 / mse) > 40, f"{cid} t={t}: RGB PSNR <= 40 dB"
+            for o in js["objects"]:
+                k = o["k"]
+                for t in range(clip.num_frames):
+                    R, tr, sc = object_pose_in_camera(clip, k, t)
+                    assert np.allclose(o["R_co"][t], R) and np.allclose(o["t_co"][t], tr) and np.allclose(o["s_co"][t], sc), f"{cid} k={k} t={t}: pose differs"
+                assert np.array_equal(load_voxels(voxels, o["asset_id"]), np.load(clip.asset_path(k, "voxels"))), f"{cid} k={k}: voxels differ"
+            checked += 1
+            if checked == num:
+                print(f"verified {checked} clips: masks, poses and voxels exact, RGB PSNR > 40 dB")
+                return
+    print(f"verified {checked} clips (all exported): masks, poses and voxels exact, RGB PSNR > 40 dB")
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     p.add_argument("--dataset", type=Path, default=Path("dataset"))
@@ -216,10 +247,13 @@ def main() -> None:
     p.add_argument("--out", type=Path, required=True)
     p.add_argument("--clips-per-shard", type=int, default=100)
     p.add_argument("--workers", type=int, default=1)
+    p.add_argument("--verify", type=int, default=0, metavar="N", help="read back and check the first N clips")
     args = p.parse_args()
     index = export(args.dataset, args.split, args.out, args.clips_per_shard, args.workers)
     total = sum(s["bytes"] for s in index["shards"])
     print(f"{index['num_clips']} clips, {total / 1e9:.2f} GB, {index['num_assets']} assets")
+    if args.verify:
+        verify(args.dataset, args.split, args.out, args.verify)
 
 
 if __name__ == "__main__":

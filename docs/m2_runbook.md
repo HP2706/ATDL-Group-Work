@@ -1,6 +1,6 @@
 # M2 runbook: 10k train clips on a GPU cluster
 
-M2 renders 10,000 train clips from Objaverse assets on SA-1B backgrounds, validates them, and packs them into training shards. Everything runs from the repo root on a Linux node with NVIDIA GPUs. Steps 1-3 can be done any time; **step 4 (the full render) waits until T6 is signed off**, because T6 can still change render settings.
+M2 renders 10,000 train clips from Objaverse assets on SA-1B backgrounds, validates them, and packs them into training shards. Everything runs from the repo root on a Linux node with NVIDIA GPUs. T6 is signed off, so all steps can run in order. The whole chain (assets, render with Blender 4.5, tests, export) was checked locally on 5 train clips.
 
 Expected volume: about 185 GB of full-format clips on scratch (inferred from M1's 9.2 GB per 500 clips), 40-50 GB of training shards.
 
@@ -54,7 +54,7 @@ It checks four things:
 
 Send the output back. If the first render fails, the script prints the Blender log. The likeliest cause is the GPU not being supported by this Blender build.
 
-## 4. Render (after T6 sign-off)
+## 4. Render
 
 Train seeds are **1000000-1009999**. They must not overlap the eval seeds 0-499: a seed fixes N, layout and camera path regardless of split.
 
@@ -86,11 +86,11 @@ The first command runs T1/T1b on a 2% sample, and T3, T4 and the format checks o
 
 ```bash
 uv run python -m sam3dvid.export --dataset /scratch/m2/dataset --split train --out /scratch/m2/export/train \
-    --clips-per-shard 100 --workers 8
+    --clips-per-shard 100 --workers 8 --verify 20
 ```
 
 The export packs RGB (JPEG q95, 4:4:4), visible masks, per-frame camera-frame poses and the voxels of the used assets into WebDataset tar shards plus `index.json`; the format is in `docs/data_format.md` Section 9. Only the export directory needs to leave the cluster: about 4 MB per clip, so about 40 GB for 10,000 clips.
 
 - **Run it only after rendering and validation are finished.** Shards are cut from the sorted clip list, and an existing shard is skipped on resume, so exporting while clips are still missing produces shards whose contents don't match a later index.
-- **Round trip:** `uv run pytest -q tests/test_export.py` checks the reader against the source clips (on the local dataset).
-- **Not yet tried:** `--workers > 1`, and reading the shards with the `webdataset` library itself.
+- **Round trip:** `--verify 20` reads the first 20 clips back and checks them against the source clips: masks bit-exact, poses and voxels equal, RGB PSNR > 40 dB. It stops with an AssertionError naming the clip and frame otherwise. Re-running the command only verifies, because finished shards are skipped.
+- **Not yet tried:** reading the shards with the `webdataset` library itself.

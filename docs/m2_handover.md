@@ -7,15 +7,15 @@ This brief is for whoever runs M2, and for their coding agent: give the agent th
 Produce the **train split**: 10,000 clips (seeds 1000000-1009999) rendered from filtered Objaverse assets on SA-1B backgrounds. Validate them, and pack them into training shards (RGB, visible masks, poses, voxels) for the model team.
 
 **Deliverables:**
-1. Training shards plus `index.json` and the voxels file. Expected 40-50 GB; this is what the model team trains on.
+1. Training shards plus `index.json` and the voxels file. Expected about 40 GB (4 MB per clip, measured); this is what the model team trains on.
 2. A short run report: GPU type, seconds per clip, worker count, rejection rate, failed seeds, test results, total size.
-3. The review contact sheets from step 6 of the runbook, for sign-off by Julian.
+3. The review contact sheets from runbook §5, for sign-off by Julian.
 
 The full-format clips (about 185 GB, inferred from M1) stay on cluster storage until the shards are accepted, and can then be deleted.
 
 ## Context in five sentences
 
-The generator places 1-4 static objects in a scene, orbits a camera around them over 32 frames, renders with Blender/Cycles through BlenderProc, and composites the result over an SA-1B photo. Every clip is validated by geometric tests (T1-T5) that compare the rendered masks and depth against ray-cast ground truth. The eval split (M1, 500 clips on GSO objects) is done and passes everything. M2 is the same pipeline with Objaverse assets and 20x the volume, on bigger GPUs. The only new risk is the hardware: the B200 (Blackwell) needs Blender 4.5 LTS instead of the default 4.2.1, and this has been validated on an RTX 3060 but **not yet on a B200**.
+The generator places 1-4 static objects in a scene, orbits a camera around them over 32 frames, renders with Blender/Cycles through BlenderProc, and composites the result over an SA-1B photo. Every clip is validated by geometric tests (T1-T5) that compare the rendered masks and depth against ray-cast ground truth. The eval split (M1, 500 clips on GSO objects) is done and passes everything, and the SAM 3D convention check (T6) is signed off. M2 is the same pipeline with Objaverse assets and 20x the volume, on bigger GPUs; the whole chain was run locally on 5 train clips. The only new risk is the hardware: the B200 (Blackwell) needs Blender 4.5 LTS instead of the default 4.2.1, and this has been validated on an RTX 3060 but **not yet on a B200**.
 
 ## Steps and checkpoints
 
@@ -25,14 +25,12 @@ Stop at each **checkpoint** and send the listed output to Julian before continui
 |---|---|---|---|
 | 1 | Clone the repo on a UCloud GPU job; run `scripts/m2/setup_node.sh` | §1 | - |
 | 2 | Get the SA-1B backgrounds (your own license and links file) and build the pools | §2 | Pool sizes printed (expect 7,258 train) |
-| 3 | Download and preprocess the Objaverse assets; check the filter contact sheet | §2 | **Contact sheet + accept rate** |
+| 3 | Download and preprocess the Objaverse assets; check the filter contact sheet. Then the asset pool is frozen | §2 | **Contact sheets + accept rate** (expect about 67%) |
 | 4 | `scripts/m2/smoke_test.sh` on the B200 | §3 | **Full output** (does Blender render on the B200, s/clip for 1/2/4 workers) |
 | 5 | Pilot: seeds 1000000-1000099 | §4 | **failures.jsonl, s/clip, rejection rate, 20 review videos** |
-| 6 | Wait for T6 sign-off (Julian); then the full render in seed-range jobs | §4 | Progress once a day is enough |
+| 6 | Full render in seed-range jobs | §4 | Progress once a day is enough |
 | 7 | Validate (2% sample + T3/T4 on all), review videos | §5 | **Test summary + contact sheets** |
-| 8 | Export shards, check the round trip on a few clips | §6 | **Shard index, total size** |
-
-Step 6 is gated on T6, the SAM 3D convention check, which can still change render settings. Steps 1-5 can start right away.
+| 8 | Export shards with `--verify 20` | §6 | **Shard index, total size, verify line** |
 
 ## UCloud notes (fill in as you learn them)
 
@@ -65,6 +63,7 @@ Take s/clip from the smoke test, and leave 20% headroom for retries.
 - **`GLIBC_2.xx not found`:** the node's OS is too old for Blender; it needs a container (ask).
 - **A job is killed or times out:** run the same command again; finished clips are skipped.
 - **Many rejections, e.g. > 30% of clips needing retries:** stop and report. Objaverse assets may be behaving differently from GSO (thin or degenerate meshes); the geometric filter may need tightening.
+- **An accept rate far from about 67%, or scenes (houses, floor plans, landscapes) on the accepted contact sheet:** report before rendering; the filter settings are Julian's call.
 - **Disk or inode quota errors:** stop; the dataset root needs to move.
 
 Never change sampling or render parameters to make something pass without checking in: the eval split was rendered with them, and train and eval must match.
