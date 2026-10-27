@@ -63,6 +63,11 @@ The following reproduces the relevant wording from [Course information](https://
 >
 > If you are in doubt about plagiarism or citation rules, please ask the teachers or TAs.
 
+## Code
+
+- [`code/`](code/): video-conditioned SAM 3D training and experiments on NAVI.
+- [`synthetic-data/`](synthetic-data/): generator for synthetic multi-object videos with exact 3D ground truth. Rendered data is not committed; see its [README](synthetic-data/README.md) and [`DATASET.md`](synthetic-data/DATASET.md).
+
 ## Local template
 
 The existing template is in [`report/ISBI_template-master/`](report/ISBI_template-master/), with the starting source [`Template_ISBI_latex.tex`](report/ISBI_template-master/Template_ISBI_latex.tex).
