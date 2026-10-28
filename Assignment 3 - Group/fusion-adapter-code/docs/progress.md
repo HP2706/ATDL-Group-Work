@@ -1,70 +1,48 @@
-# Progress: Video SAM 3D fusion adapter
+# Progress
 
-Status on 2026-10-26, branch `mathias`. P1 to P5 are committed. The P5 GPU checks have not run yet; P6 to P8 are not started.
+Status on 2026-10-27, branch `mathias`. All phases are implemented. What is left needs a GPU and the real datasets, neither of which has been used yet.
 
-## Phases
-
-| Phase | Content | Status | Commit |
-|---|---|---|---|
-| P1 | Skeleton, config merging, env files, CLI, `check-env` | Done | `12696e8` |
-| P2 | Data reader, sample builder, fake dataset | Done | `76af8fc` |
-| P3 | `token_coverage`, gated fusion adapter | Done | `34cdad3` |
-| P4 | FakeSam3D, training loop, checkpoints, resume, benchmark, validation | Done | `c40da0d` |
-| P5 | SAM 3D inspection, real wrapper, encoders, `cache-latents`, `frame-test` | Code done; GPU checks pending | `d430f16` |
-| P6 | `evaluate.py`, full `metrics.py`, `analyze.py` | Not started | |
-| P7 | UCloud and GCP scripts, `datagen.py` | Not started | |
-| P8 | Final README | Not started (stub only) | |
-
-Tests: 76 CPU tests pass (`pytest -q`, about 15 s). The 11 GPU tests in `tests/gpu/` are skipped without CUDA.
-
-## What exists
-
-| Area | Files | What it does |
+| Phase | Content | Status |
 |---|---|---|
-| Config and CLI | `configs/`, `vidsam3d/config.py`, `vidsam3d/__main__.py` | base ← condition ← env ← `key=value`; struct mode, so a misspelled key is an error. One entrypoint: `python -m vidsam3d <command>`. |
-| Environment check | `vidsam3d/check_env.py` | GPU, VRAM, versions, paths, HF token and access, SAM 3D checkpoint files and import; `--load-models` loads SAM 3D and V-JEPA. |
-| Data | `vidsam3d/data/reader.py`, `samples.py` | Reads format v0.1 with its conventions. Builds samples: frame subset, reference frame, clip window, object-centred crop, Δt, leakage guard. The val split lives in its own `clips/val`, `assets/val` folders. |
-| Targets | `vidsam3d/data/targets.py` | Latent cache per asset with round-trip IoU (T5), canonical permutation, `voxel_fill`, the 24 cube rotations, Phase B pose stub. |
-| Adapter | `vidsam3d/models/adapter.py` | Gated cross-attention blocks with zero-init tanh gates (17,869,828 parameters), padding for mixed K, attention-mass diagnostic. |
-| Encoders | `vidsam3d/models/encoders.py` | `token_coverage`, `kv_tokens` for the three key/value sources, `VJEPAEncoder` (V-JEPA 2.1 ViT-L from the pinned official code), `DinoEncoder` (SAM 3D's own DINOv2), `FakeEncoder`. |
-| SAM 3D | `vidsam3d/models/sam3d.py`, `fake_sam3d.py` | `Sam3DGeometry` wraps the official pipeline (Stage 1 only, frozen, no source changes). `FakeSam3D` has the same interface for CPU tests. |
-| Training | `vidsam3d/train.py`, `utils.py` | Flow matching on the adapter only. bf16, gradient accumulation, AdamW, warm-up + cosine, clipping, EMA. Validation loss and vIoU, best checkpoint, benchmark mode. Checkpoints go to scratch and are copied to the output dir; `resume: auto` reproduces the uninterrupted run exactly. |
-| Diagnostics | `vidsam3d/inspect_sam3d.py` | `inspect-sam3d` writes the runtime section of `docs/sam3d_internals.md`; `frame-test` runs T4. |
-| Docs | `docs/sam3d_internals.md`, `docs/p5_ucloud_setup.md` | What the wrapper relies on in the SAM 3D code; the UCloud GPU setup guide. |
+| P1 | Config merging, env files, CLI, `check-env` | Done |
+| P2 | Data reader, sample builder, fake dataset | Done |
+| P3 | Token coverage, gated fusion adapter | Done |
+| P4 | Training loop, checkpoints, exact resume, benchmark, validation (FakeSam3D) | Done |
+| P5 | SAM 3D wrapper, V-JEPA / DINOv2 encoders, latent cache, `inspect-sam3d`, `frame-test` | Code done; GPU checks pending |
+| P6 | `evaluate.py`, `metrics.py`, `analyze.py` | Done on the fake dataset; real eval pending |
+| P7 | `datagen.py`, setup / run scripts for UCloud, Vertex AI and GPU VMs | Done; not yet run on a cluster |
+| P8 | README and docs | Done |
 
-## Decisions so far
+**Tests.** 98 CPU tests pass (`pytest -q`, about 2 min) on a rendered fake dataset with FakeSam3D. They cover the data conventions, the leakage guard, the adapter (identity at init, gradients), exact resume, evaluation (including a CPU version of T1), the metrics, the statistics, the dataset tools and a dry run through `scripts/run.sh`. The 11 GPU tests in `tests/gpu/` (T1, T3a, T4, T5 and SAM 3D facts) skip without CUDA, checkpoints and data. The metric and eval tests need pytorch3d; on macOS it builds with `CFLAGS=-Wno-invalid-specialization CXXFLAGS=-Wno-invalid-specialization uv pip install --no-build-isolation "pytorch3d @ git+https://github.com/facebookresearch/pytorch3d.git@75ebeea"`.
 
-| Decision | Value | Reason |
+## Decisions
+
+| Topic | Decision | Reason |
 |---|---|---|
-| Weight decay | Not on gates, biases, embeddings, LayerNorm | Agreed in P4 review |
-| Phase A layout tokens | Pure noise (`phase_a_layout: noise`) | Shape tokens do not attend to layout tokens in SAM 3D, so no zero-shot layout cache is needed |
-| CFG null branch | Zeros, never touched by the adapter | `add_flag` + `force_zeros_cond` in SAM 3D (asserted at runtime) |
-| V-JEPA route | Pinned `facebookresearch/vjepa2` code, `vjepa2_1_vit_large_384`, 256 px | Only V-JEPA 2.1 ViT-L release; RoPE grid is natively 16 × 16 at 256 px; no new dependencies |
-| Val split | Own split folders (`val`) | Agreed |
-| Eval reference frames | One sample when middle and most-occluded coincide; ties go to the earliest frame | Default, kept for now |
-| C1 crop | Same crop as C3 | Default, kept for now |
-| Bootstrap | Resample whole clips | Default, kept for now |
-| UCloud / GCS names | `/work/vidsam3d`, bucket `vidsam3d` | Placeholders, overridable by `PROJECT_DIR`, `GCS_BUCKET` |
+| Weight decay | Not on gates, biases, embeddings, LayerNorm | P4 review |
+| Phase A layout tokens | Pure noise | Shape tokens do not attend to layout tokens, so no zero-shot layout cache is needed (internals item 7) |
+| CFG null branch | Zeros; the adapter never touches it | `add_flag` + `force_zeros_cond` in SAM 3D, asserted at runtime |
+| Sampler | Distilled shortcut, 4 steps, no CFG, for every condition | Compute; flow mode with CFG is one config switch away (`sampler.mode: flow`) |
+| GPU environment | torch 2.7.1+cu128, pytorch3d / kaolin rebuilt for the GPU | Only B200 is available, and SAM 3D's cu121 stack has no sm_100 kernels; the same env runs on A100/H100 |
+| V-JEPA | `vjepa2_1_vit_large_384` from the pinned official code, 256 px | Only V-JEPA 2.1 ViT-L release; its RoPE grid is natively 16 × 16 |
+| Val split | Own split folders (`clips/val`, `assets/val`) | Agreed |
+| Eval references | Middle frame and most-occluded frame of S; one sample if they coincide; ties go to the earliest frame | Default |
+| Aligned metrics | Normalise to [-1, 1], similarity ICP, vIoU on the GT grid, Chamfer and F-score on surface voxels; F-score thresholds 0.02 / 0.05 of the longest side | Rigid ICP cannot undo the scale change that bbox normalisation gives a rotated shape |
+| Result labels | Run name plus `_k<K>`, `_shuffle`, `_wrongvideo`; baselines `c0`, `c0b_oracle` | One results file per label; seeds depend only on (clip, k, r) |
+| Bootstrap | Resample whole clips, 2,000 resamples, seeded | Keeps all objects and reference frames of a clip together |
+| Shard manifests | `manifest.<split>.shard<ID>.jsonl`, written from each clip's `meta.json` | Independent of the generator's file naming |
 
-## Waiting for the GPU run
+## Waiting for
 
-| Check | Command | What it decides |
+| Item | Needed for | Who |
 |---|---|---|
-| Environment | `python -m vidsam3d check-env --env ucloud --load-models` | Both models load |
-| Runtime internals | `python -m vidsam3d inspect-sam3d --env ucloud` | `adapter.query_sets` (names of the two RGB token sets); confirms the zero null branch and that the shape ignores the layout |
-| GPU tests | `VIDSAM3D_ENV=ucloud pytest -m gpu tests/gpu -s` | T1 (identity at init), T3a (V-JEPA token order), T5 (VAE round trip) |
-| T5 | part of the GPU tests | `target.voxel_fill`: surface or solid |
-| T4 | `python -m vidsam3d frame-test --env ucloud` | `target.canonical_permutation` |
+| Datasets (train, val, eval) in format v0.1 | everything after `check-env` | Julian |
+| Generator command template, clip counts, seed ranges (`generator.*` in `base.yaml`) | `gen-data` | Julian |
+| `ours_to_sam3d` pose converter | Phase B (rotation loss) only | Julian |
+| First run of `scripts/setup_env.sh` on a B200 | all GPU steps | us |
+| `inspect-sam3d` output | `adapter.query_sets` | us |
+| T5 and T4 results | `target.voxel_fill`, `target.canonical_permutation` | us |
+| Benchmark | `train.batch_size`, `train.max_steps`; check the cost of the val loss and of the conditioning path | us |
+| GCP project, bucket, machine type | `scripts/gcp/gcp.env` (only if we use Google Cloud) | us |
 
-## Open questions
-
-1. **Sampler for all conditions.** Default: distilled shortcut mode, 4 steps, no CFG (about 4 network passes per sample). Alternative: flow mode, 25 steps with CFG 7 (about 50).
-2. **Cost of the conditioning path.** A depth model and 4 DINOv2 passes run per sample and step. If the benchmark shows this dominates, cache the depth map per (clip, frame).
-3. **Validation cost.** 200 samples × 9 τ every 1,000 steps; check once the benchmark runs.
-4. **For Julian.** Final generator command template, val split, `ours_to_sam3d` (needed for Phase B only).
-
-## Still to do
-
-- **P6:** `evaluate.py` (per-sample `results.jsonl`, resumable, seeds from (clip, k, r); C0 zero-shot, C0b best-frame oracle, `--k`, `--shuffle-frames`, `--wrong-video`), aligned metrics in `metrics.py` (ICP, Chamfer, F-score at 0.02 and 0.05 via pytorch3d), `analyze.py` (paired Δ, cluster bootstrap, Wilcoxon, tables, plots). Done when the metric tests pass and zero-shot eval runs on 10 real eval clips. T7 (wrong-video eval) belongs here.
-- **P7:** `scripts/ucloud/setup_env.sh` and `run.sh`, GCP Dockerfile, `build.sh`, `submit.sh`, `vm_run.sh`, `datagen.py` (`gen-data`, `merge-manifests`, `validate-data`), data staging to scratch. The setup script should clone both repos at the pinned commits. Done when the scripts are shellcheck-clean and a `--fake-sam3d` dry run works through `run.sh`.
-- **P8:** final one-page README.
+The order of the GPU steps once the data is in place is in [ucloud.md](ucloud.md#when-the-data-arrives).

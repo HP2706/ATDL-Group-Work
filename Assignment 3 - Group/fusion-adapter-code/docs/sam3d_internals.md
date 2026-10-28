@@ -23,9 +23,9 @@
 - `os.environ["LIDRA_SKIP_INIT"] = "1"` before importing `sam3d_objects` (as `notebook/inference.py` does), `sys.path.insert(0, sam3d_repo)`.
 - `OmegaConf.load(<checkpoint_dir>/pipeline.yaml)`, set `workspace_dir`, `rendering_engine = "pytorch3d"`, `compile_model = False`, `hydra.utils.instantiate`. The VAE encoder comes from `ss_encoder.yaml` / `ss_encoder.ckpt` in the same directory if the pipeline does not load it.
 - DINOv2 is loaded by the `Dino` embedder through `torch.hub` (`facebookresearch/dinov2`, GitHub) at construction, so the first run needs network access (cached in `TORCH_HOME` afterwards).
-- Attention backend: `inference_pipeline.py` sets `ATTN_BACKEND=flash_attn` at import.
+- Attention backend: `inference_pipeline.py` sets `ATTN_BACKEND=flash_attn` at import only on A100/H100/H200; elsewhere (B200) the default `sdpa` is used, so flash_attn and xformers are not needed.
 - Activation checkpointing: set `block.use_checkpoint = True` on the generator blocks (non-reentrant `torch.utils.checkpoint`, so gradients reach the conditioning tokens).
-- The earlier pilot patched `tdfy_dit/models/__init__.py` to skip stage-2 imports. We do **not** patch; the full SAM 3D environment installs those dependencies.
+- Environment: torch 2.7.1+cu128 (`scripts/setup_env.sh`), not SAM 3D's pinned torch 2.5.1+cu121, which has no B200 (sm_100) kernels. Importing the pipeline also imports stage-2 modules, so their dependencies must import: pytorch3d and kaolin (rebuilt for the GPU), spconv (CUDA-12 wheel), gsplat (installed without its CUDA build, never run), open3d (needs `libGL`). The list is in `requirements.gpu.txt`. We do not patch SAM 3D (the earlier pilot patched `tdfy_dit/models/__init__.py` to skip these imports).
 
 ## V-JEPA 2.1
 
@@ -33,7 +33,7 @@
 - Input `(B, 3, T, H, W)`; `T == img_temporal_dim_size (1)` uses the **image patch embedding** + image modality embedding, otherwise tubelets of 2 + video modality embedding. Output `(B, N, 1024)` after the last `norms_block`; `encoder.out_layers = [5, 11, 17, 23]` returns the 4 hierarchical levels.
 - Patch embedding is `Conv3d(...).flatten(2).transpose(1, 2)`, so token order is (t, h, w); T3a checks it.
 - Normalisation: ImageNet mean/std on [0, 1] input (`evals/video_classification_frozen/utils.py`).
-- Dependencies `timm`, `einops`: already in the SAM 3D environment (`timm==0.9.16`). No new dependency.
+- Dependencies `timm`, `einops` (in `requirements.gpu.txt`).
 
 ## Open questions
 

@@ -378,19 +378,20 @@ configs/
 - [ ] ETA of `ours_to_sam3d` (needed only for Phase B and layout evaluation).
 - [ ] Near-duplicate check between GSO eval assets and the Objaverse training subset.
 
-**Decisions (fill in after Day 1–3):**
+**Decisions** (static = read from the SAM 3D code, see `docs/sam3d_internals.md`; GPU = still to measure):
 
 | Item | Default | Verified value / decision |
 |---|---|---|
-| Conditioning token sets, N_c, d_c | 4 DINOv2 sets, d = 1024 | |
-| Query sets | RGB sets (crop + full) | |
-| CFG null branch | untouched | |
-| τ distribution | logit-normal(0, 1) | |
-| Latent normalisation | SAM 3D constants | |
-| Shape ↔ layout attention | unknown | |
-| Canonical frame permutation P | identity | |
-| V-JEPA token order | (t, h, w) | |
-| Batch size / steps per run | 2–4 / from throughput | |
+| Conditioning token sets, N_c, d_c | 4 DINOv2 sets, d = 1024 | Fused sets from `EmbedderFuser`, split by name at runtime; names and sizes: GPU (`inspect-sam3d`) |
+| Query sets | RGB sets (crop + full) | RGB sets; names: GPU |
+| CFG null branch | untouched | Zeros (`add_flag` + `force_zeros_cond`), never adapted (static; asserted) |
+| τ distribution | logit-normal(0, 1) | logit-normal(0, 1) unless the yaml overrides it (static; GPU confirms) |
+| Latent normalisation | SAM 3D constants | None: the generator uses the VAE mean directly (static) |
+| Shape ↔ layout attention | unknown | Shape attends only to shape, so Phase A feeds layout noise (static; GPU test) |
+| Canonical frame permutation P | identity | Identity expected (Z-up TRELLIS frame in the encoder demo); GPU (T4) |
+| V-JEPA token order | (t, h, w) | Conv3d patch embedding, flatten (t, h, w) (static); GPU (T3a) |
+| Batch size / steps per run | 2–4 / from throughput | GPU (benchmark) |
+| Sampler for all conditions | distilled 4-step | Shortcut mode, 4 steps, no CFG |
 
 ---
 
