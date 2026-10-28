@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import json
+import os
 import sys
 
 from vidsam3d.config import apply_process_env, load_config
@@ -55,11 +57,33 @@ def cmd_analyze(cfg, args) -> None:
     analyze(cfg, args.results, baseline=args.baseline, out_dir=args.out)
 
 
-def not_implemented(phase: str):
-    """Return a handler for a command that arrives in a later phase."""
-    def handler(cfg, args) -> None:
-        sys.exit(f"`{args.command}` is not implemented yet (phase {phase}).")
-    return handler
+def cmd_gen_data(cfg, args) -> None:
+    """Run one shard of the external data generator."""
+    from vidsam3d.datagen import gen_data
+    gen_data(cfg, args.split, args.shard_id, args.num_shards, dry_run=args.dry_run)
+
+
+def cmd_merge_manifests(cfg, args) -> None:
+    """Merge the shard manifests of a split into manifest.jsonl."""
+    from vidsam3d.datagen import merge_manifests
+    merge_manifests(cfg, args.split)
+
+
+def cmd_validate_data(cfg, args) -> None:
+    """Check a split; exit 1 if any clip has a problem."""
+    from vidsam3d.datagen import validate_data
+    report = validate_data(cfg, args.split, args.num_projection_clips)
+    if args.report:
+        with open(args.report, "w") as f:
+            json.dump(report, f, indent=1)
+    if report["clips_with_problems"]:
+        sys.exit(1)
+
+
+def env_int(name: str) -> int | None:
+    """Integer from an environment variable (SHARD_ID / NUM_SHARDS for shard jobs)."""
+    value = os.environ.get(name)
+    return int(value) if value not in (None, "") else None
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -110,23 +134,28 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("gen-data", parents=[common], help="run one shard of the external generator")
     p.add_argument("--split", required=True)
-    p.add_argument("--shard-id", type=int, required=True)
-    p.add_argument("--num-shards", type=int, required=True)
-    p.set_defaults(func=not_implemented("P7"))
+    p.add_argument("--shard-id", type=int, default=env_int("SHARD_ID"), help="default: $SHARD_ID")
+    p.add_argument("--num-shards", type=int, default=env_int("NUM_SHARDS"), help="default: $NUM_SHARDS")
+    p.add_argument("--dry-run", action="store_true", help="print the command only")
+    p.set_defaults(func=cmd_gen_data)
 
     p = sub.add_parser("merge-manifests", parents=[common], help="merge shard manifests")
     p.add_argument("--split", required=True)
-    p.set_defaults(func=not_implemented("P7"))
+    p.set_defaults(func=cmd_merge_manifests)
 
     p = sub.add_parser("validate-data", parents=[common], help="check files and run the projection check")
     p.add_argument("--split", required=True)
-    p.set_defaults(func=not_implemented("P7"))
+    p.add_argument("--num-projection-clips", type=int, default=20)
+    p.add_argument("--report", default=None, help="also write the report as JSON")
+    p.set_defaults(func=cmd_validate_data)
     return parser
 
 
 def main(argv: list[str] | None = None) -> None:
     """Parse arguments, load the config and run the command."""
     args = build_parser().parse_args(argv)
+    if args.command == "gen-data" and (args.shard_id is None or args.num_shards is None):
+        sys.exit("gen-data needs --shard-id/--num-shards (or $SHARD_ID/$NUM_SHARDS)")
     overrides = list(args.overrides) + (["fake_sam3d=true"] if args.fake_sam3d else [])
     cfg = load_config(args.condition, args.env, overrides)
     apply_process_env(cfg)

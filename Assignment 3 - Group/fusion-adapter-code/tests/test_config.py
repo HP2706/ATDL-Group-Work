@@ -89,6 +89,16 @@ def test_check_env_cli_runs(capsys):
     assert "paths.data_root" in out and "failed" in out
 
 
-def test_unimplemented_command_exits_cleanly():
-    with pytest.raises(SystemExit, match="not implemented"):
-        main(["merge-manifests", "--env", "local", "--split", "train"])
+def test_gen_data_needs_a_shard(monkeypatch):
+    monkeypatch.delenv("SHARD_ID", raising=False)
+    with pytest.raises(SystemExit, match="shard"):
+        main(["gen-data", "--env", "local", "--split", "train", "--num-shards", "2"])
+
+
+def test_torch_kernel_compatibility_rule():
+    from vidsam3d.check_env import torch_supports
+    cu121 = ["sm_50", "sm_60", "sm_70", "sm_75", "sm_80", "sm_86", "sm_90"]
+    assert torch_supports((9, 0), cu121) and torch_supports((8, 9), cu121)   # H100, L40S
+    assert not torch_supports((10, 0), cu121)                               # B200: no kernels
+    assert torch_supports((10, 0), cu121 + ["sm_100"])
+    assert torch_supports((10, 0), cu121 + ["compute_90"])                  # PTX JIT

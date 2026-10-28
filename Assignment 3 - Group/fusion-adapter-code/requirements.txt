@@ -1,4 +1,5 @@
-# Extras on top of the SAM 3D Objects environment (which provides torch, pytorch3d, kaolin).
+# Our own dependencies. On GPU machines scripts/setup_env.sh installs them together with torch
+# and requirements.gpu.txt (SAM 3D / V-JEPA runtime); locally, add torch==2.7.1 for the CPU tests.
 omegaconf>=2.3
 numpy
 pillow
@@ -7,5 +8,3 @@ matplotlib
 tqdm
 pytest
 huggingface_hub
-# V-JEPA 2.1 is loaded from the pinned facebookresearch/vjepa2 checkout (paths.vjepa2_repo);
-# its deps (timm, einops) are already in the SAM 3D environment.

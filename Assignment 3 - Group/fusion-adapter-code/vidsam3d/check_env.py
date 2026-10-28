@@ -29,6 +29,23 @@ def check_packages() -> list[Row]:
     return rows
 
 
+def torch_supports(capability: tuple[int, int], arch_list: list[str]) -> bool:
+    """True if a torch build with `arch_list` (e.g. ["sm_80", "compute_90"]) can run on the GPU.
+
+    SASS runs on GPUs of the same major version with an equal or higher minor version;
+    PTX (compute_XY) can be JIT-compiled for any newer GPU.
+    """
+    major, minor = capability
+    for arch in arch_list:
+        kind, num = arch.split("_")
+        m, n = divmod(int(num), 10)
+        if kind == "sm" and m == major and n <= minor:
+            return True
+        if kind == "compute" and (m, n) <= (major, minor):
+            return True
+    return False
+
+
 def check_gpu() -> list[Row]:
     """Report CUDA availability, devices, VRAM and bf16 support."""
     try:
@@ -43,6 +60,9 @@ def check_gpu() -> list[Row]:
         gb = props.total_memory / 1024**3
         status = "OK" if gb >= MIN_VRAM_GB else "WARN"
         rows.append((status, f"gpu{i}", f"{props.name}, {gb:.1f} GB (SAM 3D needs >= {MIN_VRAM_GB})"))
+        cap, archs = torch.cuda.get_device_capability(i), torch.cuda.get_arch_list()
+        rows.append(("OK" if torch_supports(cap, archs) else "FAIL", f"gpu{i} kernels",
+                     f"GPU sm_{cap[0]}{cap[1]}, torch {torch.__version__} built for {' '.join(archs)}"))
     rows.append(("OK" if torch.cuda.is_bf16_supported() else "WARN", "bf16",
                  str(torch.cuda.is_bf16_supported())))
     return rows
@@ -97,7 +117,8 @@ def check_models(cfg: DictConfig, load: bool) -> list[Row]:
         importlib.import_module("sam3d_objects.pipeline.inference_pipeline_pointmap")
         rows.append(("OK", "SAM 3D import", "sam3d_objects.pipeline.inference_pipeline_pointmap"))
     except Exception as e:
-        rows.append(("WARN", "SAM 3D import", f"{type(e).__name__}: {str(e).splitlines()[0][:120]}"))
+        status = "FAIL" if load else "WARN"         # only fatal where the models must run
+        rows.append((status, "SAM 3D import", f"{type(e).__name__}: {str(e).splitlines()[0][:120]}"))
     if not load:
         rows.append(("SKIP", "model loading", "use --load-models (GPU)"))
         return rows

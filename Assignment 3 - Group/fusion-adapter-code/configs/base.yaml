@@ -130,7 +130,9 @@ analysis:
 logging:
   tensorboard: false
 
-generator:                   # external generator (Julian); template to be confirmed
+generator:                   # external generator (Julian); all values to be confirmed with him
   repo: ???
-  clips_per_shard: ???
+  num_clips: {train: 10000, val: 500, eval: 500}
+  seed_offset: {train: 0, val: 1000000, eval: 2000000}   # disjoint seed ranges per split
+  # placeholders: generator_repo, split, seed_start, num_clips, out_dir (= data_root), shard_id
   command: "python {generator_repo}/generate.py --split {split} --seed-start {seed_start} --num-clips {num_clips} --out {out_dir}"

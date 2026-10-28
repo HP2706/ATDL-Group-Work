@@ -6,13 +6,14 @@ so masks, depth, cameras and voxels are mutually consistent. The geometry is com
 world coordinates (x_w = R_wo (s x_o) + t_wo, then x_c = R_cw x_w + t_cw), independently of the
 reader's composed R_co. `mesh.glb` files are empty placeholders.
 
-Usage: python tests/fixtures/make_fake_dataset.py <out_dir>
+Usage: python tests/fixtures/make_fake_dataset.py <out_dir> [--split S --seed-start A --num-clips N]
+The second form behaves like the external generator (no manifest; used by the gen-data tests).
 """
 
 from __future__ import annotations
 
+import argparse
 import json
-import sys
 from pathlib import Path
 
 import numpy as np
@@ -161,7 +162,7 @@ def write_clip(root: Path, split: str, seed: int, size: int, solids: dict) -> di
 
 
 def make_fake_dataset(root: str | Path, size: int = 64, splits=("train", "eval"),
-                      seeds: dict[str, list[int]] | None = None) -> Path:
+                      seeds: dict[str, list[int]] | None = None, write_manifest: bool = True) -> Path:
     """Write the fake dataset to `root` and return the path (`seeds` overrides SPLIT_SEEDS)."""
     seeds = seeds or SPLIT_SEEDS
     root = Path(root)
@@ -177,10 +178,21 @@ def make_fake_dataset(root: str | Path, size: int = 64, splits=("train", "eval")
                 {"source": "gso", "source_name": name, "license": "test",
                  "num_voxels": int(surface(solid).sum())}))
         lines += [write_clip(root, split, seed, size, solids) for seed in seeds[split]]
-    (root / "manifest.jsonl").write_text("".join(json.dumps(line) + "\n" for line in lines))
-    (root / "config.yaml").write_text("generator: make_fake_dataset\n")
+    if write_manifest:
+        (root / "manifest.jsonl").write_text("".join(json.dumps(line) + "\n" for line in lines))
+        (root / "config.yaml").write_text("generator: make_fake_dataset\n")
     return root
 
 
 if __name__ == "__main__":
-    print(make_fake_dataset(sys.argv[1]))
+    ap = argparse.ArgumentParser()
+    ap.add_argument("out_dir")
+    ap.add_argument("--split")
+    ap.add_argument("--seed-start", type=int)
+    ap.add_argument("--num-clips", type=int)
+    a = ap.parse_args()
+    if a.split is None:
+        print(make_fake_dataset(a.out_dir))
+    else:
+        print(make_fake_dataset(a.out_dir, splits=(a.split,), write_manifest=False,
+                                seeds={a.split: list(range(a.seed_start, a.seed_start + a.num_clips))}))
