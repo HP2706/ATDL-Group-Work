@@ -1,0 +1,5 @@
+# C3-nomask: C3 without the coverage-weighted object embedding.
+encoder:
+  kv_source: vjepa
+adapter:
+  use_object_embedding: false

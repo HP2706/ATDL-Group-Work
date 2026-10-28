@@ -1,0 +1,138 @@
+# All defaults. Condition and env files may only override keys that exist here
+# (the config is in struct mode, so a typo is an error).
+# `???` = must be set before use (OmegaConf raises MissingMandatoryValue on access).
+
+condition: base          # filled in by config.load_config
+env: local               # filled in by config.load_config
+run_name: ${condition}_seed${seed}
+seed: 0
+fake_sam3d: false        # use FakeSam3D (tests, dry runs)
+device: auto             # auto | cuda | cpu
+
+# Set in configs/env/*.yaml only.
+paths:
+  data_root: ???             # dataset/ (format v0.1)
+  output_root: ???           # persistent: runs, checkpoints, results
+  scratch_root: ???          # fast local disk: checkpoints first, staged data
+  cache_root: ???            # latents, eval features
+  sam3d_repo: ???            # checkout of facebookresearch/sam-3d-objects
+  sam3d_checkpoint_dir: ???  # downloaded SAM 3D checkpoints
+  hf_home: ???               # Hugging Face cache
+  vjepa2_repo: ???           # checkout of facebookresearch/vjepa2 (pinned commit, see scripts)
+
+data:
+  train_split: train
+  val_split: val             # held-out Objaverse clips in their own split folders (clips/val, assets/val)
+  eval_split: eval
+  stage_to_scratch: false    # if true, the shell script copies the split to scratch_root first
+  num_workers: 4
+  frame_stride: 2            # S = {o, o+2, ..., o+30}
+  num_subset_frames: 16
+  clip_lengths: [1, 4, 8, 16]
+  clip_length_probs: [0.15, 0.15, 0.2, 0.5]
+  p_occluded_bias: 0.5       # train: P(sample r proportional to 1 - visible_frac)
+  min_visible_amodal_frac: 0.02
+  crop:
+    scale: 1.25              # side = max(scale * longest union bbox side, min_side)
+    min_side: 128
+    size: 256                # resize target (V-JEPA input)
+    jitter_center: 0.1       # train: centre +- 10 % of the side
+    jitter_scale: [0.9, 1.1] # train: side x U(0.9, 1.1)
+
+encoder:
+  kv_source: vjepa           # vjepa | dinov2_ref | dinov2_clip
+  vjepa:
+    name: vjepa2_1_vit_large_384     # only V-JEPA 2.1 ViT-L/16 release (RoPE, runs at 256 px)
+    weights_url: https://dl.fbaipublicfiles.com/vjepa2   # pinned code points at localhost
+    image_size: 256
+    layers: last             # last | hierarchical (stretch)
+    dtype: bfloat16
+  dinov2:                    # SAM 3D's own DINOv2 weights (C1/C2)
+    image_size: 224
+    pair_average: false
+
+adapter:
+  d_cond: 1024               # VERIFY with inspect-sam3d
+  d_vid: 1024                # 4096 if encoder.vjepa.layers = hierarchical
+  n_blocks: 2
+  heads: 16
+  ffn_ratio: 2.0
+  max_dt: 7
+  use_object_embedding: true
+  use_time_embedding: true
+  query_sets: ???            # names of the two RGB sets; printed by `inspect-sam3d` (internals item 1)
+
+sam3d:
+  hf_repo: facebook/sam-3d-objects
+  activation_checkpointing: true
+  phase_a_layout: noise      # shape tokens do not attend to layout tokens (internals item 7)
+
+sampler:                     # one setting for all conditions (internals item 4, open question A)
+  mode: shortcut             # shortcut: distilled, d = 1/steps, no CFG | flow: d = 0 with CFG
+  steps: 4
+  cfg_scale: null            # flow mode only; null = the pipeline's ss_cfg_strength
+
+target:
+  # Signed permutation matrix (one of the 24 cube rotations) applied to GT voxels
+  # before VAE encoding. Set from the frame-test (T4).
+  canonical_permutation: [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+  voxel_fill: surface        # surface (voxels.npy as is) | solid (fill interior); set from T5
+
+loss:
+  rotation_weight: 0.0       # 0 = Phase A (shape only); 0.1 in Phase B
+  tau_dist: logit_normal     # fallback if SAM 3D has no default (internals item 5)
+  tau_mean: 0.0
+  tau_std: 1.0
+
+optim:
+  lr: 1.0e-4
+  betas: [0.9, 0.999]
+  weight_decay: 0.01         # not applied to gates, biases, embeddings, LayerNorm
+  warmup_steps: 500
+  min_lr: 1.0e-6
+  grad_clip: 1.0
+  ema_decay: 0.999
+  gate_lr_mult: 1.0          # raise to 10 if tanh(gates) stay ~0 after 2k steps
+
+train:
+  batch_size: 2              # per GPU, from the benchmark
+  effective_batch_size: 32   # via gradient accumulation
+  max_steps: ???             # from the benchmark
+  bf16: true
+  log_every: 10
+  ckpt_every: 1000
+  keep_ckpts: 3              # ckpt_<step>.pt kept in output_root/<run_name>
+  resume: auto               # auto | none | <path to ckpt>
+  benchmark_steps: 20
+
+val:
+  loss_every: 1000
+  loss_num_samples: 200
+  tau_grid: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+  sample_every: 5000
+  sample_num_objects: 100
+
+eval:
+  k: 16                      # clip length (CLI --k)
+  middle_frame: 16
+  flush_every: 20            # copy results.jsonl from scratch to output_root every N samples
+  metrics:
+    max_points: 20000        # points per shape for ICP / Chamfer / F-score (seeded subsample)
+    icp_iterations: 100
+    icp_scale: true          # similarity ICP: bbox normalisation changes the scale of rotated shapes
+    fscore_thresholds: [0.02, 0.05]   # fractions of the longest side; 1 voxel = 1/64 = 0.016
+
+analysis:
+  bootstrap_resamples: 2000
+  visible_frac_bins: [0.1, 0.4, 0.7, 1.0]
+  arc_span_bins: [10, 30, 50, 70]
+
+logging:
+  tensorboard: false
+
+generator:                   # external generator (Julian); all values to be confirmed with him
+  repo: ???
+  num_clips: {train: 10000, val: 500, eval: 500}
+  seed_offset: {train: 0, val: 1000000, eval: 2000000}   # disjoint seed ranges per split
+  # placeholders: generator_repo, split, seed_start, num_clips, out_dir (= data_root), shard_id
+  command: "python {generator_repo}/generate.py --split {split} --seed-start {seed_start} --num-clips {num_clips} --out {out_dir}"

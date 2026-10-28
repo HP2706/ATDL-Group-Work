@@ -1,0 +1,24 @@
+# Data, outputs, caches, weights (never commit)
+/data/
+/outputs/
+/scratch/
+/cache/
+/checkpoints/
+/third_party/
+/runs/
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+
+# Secrets
+.env
+.env.*
+scripts/gcp/gcp.env
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/

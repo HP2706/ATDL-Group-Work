@@ -1,0 +1,11 @@
+# UCloud (DeiC Interactive HPC). Only /work persists after a job.
+# PROJECT_DIR is the attached project folder; run.sh sets SCRATCH_ROOT to local disk if available.
+paths:
+  data_root: ${oc.env:DATA_ROOT,${oc.env:PROJECT_DIR,/work/vidsam3d}/dataset}
+  output_root: ${oc.env:OUTPUT_ROOT,${oc.env:PROJECT_DIR,/work/vidsam3d}/outputs}
+  scratch_root: ${oc.env:SCRATCH_ROOT,${oc.env:PROJECT_DIR,/work/vidsam3d}/scratch}
+  cache_root: ${oc.env:CACHE_ROOT,${oc.env:PROJECT_DIR,/work/vidsam3d}/cache}
+  sam3d_repo: ${oc.env:SAM3D_REPO,${oc.env:PROJECT_DIR,/work/vidsam3d}/sam-3d-objects}
+  sam3d_checkpoint_dir: ${oc.env:SAM3D_CHECKPOINT_DIR,${oc.env:PROJECT_DIR,/work/vidsam3d}/checkpoints/sam3d}
+  hf_home: ${oc.env:HF_HOME,${oc.env:PROJECT_DIR,/work/vidsam3d}/hf_home}
+  vjepa2_repo: ${oc.env:VJEPA2_REPO,${oc.env:PROJECT_DIR,/work/vidsam3d}/vjepa2}

@@ -1,0 +1,3 @@
+# C3 (main): keys/values = V-JEPA 2.1 tokens of the clip.
+encoder:
+  kv_source: vjepa
