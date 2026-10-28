@@ -122,7 +122,7 @@ def frame_test(cfg: DictConfig, num_objects: int = 30, min_visible: float = 0.9,
     for i, it in enumerate(ds.index):
         if "middle" not in it["rules"]:
             continue
-        clip = reader.load_clip(ds.data_root, ds.entries[it["clip_id"]])
+        clip = ds.clip(it["clip_id"])
         r, k = it["r"], it["k"]
         if reader.visibility(clip)[r, k - 1] >= min_visible:
             items.append((reader.visibility(clip, "amodal_px")[r, k - 1], i))
@@ -135,7 +135,7 @@ def frame_test(cfg: DictConfig, num_objects: int = 30, min_visible: float = 0.9,
         cond = model.condition(s["inputs"]["ref_rgb"][None].cuda(), s["inputs"]["ref_mask"][None].cuda())
         z, _ = model.sample(cond, [sample_seed(info["clip_id"], info["k"], info["r"])], cfg.sampler)
         pred = model.decode_latent(z)[0].cpu().numpy()
-        gt = reader.load_voxels(ds.data_root, info["voxels"])
+        gt = reader.load_voxels(ds.voxels_file, info["asset_id"])
         gt = fill_voxels(gt) if cfg.target.voxel_fill == "solid" else gt
         ious.append([voxel_iou(pred, apply_canonical_permutation(gt, P)) for P in rotations])
     ious = np.array(ious)

@@ -11,20 +11,20 @@ device: auto             # auto | cuda | cpu
 
 # Set in configs/env/*.yaml only.
 paths:
-  data_root: ???             # dataset/ (format v0.1)
+  data_root: ???             # one training export (sam3dvid.export) per split: <data_root>/{train,eval}/
   output_root: ???           # persistent: runs, checkpoints, results
   scratch_root: ???          # fast local disk: checkpoints first, staged data
-  cache_root: ???            # latents, eval features
+  cache_root: ???            # latents, shard indexes
   sam3d_repo: ???            # checkout of facebookresearch/sam-3d-objects
   sam3d_checkpoint_dir: ???  # downloaded SAM 3D checkpoints
   hf_home: ???               # Hugging Face cache
   vjepa2_repo: ???           # checkout of facebookresearch/vjepa2 (pinned commit, see scripts)
 
 data:
-  train_split: train
-  val_split: val             # held-out Objaverse clips in their own split folders (clips/val, assets/val)
-  eval_split: eval
-  stage_to_scratch: false    # if true, the shell script copies the split to scratch_root first
+  train_split: train         # 10k Objaverse clips; val is carved out of this folder
+  val_asset_frac: 0.03       # val = train clips showing one of these held-out assets (hash-chosen); 0 = no val
+  eval_split: eval           # held-out GSO test set
+  stage_to_scratch: false    # if true, the shell script copies the export folders to scratch_root first
   num_workers: 4
   frame_stride: 2            # S = {o, o+2, ..., o+30}
   num_subset_frames: 16
@@ -129,10 +129,3 @@ analysis:
 
 logging:
   tensorboard: false
-
-generator:                   # external generator (Julian); all values to be confirmed with him
-  repo: ???
-  num_clips: {train: 10000, val: 500, eval: 500}
-  seed_offset: {train: 0, val: 1000000, eval: 2000000}   # disjoint seed ranges per split
-  # placeholders: generator_repo, split, seed_start, num_clips, out_dir (= data_root), shard_id
-  command: "python {generator_repo}/generate.py --split {split} --seed-start {seed_start} --num-clips {num_clips} --out {out_dir}"

@@ -20,8 +20,8 @@ def gpu_cfg():
     cfg = load_config("c3")
     if not (Path(cfg.paths.sam3d_checkpoint_dir) / "pipeline.yaml").is_file():
         pytest.skip(f"no SAM 3D checkpoints in {cfg.paths.sam3d_checkpoint_dir}")
-    if not (Path(cfg.paths.data_root) / "manifest.jsonl").is_file():
-        pytest.skip(f"no dataset at {cfg.paths.data_root}")
+    if not (Path(cfg.paths.data_root) / cfg.data.eval_split / "index.json").is_file():
+        pytest.skip(f"no eval export at {cfg.paths.data_root}/{cfg.data.eval_split}")
     return cfg
 
 

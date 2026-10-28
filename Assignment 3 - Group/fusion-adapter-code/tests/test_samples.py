@@ -4,11 +4,10 @@ import numpy as np
 import pytest
 import torch
 
-from vidsam3d.config import load_config
 from vidsam3d.data import reader, samples
 from vidsam3d.data.samples import ClipDataset
 
-STRAT_FIELDS = ("visible_frac", "amodal_px", "arc_span_deg", "num_objects", "asset_id", "source")
+STRAT_FIELDS = ("visible_frac", "amodal_px", "arc_span_deg", "num_objects", "asset_id")
 
 
 def test_frame_subset():
@@ -49,10 +48,9 @@ def test_crop_pad_zero_pads_outside_the_image():
 
 
 def test_crop_mask_area_is_preserved(fake_cfg):
-    sample = ClipDataset(fake_cfg, "eval", train=False)[0]
-    clip = reader.load_clip(fake_cfg.paths.data_root,
-                            {"clip_id": sample["info"]["clip_id"], "split": "eval",
-                             "path": f"clips/eval/{sample['info']['clip_id']}"})
+    ds = ClipDataset(fake_cfg, "eval", train=False)
+    sample = ds[0]
+    clip = ds.clip(sample["info"]["clip_id"])
     x0, y0, side = sample["info"]["crop_window"]
     size = fake_cfg.data.crop.size
     for i, t in enumerate(sample["info"]["frame_ids"]):
@@ -95,9 +93,9 @@ def test_eval_clip_length_option(fake_cfg):
 
 def test_train_samples(fake_cfg):
     ds = ClipDataset(fake_cfg, "train", train=True)
-    assert len(ds) == 3                                   # (clip, k) pairs: 1 + 2 objects
+    assert len(ds) == 6                                   # (clip, k) pairs: 1 + 2 + 1 + 2 objects
     seen_lengths = set()
-    for epoch in range(20):
+    for epoch in range(10):
         ds.set_epoch(epoch)
         for i in range(len(ds)):
             info, x = ds[i]["info"], ds[i]["inputs"]
@@ -137,12 +135,14 @@ def test_leakage_guard(fake_cfg):
     assert not set(sample["inputs"]) & {"amodal", "depth", "R_co", "t_co", "K", "cameras"}
 
 
-def test_val_split_lives_in_its_own_folders(tmp_path):
-    from tests.fixtures.make_fake_dataset import make_fake_dataset
-    root = make_fake_dataset(tmp_path, splits=("train", "val"))
-    cfg = load_config("c3", "local", [f"paths.data_root={root}", "data.crop.min_side=16",
-                                      "data.crop.size=32"])
-    assert cfg.data.val_split == "val"
-    ds = ClipDataset(cfg, cfg.data.val_split, train=False)
-    assert {x["clip_id"] for x in ds.index} == {"00000200", "00000201"}
-    assert (root / "clips/val").is_dir() and (root / "assets/val").is_dir()
+def test_val_is_asset_disjoint_from_train(fake_cfg):
+    fake_cfg.data.val_asset_frac = 0.5                  # hash picks the sphere, not the box
+    train = ClipDataset(fake_cfg, "train", train=True)
+    val = ClipDataset(fake_cfg, samples.VAL, train=False)
+    assert {x["clip_id"] for x in train.index} == {"00000000", "00000002"}     # box-only clips
+    assert {x["clip_id"] for x in val.index} == {"00000001", "00000003"}       # clips with the sphere
+    assert {train[i]["info"]["asset_id"] for i in range(len(train))} == {"box"}
+    assert {val[i]["info"]["asset_id"] for i in range(len(val))} == {"sphere"}  # only val assets as targets
+    fake_cfg.data.val_asset_frac = 0.0
+    assert len(ClipDataset(fake_cfg, "train", train=True).index) == 6             # 1 + 2 + 1 + 2 objects
+    assert samples.is_val_asset("sphere", 0.5) and not samples.is_val_asset("box", 0.5)

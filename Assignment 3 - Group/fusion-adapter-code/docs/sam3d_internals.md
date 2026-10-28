@@ -25,7 +25,7 @@ Item numbers are referenced from `configs/base.yaml`.
 9. **Stage 1 only.** `InferencePipelinePointMap.run(stage1_only=True)` stops after `sample_sparse_structure` and `pose_decoder`. Path: `compute_pointmap` (MoGe) → `preprocess_image` → `ss_condition_embedder` → `ss_generator` → `ss_decoder`.
    → The wrapper instantiates the pipeline from `pipeline.yaml`, keeps these components and deletes the stage-2 models.
 10. **Frames and layout.** The encoder demo maps glTF Y-up to Z-up with `[[1,0,0],[0,0,-1],[0,1,0]]` (our `CANONICAL_FROM_GLTF`) and scales the longest side to 1, as data format v0.1 does. The layout is a local→camera quaternion in **PyTorch3D camera axes** (x and y flipped vs. OpenCV); the pose convention (`module.pose_target_convention`) and latent names (`latent_mapping`) are RUNTIME.
-    → Expect P = identity in T4. Phase B needs `ours_to_sam3d` to handle the axis flip and the pose convention.
+    → Expect P = identity in T4. For Phase B, `targets.convert_pose_to_sam3d` ports the generator's `ours_to_sam3d`, which its test T6 verified against SAM 3D's outputs: `q = quat((F R_co)^T)`, `t = F t_co`, `s = s_co` with `F = diag(-1, -1, 1)`.
 
 ## Loading (no source changes)
 

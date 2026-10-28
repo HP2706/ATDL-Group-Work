@@ -11,9 +11,10 @@ This page describes the method as implemented. Config keys refer to [`configs/ba
 | 32 frames at 512 px | The model uses a 16-frame subset (stride 2) |
 | 1–4 floating objects, camera orbits 10–70° | Many new viewpoints; arc span is a stratification axis |
 | Exact amodal masks and `visible_frac` | Exact occlusion stratification (eval only, never a model input) |
-| Train = Objaverse-XL, eval = GSO | Cross-dataset generalisation; val = held-out Objaverse clips in their own split |
-| Largest object ≈ 2 % of the image | Object-centred clip crops are mandatory (§3.3) |
-| Canonical frame = TRELLIS normalisation; `ours_to_sam3d` pending | Phase A trains shape only; rotation (Phase B) waits for the converter |
+| Train = Objaverse-XL, eval = GSO | Cross-dataset generalisation; val = the train clips that show one of 3 % held-out assets (asset-disjoint) |
+| Small objects: median 2.5 % of the frame | Object-centred clip crops are mandatory (§3.3) |
+| Canonical frame = TRELLIS normalisation, same as SAM 3D's (generator test T6) | Phase A trains shape only; the converter for Phase B exists |
+| Delivered as a training export (JPEG frames, visible masks, poses, voxels) | No amodal masks or depth reach this code at all |
 
 ## 2. Architecture
 
@@ -73,7 +74,7 @@ Only `rgb` and the target's **visible** mask. Amodal masks, depth, cameras, pose
 
 ### 3.4 Targets (`vidsam3d/data/targets.py`)
 
-`voxels.npy` → canonical permutation P (`target.canonical_permutation`, from T4) → optional interior fill (`target.voxel_fill`, from T5) → SAM 3D VAE encoder mean, cached per asset by `cache-latents`. Phase B would add the rotation target through `ours_to_sam3d`; until then `convert_pose_to_sam3d` raises.
+Voxels from `voxels_<split>.npz` → canonical permutation P (`target.canonical_permutation`, from T4) → optional interior fill (`target.voxel_fill`, from T5) → SAM 3D VAE encoder mean, cached per asset by `cache-latents`. Phase B would add the rotation target through `convert_pose_to_sam3d` (the generator's T6-verified converter: OpenCV → PyTorch3D camera axes, wxyz quaternion; same object frame and scale).
 
 ## 4. Key/value encoders (`vidsam3d/models/encoders.py`)
 
@@ -116,7 +117,7 @@ All encoders are frozen and run online. Inputs use ImageNet normalisation. The c
 
 **Exact resume.** The data stream and the noise are pure functions of (seed, step), so a resumed run reproduces an uninterrupted one. Checkpoints are written to scratch, copied to `output_root`, and `latest.json` is updated last.
 
-**Validation** (val split): every 1k steps the flow loss on 200 samples at τ ∈ {0.1, …, 0.9} with fixed noise. Every 5k steps, canonical vIoU of sampled shapes for 100 objects; the best is kept as `best.pt`.
+**Validation** (asset-disjoint val, `data.val_asset_frac`): every 1k steps the flow loss on 200 samples at τ ∈ {0.1, …, 0.9} with fixed noise. Every 5k steps, canonical vIoU of sampled shapes for 100 objects; the best is kept as `best.pt`.
 
 ## 8. Tests
 
@@ -131,7 +132,7 @@ All encoders are frozen and run online. Inputs use ImageNet normalisation. The c
 | T7 | Wrong-video control | `eval --wrong-video` |
 | T8 | Paired randomness: noise seeds depend only on (clip, k, r) | `tests/test_evaluate.py` |
 
-T4 outcomes: identity wins → keep it. One permutation wins consistently → set `target.canonical_permutation`. No consistent winner → evaluate shape only after ICP, or fall back to a TRELLIS host (research plan, Plan B1).
+T4 outcomes: identity wins → keep it. The generator's T6 already found identity ranked first, but only narrowly (mean IoU 0.266 vs. 0.260), because SAM 3D picks its own yaw per object; expect canonical vIoU to be low for every condition and rely on the aligned metrics. One permutation wins consistently → set `target.canonical_permutation`. No consistent winner → evaluate shape only after ICP, or fall back to a TRELLIS host (research plan, Plan B1).
 
 ## 9. Evaluation (`vidsam3d/evaluate.py`, `metrics.py`, `analyze.py`)
 
@@ -156,11 +157,7 @@ T4 outcomes: identity wins → keep it. One permutation wins consistently → se
 
 A new ablation is a file in `configs/conditions/` with only the keys that differ.
 
-## 11. Open questions for Julian
+## 11. Open questions for the data side
 
-- Larger objects for M1: the largest object is ≈ 2 % of the image, which limits SAM 3D and V-JEPA alike (e.g. a smaller camera-distance factor than U(1.1, 1.6)).
-- When does the train split arrive, and can we get a 500–1,000-clip dev slice first?
-- A val split of held-out Objaverse objects (`clips/val`, `assets/val`).
-- The generator command, clip counts and seed ranges (`generator.*`).
-- `ours_to_sam3d` (Phase B only).
+- Can the M2 pilot (seeds 1000000-1000099) be exported first as a dev slice, to run `validate-data`, the benchmark and a short training run before the full 10k arrive?
 - A near-duplicate check between the GSO eval assets and the Objaverse training subset.

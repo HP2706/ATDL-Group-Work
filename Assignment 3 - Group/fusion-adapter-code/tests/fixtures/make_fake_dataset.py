@@ -1,19 +1,25 @@
-"""Write a tiny dataset in the exact v0.1 layout (docs/data_format.md) for CPU tests.
+"""Write a tiny dataset for CPU tests, packed by the data generator's own exporter.
 
-Per split: clip 0 holds one box, clip 1 a box and a sphere that occludes it for part of the
-orbit. Frames are rendered by splatting the solid voxel centres of each object with a z-buffer,
-so masks, depth, cameras and voxels are mutually consistent. The geometry is computed through
+Clips are first written in the generator's full per-clip format (synthetic-data/docs/
+data_format.md), then packed with `sam3dvid.export` from the sibling `synthetic-data/src`
+(or $SAM3DVID_SRC) into <root>/<split>/, exactly as the training data will arrive. The full
+format is deleted afterwards, so the tests read nothing else.
+
+Per split, even seeds hold one box, odd seeds a box and a sphere that occludes it for part of
+the orbit. Frames are rendered by splatting the solid voxel centres of each object with a
+z-buffer, so masks, cameras and voxels are mutually consistent. The geometry is computed through
 world coordinates (x_w = R_wo (s x_o) + t_wo, then x_c = R_cw x_w + t_cw), independently of the
 reader's composed R_co. `mesh.glb` files are empty placeholders.
 
-Usage: python tests/fixtures/make_fake_dataset.py <out_dir> [--split S --seed-start A --num-clips N]
-The second form behaves like the external generator (no manifest; used by the gen-data tests).
+Usage: python tests/fixtures/make_fake_dataset.py <out_dir>
 """
 
 from __future__ import annotations
 
-import argparse
 import json
+import os
+import sys
+import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -21,7 +27,20 @@ from PIL import Image
 
 RES = 64          # voxel grid
 NUM_FRAMES = 32
-SPLIT_SEEDS = {"train": [0, 1], "eval": [100, 101], "val": [200, 201]}
+SPLIT_SEEDS = {"train": [0, 1, 2, 3], "eval": [100, 101]}
+GENERATOR_SRC = Path(os.environ.get("SAM3DVID_SRC")
+                     or Path(__file__).resolve().parents[3] / "synthetic-data" / "src")
+
+
+def generator_export():
+    """`export` from the data generator (synthetic-data/src/sam3dvid/export.py)."""
+    if not (GENERATOR_SRC / "sam3dvid" / "export.py").is_file():
+        raise RuntimeError(f"the tests pack fake clips with the data generator's exporter, but "
+                           f"{GENERATOR_SRC} has no sam3dvid/export.py; set SAM3DVID_SRC")
+    if str(GENERATOR_SRC) not in sys.path:
+        sys.path.insert(0, str(GENERATOR_SRC))
+    from sam3dvid.export import export
+    return export
 COLORS = {"box": (220, 60, 40), "sphere": (40, 120, 230)}
 
 
@@ -150,6 +169,7 @@ def write_clip(root: Path, split: str, seed: int, size: int, solids: dict) -> di
                for k, o in enumerate(spec["objects"], start=1)]
     arc_span = abs(spec["arc"][1] - spec["arc"][0])
     meta = {"clip_id": clip_id, "split": split, "seed": seed, "attempt": 0, "num_objects": n,
+            "generator_version": "fake", "git_commit": None,
             "arc_span_deg": arc_span, "arc_direction": 1, "hfov_deg": 50,
             "start_azimuth_deg": spec["arc"][0], "start_elevation_deg": spec["elev"],
             "elevation_drift_deg": 0.0, "orbit_radius": 3.2, "scene_center": [0, 0, 0],
@@ -161,11 +181,8 @@ def write_clip(root: Path, split: str, seed: int, size: int, solids: dict) -> di
             "path": f"clips/{split}/{clip_id}"}
 
 
-def make_fake_dataset(root: str | Path, size: int = 64, splits=("train", "eval"),
-                      seeds: dict[str, list[int]] | None = None, write_manifest: bool = True) -> Path:
-    """Write the fake dataset to `root` and return the path (`seeds` overrides SPLIT_SEEDS)."""
-    seeds = seeds or SPLIT_SEEDS
-    root = Path(root)
+def write_full_format(root: Path, size: int, splits, seeds: dict[str, list[int]]) -> None:
+    """The generator's per-clip folder format: assets/, clips/, manifest.jsonl."""
     solids = {name: solid_shape(name) for name in COLORS}
     lines = []
     for split in splits:
@@ -174,25 +191,21 @@ def make_fake_dataset(root: str | Path, size: int = 64, splits=("train", "eval")
             asset.mkdir(parents=True, exist_ok=True)
             np.save(asset / "voxels.npy", surface(solid))
             (asset / "mesh.glb").write_bytes(b"")
-            (asset / "meta.json").write_text(json.dumps(
-                {"source": "gso", "source_name": name, "license": "test",
-                 "num_voxels": int(surface(solid).sum())}))
         lines += [write_clip(root, split, seed, size, solids) for seed in seeds[split]]
-    if write_manifest:
-        (root / "manifest.jsonl").write_text("".join(json.dumps(line) + "\n" for line in lines))
-        (root / "config.yaml").write_text("generator: make_fake_dataset\n")
+    (root / "manifest.jsonl").write_text("".join(json.dumps(line) + "\n" for line in lines))
+
+
+def make_fake_dataset(root: str | Path, size: int = 64, splits=("train", "eval"),
+                      seeds: dict[str, list[int]] | None = None, clips_per_shard: int = 2) -> Path:
+    """Write <root>/<split>/ training exports and return `root` (`seeds` overrides SPLIT_SEEDS)."""
+    export = generator_export()
+    root = Path(root)
+    with tempfile.TemporaryDirectory() as full:
+        write_full_format(Path(full), size, splits, seeds or SPLIT_SEEDS)
+        for split in splits:
+            export(Path(full), split, root / split, clips_per_shard=clips_per_shard)
     return root
 
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser()
-    ap.add_argument("out_dir")
-    ap.add_argument("--split")
-    ap.add_argument("--seed-start", type=int)
-    ap.add_argument("--num-clips", type=int)
-    a = ap.parse_args()
-    if a.split is None:
-        print(make_fake_dataset(a.out_dir))
-    else:
-        print(make_fake_dataset(a.out_dir, splits=(a.split,), write_manifest=False,
-                                seeds={a.split: list(range(a.seed_start, a.seed_start + a.num_clips))}))
+    print(make_fake_dataset(sys.argv[1]))

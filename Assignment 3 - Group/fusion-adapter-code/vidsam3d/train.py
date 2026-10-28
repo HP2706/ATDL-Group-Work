@@ -18,8 +18,8 @@ from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader, Sampler
 
 from vidsam3d.config import save_config
-from vidsam3d.data.samples import ClipDataset
-from vidsam3d.data.targets import convert_pose_to_sam3d, load_latent, target_voxels
+from vidsam3d.data.samples import VAL, ClipDataset
+from vidsam3d.data.targets import load_latent, target_voxels
 from vidsam3d.metrics import voxel_iou
 from vidsam3d.models.adapter import build_adapter, count_parameters, pad_video_batch
 from vidsam3d.models.encoders import build_kv_encoder, kv_tokens
@@ -196,7 +196,7 @@ def val_viou(sam3d, encoder, adapter, val_ds, cfg, device) -> float:
         info = s["info"]
         cond = adapted_condition(sam3d, encoder, adapter, [s], cfg, device)
         z, _ = sam3d.sample(cond, [sample_seed(info["clip_id"], info["k"], info["r"])], cfg.sampler)
-        gt = target_voxels(cfg.paths.data_root, info["voxels"], cfg)
+        gt = target_voxels(val_ds.voxels_file, info["asset_id"], cfg)
         ious.append(voxel_iou(sam3d.decode_latent(z)[0].cpu(), torch.from_numpy(gt)))
     return sum(ious) / len(ious)
 
@@ -214,8 +214,8 @@ def restore_metrics(scratch_dir, output_dir, step: int):
 def train(cfg: DictConfig, benchmark: bool = False, stop_at: int | None = None) -> dict:
     """Train (or benchmark) an adapter; `stop_at` simulates a pre-empted job in tests."""
     setup_logging()
-    if cfg.loss.rotation_weight > 0:
-        convert_pose_to_sam3d(None, None, None)            # Phase B: fails until the converter exists
+    if cfg.loss.rotation_weight > 0:                        # converter: targets.convert_pose_to_sam3d
+        raise NotImplementedError("Phase B (rotation loss) is not implemented")
     if benchmark:                                           # never touch the real run's files
         cfg = cfg.copy()
         cfg.run_name = f"{cfg.run_name}_benchmark"
@@ -255,7 +255,7 @@ def train(cfg: DictConfig, benchmark: bool = False, stop_at: int | None = None) 
     loader = DataLoader(train_ds, collate_fn=collate_list, num_workers=cfg.data.num_workers,
                         batch_sampler=StreamBatchSampler(len(train_ds), tcfg.batch_size, cfg.seed,
                                                          start=step * accum))
-    val_ds = None if benchmark else ClipDataset(cfg, cfg.data.val_split, train=False)
+    val_ds = None if benchmark or not cfg.data.val_asset_frac else ClipDataset(cfg, VAL, train=False)
     autocast = torch.autocast(device.type, dtype=torch.bfloat16, enabled=bool(tcfg.bf16))
 
     def checkpoint_state() -> dict:

@@ -13,7 +13,7 @@ D = 32
 FAKE_OVERRIDES = {
     "fake_sam3d": "true", "device": "cpu", "adapter.d_cond": D, "adapter.d_vid": D,
     "adapter.heads": 4, "adapter.query_sets": "[crop,full]", "sam3d.phase_a_layout": "noise",
-    "sampler.steps": 4, "sampler.cfg_scale": 1.0, "data.val_split": "train",
+    "sampler.steps": 4, "sampler.cfg_scale": 1.0, "data.val_asset_frac": 0.5,   # val asset: the sphere
     "data.crop.min_side": 16, "data.crop.size": 32, "train.bf16": "false", "train.batch_size": 2,
     "train.effective_batch_size": 2, "train.max_steps": 50, "train.log_every": 1000,
     "train.ckpt_every": 1000, "val.loss_every": 1000, "val.sample_every": 1000,

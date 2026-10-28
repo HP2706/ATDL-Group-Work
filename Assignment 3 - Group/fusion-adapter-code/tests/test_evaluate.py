@@ -22,7 +22,7 @@ METRIC_KEYS = {"viou", "viou_aligned", "chamfer", "fscore@0.02", "fscore@0.05"}
 def trained(fake_root, tmp_path_factory):
     """A 3-step c3 run on the fake dataset; returns (cfg, run_dir)."""
     tmp = tmp_path_factory.mktemp("eval")
-    cfg = fake_train_cfg(fake_root, tmp, **{"train.max_steps": 3, "data.val_split": "eval"})
+    cfg = fake_train_cfg(fake_root, tmp, **{"train.max_steps": 3})
     train(cfg)
     return cfg, tmp / "out" / "c3_seed0"
 
@@ -34,7 +34,7 @@ def test_eval_run_writes_one_line_per_sample_and_resumes(trained):
     records = read_jsonl(path)
     assert path.name == "c3_seed0.jsonl" and len(records) == n
     assert METRIC_KEYS <= set(records[0]) and records[0]["condition"] == "c3"
-    assert {"visible_frac", "amodal_px", "arc_span_deg", "num_objects", "asset_id", "source"} <= set(records[0])
+    assert {"visible_frac", "amodal_px", "arc_span_deg", "num_objects", "asset_id"} <= set(records[0])
     evaluate(cfg, str(run_dir))                              # resume: nothing new
     assert len(read_jsonl(path)) == n
 
@@ -53,10 +53,9 @@ def test_baselines(trained):
     c0b = read_jsonl(evaluate(cfg, "best-frame"))
     assert c0[0]["label"] == c0[0]["condition"] == "c0"
     assert c0b[0]["label"] == c0b[0]["condition"] == "c0b_oracle"
+    ds = ClipDataset(cfg, "eval", train=False)
     for r in c0b:                                            # oracle frame = max visible_frac over S
-        clip = reader.load_clip(cfg.paths.data_root, {"clip_id": r["clip_id"], "split": "eval",
-                                                       "path": f"clips/eval/{r['clip_id']}"})
-        vis = reader.visibility(clip)[:, r["k"] - 1]
+        vis = reader.visibility(ds.clip(r["clip_id"]))[:, r["k"] - 1]
         assert vis[r["oracle_frame"]] == max(vis[t] for t in range(0, 32, 2))
 
 

@@ -1,89 +1,152 @@
-"""Read the synthetic video dataset, format v0.1 (docs/data_format.md). numpy + PIL only.
+"""Read the training export of the synthetic video dataset (numpy + PIL only).
 
-Conventions: x_a = R_ab x_b + t_ab; T_cw is world->camera with OpenCV axes;
-x_w = R_wo (s_wo * x_o) + t_wo; voxel centre = (index + 0.5) / 64 - 0.5.
-Ground-truth-only data (amodal masks, depth) is loaded only through `load_*_gt`.
+The format is defined in `synthetic-data/docs/data_format.md` (section 9, built by
+`python -m sam3dvid.export`). One directory per split:
+
+    <split>/index.json              shards with their clip ids and byte sizes
+    <split>/<split>-NNNNNN.tar      per clip: <id>.rgb.TTT.jpg, <id>.visible.TTT.png, <id>.json
+    <split>/voxels_<split>.npz      asset_id -> np.packbits of the bool (64, 64, 64) grid
+
+Conventions (section 3): x_a = R_ab x_b + t_ab; T_cw is world->camera with OpenCV axes;
+x_c = R_co (s_co * x_o) + t_co; voxel centre = (index + 0.5) / 64 - 0.5; pixel centres at
+integers, so the principal point is ((W - 1) / 2, (H - 1) / 2).
+Clips are read by random access: the member offsets of every shard are scanned once and cached.
 """
 
 from __future__ import annotations
 
+import io
 import json
+import tarfile
+import zlib
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
 from PIL import Image
 
-# glTF is Y-up: (x, y, z)_gltf -> (x, -z, y)_canonical. Blender applies this on import; trimesh,
-# Open3D and PyTorch3D do not.
-CANONICAL_FROM_GLTF = np.array([[1, 0, 0], [0, 0, -1], [0, 1, 0]], dtype=np.float64)
+VOXEL_RES = 64
+
+
+@dataclass(frozen=True)
+class ClipRef:
+    """Where a clip lives in its shard, and which assets it shows (objects k = 1..N)."""
+    clip_id: str
+    shard: Path
+    members: dict          # extension (e.g. "rgb.000.jpg", "json") -> (offset, size)
+    asset_ids: tuple
 
 
 @dataclass(frozen=True)
 class Clip:
-    """Parsed JSON files of one clip plus its location."""
-    root: Path        # dataset/
-    dir: Path         # dataset/clips/<split>/<clip_id>
-    clip_id: str
-    split: str
-    cameras: dict
-    objects: list[dict]
-    meta: dict
+    """One clip: its JSON (camera, per-frame object poses, visibility) and shard location."""
+    ref: ClipRef
+    info: dict
+
+    @property
+    def clip_id(self) -> str:
+        return self.ref.clip_id
 
     @property
     def num_frames(self) -> int:
-        return len(self.cameras["frames"])
+        return len(self.info["T_cw"])
 
     @property
     def num_objects(self) -> int:
-        return len(self.objects)
+        return len(self.info["objects"])
 
     @property
     def image_size(self) -> tuple[int, int]:
-        """(height, width) from cameras.json."""
-        return int(self.cameras["height"]), int(self.cameras["width"])
+        """(height, width) from the principal point at the image centre."""
+        K = self.info["K"]
+        return round(2 * K[1][2] + 1), round(2 * K[0][2] + 1)
 
 
-def _read_json(path: Path):
-    """Load one JSON file."""
-    with open(path) as f:
-        return json.load(f)
+@dataclass(frozen=True)
+class Split:
+    """One export directory: its index and every clip's location."""
+    dir: Path
+    index: dict
+    clips: dict            # clip_id -> ClipRef, sorted by clip id
+
+    @property
+    def voxels_file(self) -> Path:
+        return self.dir / self.index["voxels_file"]
+
+    def load_clip(self, clip_id: str) -> Clip:
+        """Read the clip's JSON from its shard."""
+        ref = self.clips[clip_id]
+        return Clip(ref, json.loads(read_member(ref, "json")))
 
 
-def read_manifest(data_root: str | Path, split: str | None = None) -> list[dict]:
-    """Read manifest.jsonl, optionally keeping only one split."""
-    lines = Path(data_root, "manifest.jsonl").read_text().splitlines()
-    entries = [json.loads(line) for line in lines if line.strip()]
-    return [e for e in entries if split is None or e["split"] == split]
+# ---- shards ----
+
+def scan_shard(path: Path) -> dict[str, dict]:
+    """{clip_id: {"members": {ext: (offset, size)}, "asset_ids": [...]}} of one shard."""
+    clips: dict[str, dict] = {}
+    with tarfile.open(path, "r:") as tar:
+        for m in tar:
+            if not m.isfile():
+                continue
+            clip_id, _, ext = m.name.rsplit("/", 1)[-1].partition(".")
+            clips.setdefault(clip_id, {"members": {}})["members"][ext] = (m.offset_data, m.size)
+            if ext == "json":
+                info = json.loads(tar.extractfile(m).read())
+                clips[clip_id]["asset_ids"] = [o["asset_id"] for o in info["objects"]]
+    return clips
 
 
-def load_clip(data_root: str | Path, entry: dict) -> Clip:
-    """Load cameras.json, objects.json and meta.json of a manifest entry."""
-    root = Path(data_root)
-    clip_dir = root / entry["path"]
-    return Clip(root=root, dir=clip_dir, clip_id=entry["clip_id"], split=entry["split"],
-                cameras=_read_json(clip_dir / "cameras.json"),
-                objects=_read_json(clip_dir / "objects.json"),
-                meta=_read_json(clip_dir / "meta.json"))
+@lru_cache(maxsize=None)
+def open_split(split_dir: str | Path, cache_dir: str | Path | None = None) -> Split:
+    """Index a split directory; with `cache_dir`, shard scans are reused while shard sizes match."""
+    split_dir = Path(split_dir)
+    index_path = split_dir / "index.json"
+    assert index_path.is_file(), f"{index_path} missing: expected a training export (sam3dvid.export)"
+    index = json.loads(index_path.read_text())
+    cache_path = None
+    cached = {}
+    if cache_dir is not None:
+        key = zlib.crc32(str(split_dir.resolve()).encode())
+        cache_path = Path(cache_dir) / "index" / f"{split_dir.name}-{key:08x}.json"
+        if cache_path.is_file():
+            cached = json.loads(cache_path.read_text())
+    scans, changed = {}, False
+    for shard in index["shards"]:
+        entry = cached.get(shard["name"])
+        if entry is None or entry["bytes"] != shard["bytes"]:
+            entry, changed = {"bytes": shard["bytes"], "clips": scan_shard(split_dir / shard["name"])}, True
+        assert sorted(entry["clips"]) == sorted(shard["clip_ids"]), f"{shard['name']}: clips differ from index.json"
+        scans[shard["name"]] = entry
+    if cache_path is not None and changed:
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        cache_path.write_text(json.dumps(scans))
+    clips = {}
+    for name, entry in scans.items():
+        for clip_id, c in entry["clips"].items():
+            members = {ext: tuple(v) for ext, v in c["members"].items()}
+            clips[clip_id] = ClipRef(clip_id, split_dir / name, members, tuple(c["asset_ids"]))
+    return Split(split_dir, index, dict(sorted(clips.items())))
 
 
-def object_entry(clip: Clip, k: int) -> dict:
-    """objects.json entry of object k (1-based, matching the mask ids)."""
-    o = clip.objects[k - 1]
-    assert o["k"] == k, f"{clip.clip_id}: objects.json entry {k - 1} has k={o['k']}"
-    return o
+def read_member(ref: ClipRef, ext: str) -> bytes:
+    """Bytes of one member of a clip, e.g. ext = "rgb.000.jpg"."""
+    offset, size = ref.members[ext]
+    with open(ref.shard, "rb") as f:
+        f.seek(offset)
+        return f.read(size)
 
 
 # ---- images and masks (model inputs) ----
 
 def load_rgb(clip: Clip, t: int) -> np.ndarray:
-    """uint8 (H, W, 3) composited frame t."""
-    return np.asarray(Image.open(clip.dir / "rgb" / f"{t:03d}.png").convert("RGB"))
+    """uint8 (H, W, 3) frame t (JPEG q95, 4:4:4)."""
+    return np.asarray(Image.open(io.BytesIO(read_member(clip.ref, f"rgb.{t:03d}.jpg"))).convert("RGB"))
 
 
 def load_instance_mask(clip: Clip, t: int) -> np.ndarray:
     """uint8 (H, W) visible instance map of frame t: 0 = background, k = object k."""
-    return np.asarray(Image.open(clip.dir / "mask_visible" / f"{t:03d}.png"))
+    return np.asarray(Image.open(io.BytesIO(read_member(clip.ref, f"visible.{t:03d}.png"))))
 
 
 def load_visible_mask(clip: Clip, k: int, t: int) -> np.ndarray:
@@ -91,29 +154,19 @@ def load_visible_mask(clip: Clip, k: int, t: int) -> np.ndarray:
     return load_instance_mask(clip, t) == k
 
 
-# ---- ground truth only (targets, evaluation, analysis) ----
+# ---- voxels (targets) ----
 
-def load_amodal_mask_gt(clip: Clip, k: int, t: int) -> np.ndarray:
-    """bool (H, W) amodal silhouette of object k in frame t. Ground truth only."""
-    return np.asarray(Image.open(clip.dir / "mask_amodal" / f"obj{k}" / f"{t:03d}.png")) > 0
-
-
-def load_depth_gt(clip: Clip, t: int) -> np.ndarray:
-    """float32 (H, W) z-depth of frame t, NaN on background. Ground truth only."""
-    with np.load(clip.dir / "depth" / f"{t:03d}.npz") as f:
-        return f["depth"]
+@lru_cache(maxsize=4)
+def voxel_table(voxels_file: str | Path) -> dict[str, np.ndarray]:
+    """asset_id -> packed voxels of a whole split (a few KB per asset), read once per process."""
+    with np.load(voxels_file) as f:
+        return {asset_id: f[asset_id] for asset_id in f.files}
 
 
-def load_voxels(data_root: str | Path, rel_path: str) -> np.ndarray:
+def load_voxels(voxels_file: str | Path, asset_id: str) -> np.ndarray:
     """bool (64, 64, 64) surface occupancy, index [i, j, k] along (x, y, z)."""
-    vox = np.load(Path(data_root) / rel_path)
-    assert vox.dtype == bool and vox.ndim == 3, f"{rel_path}: {vox.dtype} {vox.shape}"
-    return vox
-
-
-def load_object_voxels(clip: Clip, k: int) -> np.ndarray:
-    """Surface voxels of object k's asset."""
-    return load_voxels(clip.root, object_entry(clip, k)["voxels"])
+    bits = np.unpackbits(voxel_table(str(voxels_file))[asset_id], count=VOXEL_RES**3)
+    return bits.reshape((VOXEL_RES,) * 3).astype(bool)
 
 
 def voxel_centers(vox: np.ndarray) -> np.ndarray:
@@ -123,16 +176,21 @@ def voxel_centers(vox: np.ndarray) -> np.ndarray:
 
 # ---- cameras and poses ----
 
+def object_entry(clip: Clip, k: int) -> dict:
+    """JSON entry of object k (1-based, matching the mask ids)."""
+    o = clip.info["objects"][k - 1]
+    assert o["k"] == k, f"{clip.clip_id}: objects[{k - 1}] has k={o['k']}"
+    return o
+
+
 def intrinsics(clip: Clip) -> np.ndarray:
     """3x3 K (identical for all frames)."""
-    return np.array(clip.cameras["K"], dtype=np.float64)
+    return np.array(clip.info["K"], dtype=np.float64)
 
 
 def camera_extrinsics(clip: Clip, t: int) -> tuple[np.ndarray, np.ndarray]:
     """(R_cw, t_cw) of frame t: world -> camera."""
-    frame = clip.cameras["frames"][t]
-    assert frame["t"] == t, f"{clip.clip_id}: cameras.json frame {t} has t={frame['t']}"
-    T_cw = np.array(frame["T_cw"], dtype=np.float64)
+    T_cw = np.array(clip.info["T_cw"][t], dtype=np.float64)
     return T_cw[:3, :3], T_cw[:3, 3]
 
 
@@ -144,7 +202,9 @@ def object_world_pose(clip: Clip, k: int) -> tuple[np.ndarray, np.ndarray, np.nd
 
 
 def camera_frame_pose(clip: Clip, k: int, t: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """(R_co, t_co, s_co) of object k in frame t, so that x_c = R_co (s_co * x_o) + t_co."""
+    """(R_co, t_co, s_co) of object k in frame t, composed from the world poses.
+
+    The export also stores this per frame; `validate-data` checks that the two agree."""
     R_cw, t_cw = camera_extrinsics(clip, t)
     R_wo, t_wo, s_wo = object_world_pose(clip, k)
     return R_cw @ R_wo, R_cw @ t_wo + t_cw, s_wo
@@ -158,16 +218,35 @@ def project(x_c: np.ndarray, K: np.ndarray) -> np.ndarray:
 # ---- per-clip statistics ----
 
 def visibility(clip: Clip, key: str = "visible_frac") -> np.ndarray:
-    """(T, N) array from meta.json visibility: visible_px | amodal_px | visible_frac."""
-    return np.asarray(clip.meta["visibility"][key])
+    """(T, N) array: visible_px | amodal_px | visible_frac."""
+    return np.asarray(clip.info["visibility"][key])
 
 
-def voxel_projection_check(clip: Clip, k: int, t: int) -> float:
-    """Data-format §8 sanity check: fraction of projected voxel centres on the amodal mask."""
+def arc_span_deg(clip: Clip) -> float:
+    """Orbit angle of the clip. The camera looks at a fixed point with world Z up and no roll,
+    so the yaw of its viewing direction turns by exactly the orbit's azimuth change."""
+    R_cw = np.array(clip.info["T_cw"])[:, :3, :3]
+    forward = R_cw[:, 2, :]                       # camera +z in world coordinates
+    yaw = np.unwrap(np.arctan2(forward[:, 1], forward[:, 0]))
+    return float(np.degrees(abs(yaw[-1] - yaw[0])))
+
+
+def voxel_coverage(clip: Clip, k: int, t: int, vox: np.ndarray) -> float:
+    """Fraction of object k's visible pixels covered by its projected voxels.
+
+    Each voxel centre is splatted as a square of half a projected voxel (at least 1 px), i.e. the
+    voxel's footprint. A convention check: the right pose covers ~all pixels, a wrong one far fewer."""
     R_co, t_co, s_co = camera_frame_pose(clip, k, t)
-    x_c = (voxel_centers(load_object_voxels(clip, k)) * s_co) @ R_co.T + t_co
-    uv = np.round(project(x_c, intrinsics(clip))).astype(int)
+    x_c = (voxel_centers(vox) * s_co) @ R_co.T + t_co
+    K = intrinsics(clip)
+    uv = np.round(project(x_c, K)).astype(int)
+    dilate = max(1, int(np.ceil(0.5 * K[0, 0] * s_co[0] / (vox.shape[0] * np.median(x_c[:, 2])))))
     H, W = clip.image_size
-    inside = (uv >= 0).all(1) & (uv[:, 0] < W) & (uv[:, 1] < H)
-    amodal = load_amodal_mask_gt(clip, k, t)
-    return float(amodal[uv[inside, 1], uv[inside, 0]].mean())
+    hit = np.zeros((H + 2 * dilate, W + 2 * dilate), bool)
+    uv = uv[(uv[:, 0] >= -dilate) & (uv[:, 0] < W + dilate) & (uv[:, 1] >= -dilate) & (uv[:, 1] < H + dilate)]
+    for dy in range(-dilate, dilate + 1):
+        for dx in range(-dilate, dilate + 1):
+            hit[np.clip(uv[:, 1] + dy + dilate, 0, H + 2 * dilate - 1),
+                np.clip(uv[:, 0] + dx + dilate, 0, W + 2 * dilate - 1)] = True
+    visible = load_visible_mask(clip, k, t)
+    return float(hit[dilate:H + dilate, dilate:W + dilate][visible].mean())

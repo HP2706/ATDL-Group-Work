@@ -24,7 +24,7 @@ D = 32  # matches tests/fixtures/fake_config.py
 
 @pytest.fixture(scope="module")
 def two_sample_root(tmp_path_factory):
-    """Train split = one clip with two objects -> exactly 2 training samples."""
+    """Train split = one clip with two objects -> exactly 2 training samples (no val holdout)."""
     return make_fake_dataset(tmp_path_factory.mktemp("ds2"), splits=("train",), seeds={"train": [1]})
 
 
@@ -36,7 +36,7 @@ def adapter_state(cfg):
 
 
 def test_loss_decreases_over_50_steps(two_sample_root, tmp_path):
-    cfg = fake_train_cfg(two_sample_root, tmp_path)
+    cfg = fake_train_cfg(two_sample_root, tmp_path, **{"data.val_asset_frac": 0})
     device = torch.device("cpu")
     sam3d, val_ds = build_sam3d(cfg, device), ClipDataset(cfg, "train", train=False)
     encoder = build_kv_encoder(cfg, sam3d, device)
@@ -102,7 +102,7 @@ def test_zero_shot_layout_mode_and_phase_b_guard(fake_root, tmp_path):
                                                  "sam3d.phase_a_layout": "zero_shot"})
     assert train(cfg)["step"] == 2
     cfg.loss.rotation_weight = 0.1
-    with pytest.raises(NotImplementedError, match="ours_to_sam3d"):
+    with pytest.raises(NotImplementedError, match="Phase B"):
         train(cfg)
 
 

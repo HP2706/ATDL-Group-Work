@@ -23,7 +23,7 @@ Group mini research project, 3 weeks (about 10 working days plus buffer). **Guid
 - **SAM 3D:** checkpoints released Nov 2025, encoder weights 2026-06-01 (needed to encode GT shapes into SAM 3D's latent space). The repo is inference-only, so we wrote our own flow-matching training loop. The checkpoints are gated on Hugging Face, and SAM 3D needs ≥ 32 GB VRAM.
 - **Compute:** UCloud B200 GPUs (with a newer torch than SAM 3D pins; see [UCloud guide](ucloud.md)); Google Cloud as an alternative.
 - **V-JEPA 2.1:** learnable image/video modality tokens, so the same encoder handles single images and clips. ViT-L to save compute.
-- **Data:** our own generator ([data format v0.1](data_format.md)), with exact masks, depth, poses and 64³ voxels.
+- **Data:** our own generator ([`synthetic-data`](../../synthetic-data/README.md), [data format](../../synthetic-data/docs/data_format.md)), with exact masks, depth, poses and 64³ voxels; the model reads its packed training export.
 
 ## 3. Method
 
@@ -54,8 +54,8 @@ Details: [adapter design](adapter_design.md).
 
 | Split | Objects | Clips |
 |---|---|---|
-| train | Objaverse-XL (TRELLIS-500K subset) | 10,000 (not generated yet) |
-| val | held-out Objaverse-XL objects | 300–500 (requested) |
+| train | Objaverse-XL (TRELLIS-500K subset) | 10,000 (rendered on UCloud, M2) |
+| val | train clips that show one of 3 % held-out assets | ≈ 600 |
 | eval | Google Scanned Objects | 500 |
 
 Objects and backgrounds never cross splits.
@@ -148,7 +148,7 @@ Everyone writes in week 3.
 |---|---|
 | Backprop through the frozen 1.2B model needs a lot of memory | B200 GPUs, bf16, activation checkpointing; otherwise Plan B2 |
 | Canonical frame or latent mismatch | T4 / T5 at G0; aligned metrics use ICP and tolerate frame errors |
-| Small objects (≈ 2 % of the image) | Object-centred clip crops; asked Julian for larger objects |
+| Small objects (median 2.5 % of the frame) | Object-centred clip crops |
 | Train split arrives late | Pipeline tested end-to-end on a fake dataset; ask for a dev slice |
 | Adapter overfits | Zero-init gates, small adapter, best checkpoint on val, random reference frames and crop jitter |
 

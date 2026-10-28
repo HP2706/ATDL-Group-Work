@@ -1,76 +1,84 @@
-"""Reader: data format v0.1 conventions on the fake dataset."""
+"""Reader of the training export, tested on clips packed by the generator's own exporter."""
+
+import json
 
 import numpy as np
 import pytest
 
+from tests.fixtures.make_fake_dataset import generator_export
 from vidsam3d.data import reader
+from vidsam3d.data.targets import convert_pose_to_sam3d
 
 
-def clips(root, split=None):
-    return [reader.load_clip(root, e) for e in reader.read_manifest(root, split)]
+@pytest.fixture(scope="module")
+def train(fake_root):
+    return reader.open_split(fake_root / "train")
 
 
-def test_manifest_and_splits(fake_root):
-    assert len(reader.read_manifest(fake_root)) == 4
-    assert {e["split"] for e in reader.read_manifest(fake_root, "eval")} == {"eval"}
+def test_split_index(train):
+    index = json.loads((train.dir / "index.json").read_text())
+    assert list(train.clips) == ["00000000", "00000001", "00000002", "00000003"]
+    assert len(index["shards"]) == 2 and train.voxels_file.name == "voxels_train.npz"
+    assert train.clips["00000001"].asset_ids == ("box", "sphere")
 
 
-def test_image_size_comes_from_cameras_json(fake_root):
-    clip = clips(fake_root, "eval")[0]
-    assert clip.image_size == (64, 64)
-    assert reader.load_rgb(clip, 0).shape == (64, 64, 3)
-    assert clip.num_frames == 32
+def test_shard_scan_is_cached(fake_root, tmp_path):
+    split = reader.open_split.__wrapped__(fake_root / "eval", tmp_path)
+    cache = list((tmp_path / "index").glob("eval-*.json"))
+    assert len(cache) == 1
+    again = reader.open_split.__wrapped__(fake_root / "eval", tmp_path)
+    assert again.clips == split.clips
 
 
-def test_voxel_projection_sanity_check(fake_root):
-    """Data format §8: voxel centres project onto the amodal mask (> 0.9)."""
-    for clip in clips(fake_root):
+def test_frames_masks_and_image_size(train):
+    clip = train.load_clip("00000001")
+    assert clip.num_frames == 32 and clip.num_objects == 2 and clip.image_size == (64, 64)
+    rgb, inst = reader.load_rgb(clip, 0), reader.load_instance_mask(clip, 0)
+    assert rgb.shape == (64, 64, 3) and rgb.dtype == np.uint8
+    assert inst.dtype == np.uint8 and set(np.unique(inst)) <= {0, 1, 2}
+    for t in (0, 16, 31):                                   # visibility stats match the masks
+        inst = reader.load_instance_mask(clip, t)
+        assert [(inst == k).sum() for k in (1, 2)] == reader.visibility(clip, "visible_px")[t].tolist()
+
+
+def test_exported_pose_equals_our_composition(train):
+    for clip_id in train.clips:
+        clip = train.load_clip(clip_id)
         for k in range(1, clip.num_objects + 1):
-            for t in (0, 16, 31):
-                assert reader.voxel_projection_check(clip, k, t) > 0.9
+            o = reader.object_entry(clip, k)
+            for t in range(clip.num_frames):
+                ours = reader.camera_frame_pose(clip, k, t)
+                for a, b in zip(ours, (o["R_co"][t], o["t_co"][t], o["s_co"][t])):
+                    np.testing.assert_allclose(a, b, atol=1e-9)
 
 
-def test_projection_check_catches_a_wrong_convention(fake_root):
-    """Reading voxel indices as (z, y, x) instead of (x, y, z) must fail the check."""
-    clip = clips(fake_root, "eval")[0]
-    R_co, t_co, s_co = reader.camera_frame_pose(clip, 1, 16)
-    x_o = reader.voxel_centers(reader.load_object_voxels(clip, 1))[:, ::-1]
-    x_c = (x_o * s_co) @ R_co.T + t_co
-    uv = np.round(reader.project(x_c, reader.intrinsics(clip))).astype(int)
-    ok = (uv >= 0).all(1) & (uv < 64).all(1)
-    amodal = reader.load_amodal_mask_gt(clip, 1, 16)
-    assert amodal[uv[ok, 1], uv[ok, 0]].mean() < 0.9
+def test_voxels_cover_the_visible_masks(train):
+    clip = train.load_clip("00000001")
+    for k in (1, 2):
+        vox = reader.load_voxels(train.voxels_file, reader.object_entry(clip, k)["asset_id"])
+        assert vox.dtype == bool and vox.shape == (64, 64, 64)
+        assert reader.voxel_coverage(clip, k, 16, vox) > 0.95
+    box = reader.load_voxels(train.voxels_file, "box")
+    assert reader.voxel_coverage(clip, 1, 16, box.transpose(2, 1, 0)) < 0.7   # wrong axis order
 
 
-def test_camera_frame_pose_matches_world_composition(fake_root):
-    clip = clips(fake_root, "eval")[1]
-    R_co, t_co, s_co = reader.camera_frame_pose(clip, 2, 7)
-    R_cw, t_cw = reader.camera_extrinsics(clip, 7)
-    R_wo, t_wo, s_wo = reader.object_world_pose(clip, 2)
-    x_o = np.random.default_rng(0).uniform(-0.5, 0.5, (10, 3))
-    x_c_direct = (R_cw @ ((x_o * s_wo) @ R_wo.T + t_wo).T).T + t_cw
-    np.testing.assert_allclose((x_o * s_co) @ R_co.T + t_co, x_c_direct, atol=1e-12)
-    np.testing.assert_allclose(R_co @ R_co.T, np.eye(3), atol=1e-9)
-    assert np.linalg.det(R_co) == pytest.approx(1.0)
+def test_arc_span_from_cameras(train):
+    assert reader.arc_span_deg(train.load_clip("00000000")) == pytest.approx(30.0)
+    assert reader.arc_span_deg(train.load_clip("00000001")) == pytest.approx(60.0)
 
 
-def test_masks_and_depth_are_consistent(fake_root):
-    for clip in clips(fake_root, "eval"):
-        depth, inst = reader.load_depth_gt(clip, 5), reader.load_instance_mask(clip, 5)
-        assert np.array_equal(np.isfinite(depth), inst > 0)
-        for k in range(1, clip.num_objects + 1):
-            vis, amodal = reader.load_visible_mask(clip, k, 5), reader.load_amodal_mask_gt(clip, k, 5)
-            assert vis.any() and not (vis & ~amodal).any()   # visible ⊆ amodal
-
-
-def test_visibility_stats_shape(fake_root):
-    clip = clips(fake_root, "eval")[1]
-    vf = reader.visibility(clip)
-    assert vf.shape == (32, 2) and (vf > 0).all() and (vf <= 1).all()
-
-
-def test_voxel_centers_and_gltf_matrix():
+def test_voxel_centres():
     vox = np.zeros((64, 64, 64), bool)
     vox[0, 0, 0] = vox[63, 63, 63] = True
     np.testing.assert_allclose(reader.voxel_centers(vox), [[-0.5 + 1 / 128] * 3, [0.5 - 1 / 128] * 3])
-    np.testing.assert_array_equal(reader.CANONICAL_FROM_GLTF @ [0, 1, 0], [0, 0, 1])  # glTF Y-up -> Z-up
+
+
+def test_pose_converter_matches_the_generator():
+    generator_export()                                       # puts synthetic-data/src on sys.path
+    from sam3dvid.sam3d import ours_to_sam3d
+    from scipy.spatial.transform import Rotation
+    rng = np.random.default_rng(0)
+    for R in Rotation.random(20, random_state=0).as_matrix():
+        t, s = rng.normal(size=3), np.full(3, rng.uniform(0.4, 1.0))
+        for a, b in zip(convert_pose_to_sam3d(R, t, s), ours_to_sam3d(R, t, s)):
+            np.testing.assert_allclose(a, b, atol=1e-9)

@@ -7,6 +7,7 @@ contain amodal masks, depth, poses or cameras (`check_no_leakage`).
 
 from __future__ import annotations
 
+import zlib
 from pathlib import Path
 
 import numpy as np
@@ -163,51 +164,85 @@ def build_sample(clip: reader.Clip, k: int, r: int, offset: int, clip_len: int,
         "ref_mask": torch.from_numpy(masks[ref_in_window]),        # (H, W) bool, full res
     }
     check_no_leakage(inputs)
-    obj = reader.object_entry(clip, k)
     info = {
         "clip_id": clip.clip_id, "k": k, "r": r, "clip_len": clip_len, "offset": offset,
         "frame_ids": frame_ids, "crop_window": window, "reference_rules": reference_rules or [],
-        "asset_id": obj["asset_id"], "source": obj["source"], "voxels": obj["voxels"],
+        "asset_id": reader.object_entry(clip, k)["asset_id"],
         "visible_frac": float(reader.visibility(clip, "visible_frac")[r, k - 1]),
         "amodal_px": int(reader.visibility(clip, "amodal_px")[r, k - 1]),
-        "arc_span_deg": float(clip.meta["arc_span_deg"]), "num_objects": clip.num_objects,
+        "arc_span_deg": reader.arc_span_deg(clip), "num_objects": clip.num_objects,
     }
     return {"inputs": inputs, "info": info}
+
+
+# ---- splits ----
+
+VAL = "val"
+
+
+def is_val_asset(asset_id: str, val_asset_frac: float) -> bool:
+    """Deterministic, seed-independent choice of the held-out validation assets."""
+    return zlib.crc32(f"val:{asset_id}".encode()) / 2**32 < val_asset_frac
+
+
+def split_folder(data_cfg: DictConfig, split: str) -> str:
+    """Export folder of a split: val is carved out of the train folder."""
+    return data_cfg.train_split if split == VAL else split
+
+
+def split_objects(clip_assets: dict[str, tuple], split: str, data_cfg: DictConfig) -> dict[str, list[int]]:
+    """{clip_id: target objects k} of a split. Val is asset-disjoint from train: a clip that shows
+    a val asset belongs to val (with only the val assets as targets), all other clips to train."""
+    frac = float(data_cfg.val_asset_frac)
+    is_val = {cid: [is_val_asset(a, frac) for a in assets] for cid, assets in clip_assets.items()}
+    if split == VAL:
+        return {cid: [k for k, v in enumerate(flags, 1) if v] for cid, flags in is_val.items() if any(flags)}
+    if split == data_cfg.train_split:
+        return {cid: list(range(1, len(flags) + 1)) for cid, flags in is_val.items() if not any(flags)}
+    return {cid: list(range(1, len(flags) + 1)) for cid, flags in is_val.items()}
 
 
 # ---- dataset ----
 
 class ClipDataset(Dataset):
     """Train: one item per (clip, k), with o, r, K and crop jitter drawn per item.
-    Eval: one item per (clip, k, r) for the middle and most-occluded reference frames."""
+    Eval: one item per (clip, k, r) for the middle and most-occluded reference frames.
+    `split` is train, val (asset-disjoint part of the train folder) or an export folder (eval)."""
 
     def __init__(self, cfg: DictConfig, split: str, train: bool, clip_len: int | None = None):
-        self.data_root = Path(cfg.paths.data_root)
         self.data_cfg = cfg.data
         self.train = train
         self.seed = int(cfg.seed)
         self.epoch = 0
         self.clip_len = int(clip_len or cfg.eval.k)
-        entries = reader.read_manifest(self.data_root, split)
-        assert entries, f"no clips of split {split!r} in {self.data_root}/manifest.jsonl"
-        self.entries = {e["clip_id"]: e for e in entries}
+        self.split = reader.open_split(Path(cfg.paths.data_root) / split_folder(cfg.data, split),
+                                       str(cfg.paths.cache_root))
+        clip_assets = {cid: ref.asset_ids for cid, ref in self.split.clips.items()}
+        self.objects = split_objects(clip_assets, split, cfg.data)
+        assert self.objects, f"no clips for split {split!r} in {self.split.dir}"
         if train:
-            self.index = [{"clip_id": e["clip_id"], "k": k} for e in entries
-                          for k in range(1, e["N"] + 1)]
+            self.index = [{"clip_id": cid, "k": k} for cid, ks in self.objects.items() for k in ks]
         else:
-            self.index = self._eval_index(entries, int(cfg.eval.middle_frame))
+            self.index = self._eval_index(int(cfg.eval.middle_frame))
 
-    def _eval_index(self, entries: list[dict], middle: int) -> list[dict]:
+    @property
+    def voxels_file(self) -> Path:
+        return self.split.voxels_file
+
+    def clip(self, clip_id: str) -> reader.Clip:
+        return self.split.load_clip(clip_id)
+
+    def _eval_index(self, middle: int) -> list[dict]:
         """All (clip_id, k, r, rules) for the eval reference rules (o = 0)."""
         d = self.data_cfg
         subset = frame_subset(0, d.num_subset_frames, d.frame_stride)
         index = []
-        for e in entries:
-            vis = reader.visibility(reader.load_clip(self.data_root, e))
-            for k in range(1, e["N"] + 1):
+        for cid, ks in self.objects.items():
+            vis = reader.visibility(self.clip(cid))
+            for k in ks:
                 cands = valid_references(vis[:, k - 1], subset, d.min_visible_amodal_frac)
                 for r, rules in eval_references(cands, vis[:, k - 1], middle):
-                    index.append({"clip_id": e["clip_id"], "k": k, "r": r, "rules": rules})
+                    index.append({"clip_id": cid, "k": k, "r": r, "rules": rules})
         return index
 
     def set_epoch(self, epoch: int) -> None:
@@ -221,7 +256,7 @@ class ClipDataset(Dataset):
         """Item i; train samplers may pass (i, epoch) so the draw depends only on the position."""
         i, epoch = i if isinstance(i, tuple) else (i, self.epoch)
         item = self.index[i]
-        clip = reader.load_clip(self.data_root, self.entries[item["clip_id"]])
+        clip = self.clip(item["clip_id"])
         k, d = item["k"], self.data_cfg
         if not self.train:
             return build_sample(clip, k, item["r"], 0, self.clip_len, d,

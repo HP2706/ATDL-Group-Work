@@ -1,4 +1,4 @@
-"""Training targets: GT voxels -> SAM 3D shape latents (cached per asset); pose conversion stub."""
+"""Training targets: GT voxels -> SAM 3D shape latents (cached per asset); pose conversion (Phase B)."""
 
 from __future__ import annotations
 
@@ -11,8 +11,10 @@ import numpy as np
 import torch
 from omegaconf import DictConfig
 from scipy import ndimage
+from scipy.spatial.transform import Rotation
 
 from vidsam3d.data import reader
+from vidsam3d.data.samples import split_folder
 from vidsam3d.metrics import voxel_iou
 
 log = logging.getLogger("vidsam3d")
@@ -60,16 +62,9 @@ def load_latent(cache_root: str | Path, asset_id: str) -> torch.Tensor:
     return torch.load(path, map_location="cpu")
 
 
-def split_assets(data_root: str | Path, split: str) -> list[tuple[str, str]]:
-    """(asset_id, voxels path relative to dataset/) for every asset of a split."""
-    asset_dir = Path(data_root) / "assets" / split
-    return [(p.name, f"assets/{split}/{p.name}/voxels.npy") for p in sorted(asset_dir.iterdir())
-            if (p / "voxels.npy").is_file()]
-
-
-def target_voxels(data_root: str | Path, rel_path: str, cfg: DictConfig) -> np.ndarray:
+def target_voxels(voxels_file: str | Path, asset_id: str, cfg: DictConfig) -> np.ndarray:
     """GT voxels as SAM 3D sees them: canonical_permutation applied, filled if voxel_fill=solid."""
-    vox = apply_canonical_permutation(reader.load_voxels(data_root, rel_path),
+    vox = apply_canonical_permutation(reader.load_voxels(voxels_file, asset_id),
                                       cfg.target.canonical_permutation)
     if cfg.target.voxel_fill == "solid":
         return fill_voxels(vox)
@@ -80,17 +75,19 @@ def target_voxels(data_root: str | Path, rel_path: str, cfg: DictConfig) -> np.n
 @torch.no_grad()
 def cache_latents(cfg: DictConfig, split: str, sam3d, device: torch.device,
                   batch_size: int = 8) -> dict:
-    """Encode every asset's voxels with the VAE encoder, save latents and round-trip IoU (T5)."""
-    assets = split_assets(cfg.paths.data_root, split)
-    assert assets, f"no assets in {cfg.paths.data_root}/assets/{split}"
+    """Encode every asset of a split's export folder (train covers val) with the VAE encoder;
+    save the latents and the round-trip IoU (T5)."""
+    voxels_file = reader.open_split(Path(cfg.paths.data_root) / split_folder(cfg.data, split),
+                                    str(cfg.paths.cache_root)).voxels_file
+    assets = sorted(reader.voxel_table(str(voxels_file)))
+    assert assets, f"no assets in {voxels_file}"
     ious = {}
     for i in range(0, len(assets), batch_size):
         chunk = assets[i:i + batch_size]
-        vox = torch.from_numpy(np.stack([target_voxels(cfg.paths.data_root, p, cfg)
-                                         for _, p in chunk])).to(device)
+        vox = torch.from_numpy(np.stack([target_voxels(voxels_file, a, cfg) for a in chunk])).to(device)
         z = sam3d.encode_voxels(vox)
         recon = sam3d.decode_latent(z)
-        for j, (asset_id, _) in enumerate(chunk):
+        for j, asset_id in enumerate(chunk):
             path = latent_path(cfg.paths.cache_root, asset_id)
             path.parent.mkdir(parents=True, exist_ok=True)
             torch.save(z[j].float().cpu(), path)
@@ -105,6 +102,16 @@ def cache_latents(cfg: DictConfig, split: str, sam3d, device: torch.device,
     return summary
 
 
-def convert_pose_to_sam3d(R_co, t_co, s_co):
-    """Our camera-frame pose -> SAM 3D's layout convention (Phase B). Not available yet."""
-    raise NotImplementedError("waiting for ours_to_sam3d")
+PYTORCH3D_FROM_OPENCV = np.diag([-1.0, -1.0, 1.0])
+
+
+def convert_pose_to_sam3d(R_co, t_co, s_co) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Our camera-frame pose -> SAM 3D layout (q wxyz with w >= 0, t, s) in PyTorch3D camera axes.
+
+    Port of synthetic-data's `sam3dvid.sam3d.ours_to_sam3d`, verified against SAM 3D's outputs in
+    its test T6: SAM 3D poses canonical points as x_cam = (s * x) @ R(q) + t (row vectors), and
+    its object frame and scale are ours, so only the camera axes and the rotation format change."""
+    F = PYTORCH3D_FROM_OPENCV
+    x, y, z, w = Rotation.from_matrix((F @ np.asarray(R_co, float)).T).as_quat()
+    q = np.array([w, x, y, z])
+    return (q if q[0] >= 0 else -q), F @ np.asarray(t_co, float), np.asarray(s_co, float)

@@ -89,12 +89,6 @@ def test_check_env_cli_runs(capsys):
     assert "paths.data_root" in out and "failed" in out
 
 
-def test_gen_data_needs_a_shard(monkeypatch):
-    monkeypatch.delenv("SHARD_ID", raising=False)
-    with pytest.raises(SystemExit, match="shard"):
-        main(["gen-data", "--env", "local", "--split", "train", "--num-shards", "2"])
-
-
 def test_torch_kernel_compatibility_rule():
     from vidsam3d.check_env import torch_supports
     cu121 = ["sm_50", "sm_60", "sm_70", "sm_75", "sm_80", "sm_86", "sm_90"]

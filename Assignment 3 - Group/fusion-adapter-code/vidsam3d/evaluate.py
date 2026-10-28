@@ -96,7 +96,7 @@ def with_video_of(sample: dict, other: dict) -> dict:
 
 def best_frame(ds: ClipDataset, info: dict) -> tuple[reader.Clip, int]:
     """C0b oracle: the frame of S (o = 0) where object k has the largest visible_frac."""
-    clip = reader.load_clip(ds.data_root, ds.entries[info["clip_id"]])
+    clip = ds.clip(info["clip_id"])
     vis = reader.visibility(clip)[:, info["k"] - 1]
     subset = frame_subset(0, ds.data_cfg.num_subset_frames, ds.data_cfg.frame_stride)
     return clip, max(subset, key=lambda t: vis[t])
@@ -143,13 +143,13 @@ def evaluate(cfg: DictConfig, run: str, k: int | None = None, shuffle: bool = Fa
             cond = sam3d.condition(*reference_images([ref], device))
         z, _ = sam3d.sample(cond, [sample_seed(info["clip_id"], info["k"], info["r"])], cfg.sampler)
         pred = sam3d.decode_latent(z)[0].cpu()
-        gt = torch.from_numpy(target_voxels(ds.data_root, info["voxels"], cfg))
+        gt = torch.from_numpy(target_voxels(ds.voxels_file, info["asset_id"], cfg))
         metrics = shape_metrics(pred, gt, cfg.eval.metrics, seed=sample_seed(sample_id(info)))
         record = {"sample_id": sample_id(info), "label": label, "condition": cfg.condition if adapter
                   is not None else name, "run": name, "clip_len": clip_len, "shuffle_frames": shuffle,
                   "wrong_video": wrong_video, **{key: info[key] for key in (
                       "clip_id", "k", "r", "reference_rules", "visible_frac", "amodal_px",
-                      "arc_span_deg", "num_objects", "asset_id", "source")},
+                      "arc_span_deg", "num_objects", "asset_id")},
                   **({"video_from": info["video_from"]} if "video_from" in info else {}),
                   **extra, **metrics}
         append_jsonl(local, record)

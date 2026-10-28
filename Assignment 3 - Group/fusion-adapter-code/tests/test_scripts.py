@@ -20,7 +20,7 @@ def test_shellcheck_clean():
 
 
 def test_dry_run_through_run_sh(fake_root, tmp_path):
-    env = {**os.environ, "ACTIVATE": "0", "VIDSAM3D_ENV": "local", "STAGE_TO_SCRATCH": "1",
+    env = {**os.environ, "ACTIVATE": "0", "VIDSAM3D_ENV": "local", "STAGE_TO_SCRATCH": "1", "PYTHONPATH": str(REPO),
            "PATH": f"{Path(sys.executable).parent}{os.pathsep}{os.environ['PATH']}",
            "DATA_ROOT": str(fake_root), "SCRATCH_ROOT": str(tmp_path / "scratch"),
            "OUTPUT_ROOT": str(tmp_path / "out"), "CACHE_ROOT": str(tmp_path / "cache")}
@@ -30,7 +30,7 @@ def test_dry_run_through_run_sh(fake_root, tmp_path):
     run("cache-latents", "--split", "train")
     out = run("train", "--condition", "c3")
     staged = tmp_path / "scratch" / "dataset"
-    assert (staged / "manifest.jsonl").is_file() and (staged / "clips" / "train").is_dir()
-    assert not (staged / "clips" / "eval").exists()                # only the splits train reads
+    assert (staged / "train" / "index.json").is_file()
+    assert not (staged / "eval").exists()                          # only the folder train reads
     assert "staging" in out.stdout
     assert (tmp_path / "out" / "c3_seed0" / "latest.json").is_file()
