@@ -80,7 +80,7 @@ target:
 
 loss:
   rotation_weight: 0.0       # 0 = Phase A (shape only); 0.1 in Phase B
-  tau_dist: logit_normal     # fallback if SAM 3D has no default (inspect item 5)
+  tau_dist: logit_normal     # fallback if SAM 3D has no default (internals item 5)
   tau_mean: 0.0
   tau_std: 1.0
 

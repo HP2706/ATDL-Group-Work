@@ -1,6 +1,6 @@
 # Progress
 
-Status on 2026-10-27, branch `mathias`. All phases are implemented. What is left needs a GPU and the real datasets, neither of which has been used yet.
+Status on 2026-10-28, branch `mathias`. All phases are implemented and committed. What is left needs a GPU and the real datasets, neither of which has been used yet.
 
 | Phase | Content | Status |
 |---|---|---|

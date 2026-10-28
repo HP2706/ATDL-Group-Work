@@ -15,8 +15,9 @@ The scene never changes during a clip; only the camera moves. So each object's p
 |---|---|---|---|---|
 | `eval` | Google Scanned Objects (GSO) | SA-1B eval pool | 500 | locally, shipped as a tarball |
 | `train` | Objaverse-XL (TRELLIS-500K subset, filtered) | SA-1B train pool | 10,000 | on a cluster, later |
+| `val` | held-out Objaverse-XL objects (requested) | SA-1B train pool | 300–500 | with `train` |
 
-Both splits use the identical format. Objects and backgrounds never cross splits: object sets come from different sources, and SA-1B images are assigned to a pool by a fixed hash of their image ID.
+All splits use the identical format. Objects and backgrounds never cross splits: object sets come from different sources, and SA-1B images are assigned to a pool by a fixed hash of their image ID.
 
 ## 2. Directory layout
 
@@ -24,7 +25,7 @@ Both splits use the identical format. Objects and backgrounds never cross splits
 dataset/
   manifest.jsonl                  one line per clip: {clip_id, split, N, arc_span_deg, seed, path}
   config.yaml                     generator config used
-  assets/{train|eval}/{asset_id}/
+  assets/{train|val|eval}/{asset_id}/
     mesh.glb                      normalized textured mesh (see 3.3)
     voxels.npy                    bool (64,64,64) surface occupancy (see 3.3)
     meta.json                     source, source_name (original GSO/Objaverse name), license,

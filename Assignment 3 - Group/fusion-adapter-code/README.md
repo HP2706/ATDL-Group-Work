@@ -2,7 +2,7 @@
 
 A small gated cross-attention **fusion adapter** (~18M parameters) lets the frozen SAM 3D Objects Geometry model use a video clip through frozen V-JEPA 2.1 features. Only the adapter is trained, with SAM 3D's flow-matching loss on the ground-truth shape latent; evaluation is on the coarse 64³ shape.
 
-Docs: [research plan](docs/research_plan.md) · [adapter plan](docs/fusion_adapter_plan.md) · [data format v0.1](docs/data_format.md) · [SAM 3D internals](docs/sam3d_internals.md) · [UCloud guide](docs/ucloud.md) · [progress](docs/progress.md)
+Docs: [research plan](docs/research_plan.md) · [adapter design](docs/adapter_design.md) · [data format v0.1](docs/data_format.md) · [SAM 3D internals](docs/sam3d_internals.md) · [UCloud guide](docs/ucloud.md) · [progress](docs/progress.md)
 
 ## Repository
 
