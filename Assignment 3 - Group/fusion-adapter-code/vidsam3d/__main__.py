@@ -42,6 +42,19 @@ def cmd_frame_test(cfg, args) -> None:
     frame_test(cfg, num_objects=args.num_objects)
 
 
+def cmd_eval(cfg, args) -> None:
+    """Evaluate a run directory, `zero-shot` (C0) or `best-frame` (C0b oracle)."""
+    from vidsam3d.evaluate import evaluate
+    evaluate(cfg, args.run, k=args.k, shuffle=args.shuffle_frames, wrong_video=args.wrong_video,
+             split=args.split, limit=args.limit)
+
+
+def cmd_analyze(cfg, args) -> None:
+    """Tables and plots from results files."""
+    from vidsam3d.analyze import analyze
+    analyze(cfg, args.results, baseline=args.baseline, out_dir=args.out)
+
+
 def not_implemented(phase: str):
     """Return a handler for a command that arrives in a later phase."""
     def handler(cfg, args) -> None:
@@ -81,16 +94,19 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_train)
 
     p = sub.add_parser("eval", parents=[common], help="write per-sample results.jsonl")
-    p.add_argument("--run", required=True, help="<run_dir> | zero-shot | best-frame")
+    p.add_argument("--run", required=True, help="run dir or name (e.g. c3_seed0) | zero-shot | best-frame")
     p.add_argument("--k", type=int, default=None, help="clip length (default: eval.k)")
-    p.add_argument("--shuffle-frames", action="store_true")
-    p.add_argument("--wrong-video", action="store_true")
-    p.set_defaults(func=not_implemented("P6"))
+    p.add_argument("--shuffle-frames", action="store_true", help="H3 control")
+    p.add_argument("--wrong-video", action="store_true", help="T7 control: video of another clip")
+    p.add_argument("--split", default=None, help="default: data.eval_split")
+    p.add_argument("--limit", type=int, default=None, help="evaluate at most N new samples")
+    p.set_defaults(func=cmd_eval)
 
     p = sub.add_parser("analyze", parents=[common], help="tables and plots")
-    p.add_argument("--results", nargs="+", required=True)
-    p.add_argument("--baseline", default="c1")
-    p.set_defaults(func=not_implemented("P6"))
+    p.add_argument("--results", nargs="+", required=True, help="results .jsonl files")
+    p.add_argument("--baseline", default=None, help="label to compare against (default: first)")
+    p.add_argument("--out", default=None, help="default: output_root/analysis")
+    p.set_defaults(func=cmd_analyze)
 
     p = sub.add_parser("gen-data", parents=[common], help="run one shard of the external generator")
     p.add_argument("--split", required=True)

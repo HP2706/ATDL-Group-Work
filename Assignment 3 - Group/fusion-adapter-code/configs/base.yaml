@@ -113,11 +113,19 @@ val:
   sample_num_objects: 100
 
 eval:
-  k: 16
-  reference_rules: [middle, most_occluded]
+  k: 16                      # clip length (CLI --k)
   middle_frame: 16
-  shuffle_frames: false
-  wrong_video: false
+  flush_every: 20            # copy results.jsonl from scratch to output_root every N samples
+  metrics:
+    max_points: 20000        # points per shape for ICP / Chamfer / F-score (seeded subsample)
+    icp_iterations: 100
+    icp_scale: true          # similarity ICP: bbox normalisation changes the scale of rotated shapes
+    fscore_thresholds: [0.02, 0.05]   # fractions of the longest side; 1 voxel = 1/64 = 0.016
+
+analysis:
+  bootstrap_resamples: 2000
+  visible_frac_bins: [0.1, 0.4, 0.7, 1.0]
+  arc_span_bins: [10, 30, 50, 70]
 
 logging:
   tensorboard: false

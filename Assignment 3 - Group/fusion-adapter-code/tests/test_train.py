@@ -7,10 +7,11 @@ import numpy as np
 import pytest
 import torch
 
+from tests.fixtures.fake_config import fake_train_cfg
 from tests.fixtures.make_fake_dataset import make_fake_dataset
 from vidsam3d.config import load_config
 from vidsam3d.data.samples import ClipDataset
-from vidsam3d.data.targets import apply_canonical_permutation, cache_latents, load_latent
+from vidsam3d.data.targets import apply_canonical_permutation, load_latent
 from vidsam3d.models.adapter import VideoFusionAdapter, build_adapter
 from vidsam3d.models.encoders import build_kv_encoder
 from vidsam3d.models.fake_sam3d import FakeSam3D
@@ -18,31 +19,13 @@ from vidsam3d.models.sam3d import apply_adapter, build_sam3d
 from vidsam3d.train import StreamBatchSampler, lr_factor, param_groups, train, val_flow_loss
 from vidsam3d.utils import read_jsonl
 
-D = 32
+D = 32  # matches tests/fixtures/fake_config.py
 
 
 @pytest.fixture(scope="module")
 def two_sample_root(tmp_path_factory):
     """Train split = one clip with two objects -> exactly 2 training samples."""
     return make_fake_dataset(tmp_path_factory.mktemp("ds2"), splits=("train",), seeds={"train": [1]})
-
-
-def fake_train_cfg(root, tmp, condition="c3", **overrides):
-    """Small fake-SAM 3D config writing everything under `tmp`."""
-    base = {"paths.data_root": root, "paths.output_root": tmp / "out",
-            "paths.scratch_root": tmp / "scratch", "paths.cache_root": tmp / "cache",
-            "fake_sam3d": "true", "device": "cpu", "adapter.d_cond": D, "adapter.d_vid": D,
-            "adapter.heads": 4, "adapter.query_sets": "[crop,full]",
-            "sam3d.phase_a_layout": "noise", "sampler.steps": 4, "sampler.cfg_scale": 1.0,
-            "data.val_split": "train", "data.crop.min_side": 16, "data.crop.size": 32,
-            "train.bf16": "false", "train.batch_size": 2, "train.effective_batch_size": 2,
-            "train.max_steps": 50, "train.log_every": 1000, "train.ckpt_every": 1000,
-            "val.loss_every": 1000, "val.sample_every": 1000, "optim.warmup_steps": 5,
-            "optim.lr": 3e-3, "optim.gate_lr_mult": 10, "optim.ema_decay": 0.0}
-    base.update(overrides)
-    cfg = load_config(condition, "local", [f"{k}={v}" for k, v in base.items()])
-    cache_latents(cfg, "train", build_sam3d(cfg, torch.device("cpu")), torch.device("cpu"))
-    return cfg
 
 
 def adapter_state(cfg):
