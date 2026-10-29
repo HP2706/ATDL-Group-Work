@@ -50,8 +50,8 @@ from pathlib import Path
 root = Path(os.environ['TASK_DATA_ROOT'])
 omni = json.loads((root/'omniobject3d/preparation.json').read_text())
 gso = json.loads((root/'raw/gso/index.json').read_text())
-if omni['missing_scan_objects']:
-    raise ValueError('Some captured objects have no corresponding scan; see preparation.json')
+if not omni['all_retained_objects_have_mesh']:
+    raise ValueError('A retained training object has no corresponding scan')
 if gso['num_downloaded'] != gso['num_models']:
     raise ValueError('Incomplete GSO download')
 result = {'omniobject3d': omni, 'gso_objects':gso['num_downloaded'],

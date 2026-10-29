@@ -88,7 +88,7 @@ def prepare_available_scans(root: str, output: str, shard: int = 0, shards: int 
                 folders.append(wrapper)
             for folder in sorted(folders):
                 for mesh in sorted(folder.rglob('*.obj')):
-                    if mesh.name.lower() not in {'scan.obj', 'model.obj'}:
+                    if mesh.parent.name.lower() != 'scan' and mesh.name.lower() not in {'scan.obj', 'model.obj'}:
                         continue
                     identity = mesh.parent.parent.name if mesh.parent.name.lower() == 'scan' else mesh.parent.name
                     owner = int.from_bytes(hashlib.sha256(identity.encode()).digest()[:8], 'big') % shards
@@ -163,6 +163,19 @@ def prepare_capture(task: tuple[str, str, str]) -> tuple[str, list[str]]:
     return images.parent.parent.name, [str(path) for path in frames]
 
 
+def source_scan_meshes(root: Path) -> dict[str, Path]:
+    """Scan directories also contain legitimate nonstandard names, such as wallet.obj."""
+    meshes: dict[str, Path] = {}
+    for path in root.rglob('*.obj'):
+        if path.parent.name.lower() != 'scan' and path.name.lower() not in {'scan.obj', 'model.obj'}:
+            continue
+        identity = path.parent.parent.name if path.parent.name.lower() == 'scan' else path.parent.name
+        if identity in meshes:
+            raise ValueError(f'Ambiguous mesh for {identity}')
+        meshes[identity] = path
+    return meshes
+
+
 def prepare_omniobject(root: str, output: str, seed: int = 42, validation_fraction: float = 0.1,
                       workers: int = 3, shard: int = -1, shards: int = 1) -> dict[str, Any]:
     from video3d.storage import atomic_json
@@ -171,15 +184,10 @@ def prepare_omniobject(root: str, output: str, seed: int = 42, validation_fracti
     started = time.monotonic()
     base, destination = Path(root), Path(output)
     destination.mkdir(parents=True, exist_ok=True)
-    source_meshes: dict[str, Path] = {}
-    for path in (base / 'raw_scans').rglob('*.obj'):
-        if path.name.lower() in {'scan.obj', 'model.obj'}:
-            identity = path.parent.parent.name if path.parent.name.lower() == 'scan' else path.parent.name
-            if identity in source_meshes:
-                raise ValueError(f'Ambiguous mesh for {identity}')
-            source_meshes[identity] = path
+    source_meshes = source_scan_meshes(base / 'raw_scans')
     rows: list[ScanRecord] = []
     missing: list[str] = []
+    multiobject: list[str] = []
     captures = sorted((base / 'videos_processed').rglob('standard/images'))
     tasks = [(str(source_meshes[images.parent.parent.name]),
               str(destination / 'assets' / images.parent.parent.name), str(images))
@@ -206,7 +214,7 @@ def prepare_omniobject(root: str, output: str, seed: int = 42, validation_fracti
     for images in captures:
         identity = images.parent.parent.name
         if identity not in source_meshes:
-            missing.append(identity)
+            (multiobject if ',' in identity else missing).append(identity)
             continue
         frames = [Path(path) for path in validated[identity]]
         masks = [images.parent / 'matting' / path.name for path in frames]
@@ -229,6 +237,10 @@ def prepare_omniobject(root: str, output: str, seed: int = 42, validation_fracti
         raise ValueError('No matched OmniObject3D video/mesh pairs')
     write_manifest(destination, rows)
     result = {'objects': len(rows), 'missing_scan_objects': missing,
+              'excluded_multiobject_captures': multiobject,
+              'available_scan_objects': len(source_meshes),
+              'all_retained_objects_have_mesh': True,
+              'dataset_scope': 'available_matched_single_object_processed_captures',
               'frames': sum(len(row.frames) for row in rows), 'expected_catalogue_objects': 6000,
               'complete_6000': len(rows) >= 6000 and not missing}
     (destination / 'preparation.json').write_text(json.dumps(result, indent=2))

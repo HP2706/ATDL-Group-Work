@@ -117,3 +117,14 @@ def test_capture_validation_excludes_empty_masks_and_invalidates_cache(tmp_path:
     assert len(capture_frames(images, report)) == 16
     Image.new('L', (16,16), 255).save(masks/'016.png')
     assert len(capture_frames(images, report)) == 17
+
+
+def test_scan_discovery_retains_nonstandard_wallet_names(tmp_path: Path) -> None:
+    from video3d.data.scan_prepare import source_scan_meshes
+    scan = tmp_path/'wallet_038/Scan'
+    scan.mkdir(parents=True)
+    (scan/'wallet.obj').write_text('source fixture')
+    assert source_scan_meshes(tmp_path) == {'wallet_038': scan/'wallet.obj'}
+    (scan/'Scan.obj').write_text('ambiguous fixture')
+    with pytest.raises(ValueError, match='Ambiguous mesh'):
+        source_scan_meshes(tmp_path)
