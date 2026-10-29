@@ -1,69 +1,56 @@
+"""Bounded orchestration of the shared trainer and evaluator."""
 from __future__ import annotations
 
-import json
+from datetime import datetime
+from pathlib import Path
 import subprocess
 import sys
 import time
-from pathlib import Path
 import chz
-from .config import ExperimentConfig, capture_provenance, sweep_group
-from .storage import atomic_json
+from video3d.config import ExperimentConfig, config_dict
+from video3d.storage import atomic_json
+
+VARIANTS = (("frozen", False, False), ("video-lora", True, False),
+            ("sam-lora", False, True), ("both-lora", True, True))
 
 
-VARIANTS: tuple[tuple[str, bool, bool], ...] = (("A", False, False), ("B", True, False), ("C", False, True), ("D", True, True))
-
-
-def sweep(config: ExperimentConfig) -> None:
-    root = Path(__file__).resolve().parents[4]
-    provenance = capture_provenance(root)
-    group = config.training.group or sweep_group(provenance.git_head)
-    directory = Path(config.training.output) / group
+def sweep(cfg: ExperimentConfig, max_seconds: int = 4800, evaluate: bool = True) -> Path:
+    """Four LoRA configurations, sequentially, each using the same trainer."""
+    if sys.platform == "darwin":
+        raise RuntimeError("Run experiments on remote compute")
+    if max_seconds < 1:
+        raise ValueError("max_seconds must be positive")
+    group = cfg.run_name or "sweep-" + datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+    directory = Path(cfg.paths.output_root) / (group + "-sweep")
     directory.mkdir(parents=True, exist_ok=True)
+    deadline = time.monotonic() + max_seconds
     results: list[dict[str, object]] = []
-    profile_path = Path(config.training.output) / "profile.json"
-    if not profile_path.is_file():
-        raise RuntimeError("GPU profiling must pass before the four-configuration sweep")
-    profile = json.loads(profile_path.read_text())
-    if profile["group"] != group or profile["git_head"] != provenance.git_head:
-        raise ValueError("Profiling belongs to a different sweep/source revision")
-    deadline = time.monotonic() + 4800
-    for variant, video_lora, sam_lora in VARIANTS:
-        remaining = deadline - time.monotonic()
-        if remaining < 120:
-            results.append({"variant": variant, "status": "not_started_budget_exhausted"})
+    for name, video_lora, sam_lora in VARIANTS:
+        if deadline - time.monotonic() < cfg.train.max_seconds + 90:
+            results.append({"variant": name, "status": "budget_exhausted"})
             continue
-        per_variant = config.training.max_seconds
-        if remaining < per_variant + 90:
-            results.append({"variant": variant, "status": "not_started_budget_exhausted"})
-            continue
-        # Serialize the full resolved parent config, not a partial set of overrides.
-        launch = chz.asdict(config)
-        launch["model"].update(video_lora=video_lora, sam_lora=sam_lora)
-        launch["training"].update(group=group, max_seconds=per_variant, microbatch=profile["selected_microbatch"], accumulation=profile["selected_accumulation"])
-        launch["provenance"] = chz.asdict(provenance)
-        resolved = directory / f"{variant}.json"
-        atomic_json(resolved, launch)
-        previous = Path(config.training.output) / f"{group}-{variant}" / "result.json"
-        if previous.is_file():
-            record = json.loads(previous.read_text())
-            if record["completed_steps"] and record["config"] == launch:
-                results.append({"variant": variant, "returncode": 0, "status": "already_completed"})
-                continue
-        command = [sys.executable, "-m", "video3d.cli", "train-json", str(resolved)]
-        with (directory / f"{variant}.log").open("a") as log:
-            process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT)
-            try:
-                returncode = process.wait(timeout=per_variant + 90)
-            except subprocess.TimeoutExpired:
-                process.terminate()
-                try:
-                    returncode = process.wait(timeout=45)
-                except subprocess.TimeoutExpired:
-                    process.kill()
-                    returncode = process.wait()
-            completed = previous.is_file() and json.loads(previous.read_text())["completed_steps"]
-            results.append({"variant": variant, "returncode": returncode if completed else 1, "status": "completed" if completed else "incomplete", "config": str(resolved), "log": str(directory / f"{variant}.log")})
-        atomic_json(directory / "sweep.json", {"schema_version": 2, "group": group, "results": results})
-    atomic_json(directory / "sweep.json", {"schema_version": 2, "group": group, "results": results})
-    if any(row.get("returncode", 1) != 0 for row in results):
-        raise RuntimeError("One or more configurations failed; inspect persistent sweep logs")
+        run_cfg = chz.replace(cfg, run_name=f"{group}-{name}",
+            encoder=chz.replace(cfg.encoder, vjepa=chz.replace(cfg.encoder.vjepa, video_lora=video_lora)),
+            sam3d=chz.replace(cfg.sam3d, lora=sam_lora))
+        resolved = directory / f"{name}.json"
+        atomic_json(resolved, config_dict(run_cfg))
+        # timeout owns the foreground process group; interruption triggers atomic checkpointing.
+        command = ["timeout", "--signal=INT", "--kill-after=30", str(cfg.train.max_seconds + 60),
+                   sys.executable, "-m", "video3d", "train-json", str(resolved)]
+        with (directory / f"{name}.log").open("a") as log:
+            result = subprocess.run(command, stdout=log, stderr=subprocess.STDOUT)
+            if result.returncode:
+                raise RuntimeError(f"Sweep variant {name} failed; inspect {directory}")
+            if evaluate:
+                remaining = int(deadline - time.monotonic())
+                if remaining < 1:
+                    raise RuntimeError("Sweep evaluation budget exhausted")
+                result = subprocess.run(["timeout", "--signal=INT", "--kill-after=30", str(remaining),
+                    sys.executable, "-m", "video3d", "eval-json", str(resolved),
+                    str(Path(cfg.paths.output_root) / run_cfg.run_name)], stdout=log, stderr=subprocess.STDOUT)
+                if result.returncode:
+                    raise RuntimeError(f"Sweep evaluation failed; inspect {directory}")
+        results.append({"variant": name, "status": "completed"})
+        atomic_json(directory / "sweep.json", {"results": results})
+    atomic_json(directory / "sweep.json", {"results": results})
+    return directory
