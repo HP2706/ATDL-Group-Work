@@ -1,7 +1,7 @@
 """Prepare existing scanned assets and captured frames without synthesizing training videos."""
 from __future__ import annotations
 
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, as_completed
 import fcntl
 import hashlib
 import json
@@ -13,6 +13,7 @@ from typing import Any
 import numpy as np
 from PIL import Image
 import trimesh
+from tqdm.auto import tqdm
 
 from video3d.data.scanned import ScanRecord, object_split, read_mask, read_rgb
 
@@ -111,6 +112,14 @@ def prepare_available_scans(root: str, output: str, shard: int = 0, shards: int 
 
 
 def capture_frames(images: Path, report_dir: Path) -> list[Path]:
+    """Serialize validation of one capture across preparation jobs."""
+    report_dir.mkdir(parents=True, exist_ok=True)
+    with (report_dir / 'capture-validation.lock').open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        return capture_frame_contents(images, report_dir)
+
+
+def capture_frame_contents(images: Path, report_dir: Path) -> list[Path]:
     """Retain usable RGB/mask pairs and record exclusions without changing raw data.
 
     Extracted source archives are immutable. File metadata invalidates this cache
@@ -155,7 +164,11 @@ def prepare_capture(task: tuple[str, str, str]) -> tuple[str, list[str]]:
 
 
 def prepare_omniobject(root: str, output: str, seed: int = 42, validation_fraction: float = 0.1,
-                      workers: int = 3) -> dict[str, Any]:
+                      workers: int = 3, shard: int = -1, shards: int = 1) -> dict[str, Any]:
+    from video3d.storage import atomic_json
+    if workers < 1 or shards < 1 or (shard != -1 and not 0 <= shard < shards):
+        raise ValueError('Invalid preparation worker/shard configuration')
+    started = time.monotonic()
     base, destination = Path(root), Path(output)
     destination.mkdir(parents=True, exist_ok=True)
     source_meshes: dict[str, Path] = {}
@@ -171,8 +184,25 @@ def prepare_omniobject(root: str, output: str, seed: int = 42, validation_fracti
     tasks = [(str(source_meshes[images.parent.parent.name]),
               str(destination / 'assets' / images.parent.parent.name), str(images))
              for images in captures if images.parent.parent.name in source_meshes]
+    if shard >= 0:
+        tasks = [task for task in tasks if int.from_bytes(
+            hashlib.sha256(Path(task[1]).name.encode()).digest()[:8], 'big') % shards == shard]
+    status_path = destination / ('preparation-progress.json' if shard < 0 else f'preparation-shard-{shard:02d}.json')
+    validated: dict[str, list[str]] = {}
+    report: dict[str, Any] = {'shard': shard, 'shards': shards, 'workers': workers,
+                              'objects_total': len(tasks), 'objects_complete': 0, 'state': 'RUNNING'}
+    atomic_json(status_path, report)
     with ProcessPoolExecutor(max_workers=workers) as pool:
-        validated = dict(pool.map(prepare_capture, tasks))
+        futures = [pool.submit(prepare_capture, task) for task in tasks]
+        for future in tqdm(as_completed(futures), total=len(tasks), desc=f'Prepare Omni shard {shard}', unit='object'):
+            identity, paths = future.result()
+            validated[identity] = paths
+            report.update(objects_complete=len(validated), elapsed_seconds=time.monotonic()-started)
+            atomic_json(status_path, report)
+    if shard >= 0:
+        report.update(state='COMPLETE', frames=sum(len(paths) for paths in validated.values()))
+        atomic_json(status_path, report)
+        return report
     for images in captures:
         identity = images.parent.parent.name
         if identity not in source_meshes:
@@ -202,6 +232,7 @@ def prepare_omniobject(root: str, output: str, seed: int = 42, validation_fracti
               'frames': sum(len(row.frames) for row in rows), 'expected_catalogue_objects': 6000,
               'complete_6000': len(rows) >= 6000 and not missing}
     (destination / 'preparation.json').write_text(json.dumps(result, indent=2))
+    atomic_json(status_path, {**report, 'state': 'COMPLETE', 'objects': len(rows)})
     return result
 
 
