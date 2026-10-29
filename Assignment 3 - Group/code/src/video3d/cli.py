@@ -100,9 +100,10 @@ def generation(command: str, **options: Any) -> None:
 
 
 def scanned(command: str, **options: Any) -> None:
-    from video3d.data.scan_prepare import prepare_gso, prepare_omniobject
+    from video3d.data.scan_prepare import prepare_gso, prepare_omniobject, prepare_available_scans
     from video3d.data.scanned import audit
-    commands = {'prepare-omni': prepare_omniobject, 'prepare-gso': prepare_gso, 'audit': audit}
+    commands = {'prepare-omni': prepare_omniobject, 'prepare-gso': prepare_gso, 'audit': audit,
+                'prepare-available': prepare_available_scans}
     if command not in commands:
         raise ValueError(f'Choose from {list(commands)}')
     print(json.dumps(commands[command](**options), indent=2))

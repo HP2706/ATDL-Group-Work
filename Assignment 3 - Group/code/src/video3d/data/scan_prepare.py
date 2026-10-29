@@ -2,9 +2,12 @@
 from __future__ import annotations
 
 from concurrent.futures import ProcessPoolExecutor
+import fcntl
+import hashlib
 import json
 import os
 from pathlib import Path
+import time
 from typing import Any
 
 import numpy as np
@@ -44,11 +47,67 @@ def normalize_mesh(source: Path, output: Path) -> tuple[trimesh.Trimesh, dict[st
 
 def prepare_scan_mesh(task: tuple[str, str]) -> None:
     source, output = Path(task[0]), Path(task[1])
-    marker = output / 'prepared.json'
-    if marker.exists():
-        return
-    normalize_mesh(source, output)
-    marker.write_text(json.dumps({'source': str(source), 'normalization': 'aabb_unit_cube'}))
+    output.mkdir(parents=True, exist_ok=True)
+    with (output / 'prepare.lock').open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        marker = output / 'prepared.json'
+        if marker.exists():
+            return
+        normalize_mesh(source, output)
+        temporary = marker.with_suffix('.json.tmp')
+        temporary.write_text(json.dumps({'source': str(source), 'normalization': 'aabb_unit_cube'}))
+        temporary.replace(marker)
+
+
+def prepare_available_scans(root: str, output: str, shard: int = 0, shards: int = 8,
+                            max_seconds: int = 10800, once: bool = False) -> dict[str, Any]:
+    """Prepare disjoint objects as verified scan archives arrive. The normal full
+    preparation path later reuses these same locked, complete assets.
+    """
+    if not 0 <= shard < shards or max_seconds < 1:
+        raise ValueError('Invalid preparation shard')
+    base, destination = Path(root), Path(output)
+    destination.mkdir(parents=True, exist_ok=True)
+    catalogue = json.loads((base / 'catalogue.json').read_text())['files']
+    video_categories = {Path(row['path']).name for row in catalogue if row['path'].startswith('/raw/videos_processed/')}
+    scans = [row for row in catalogue if row['path'].startswith('/raw/raw_scans/')
+             and Path(row['path']).name in video_categories]
+    done: set[str] = set()
+    checked = 0
+    started = time.monotonic()
+    while time.monotonic() - started < max_seconds:
+        for row in scans:
+            category = Path(row['path']).name.removesuffix('.tar.gz')
+            marker = base / 'archives/raw_scans' / (category + '.tar.gz.extracted.json')
+            if category in done or not marker.exists():
+                continue
+            folders = list((base / 'raw_scans').glob(category + '_*'))
+            wrapper = base / 'raw_scans' / category
+            if wrapper.is_dir():
+                folders.append(wrapper)
+            for folder in sorted(folders):
+                for mesh in sorted(folder.rglob('*.obj')):
+                    if mesh.name.lower() not in {'scan.obj', 'model.obj'}:
+                        continue
+                    identity = mesh.parent.parent.name if mesh.parent.name.lower() == 'scan' else mesh.parent.name
+                    owner = int.from_bytes(hashlib.sha256(identity.encode()).digest()[:8], 'big') % shards
+                    if owner != shard:
+                        continue
+                    prepare_scan_mesh((str(mesh), str(destination / 'assets' / identity)))
+                    checked += 1
+                    print(json.dumps({'mesh_ready': identity, 'shard': shard}), flush=True)
+            done.add(category)
+        report = {'shard': shard, 'checked_objects': checked, 'scan_archives_seen': len(done),
+                  'scan_archives_total': len(scans), 'elapsed_seconds': time.monotonic()-started,
+                  'complete': len(done) == len(scans)}
+        status = destination / f'live-preparation-{shard:02d}.json'
+        temporary = status.with_suffix('.json.tmp')
+        temporary.write_text(json.dumps(report, indent=2))
+        temporary.replace(status)
+        if report['complete'] or once:
+            return report
+        time.sleep(15)
+    return report
 
 
 def prepare_omniobject(root: str, output: str, seed: int = 42, validation_fraction: float = 0.1,

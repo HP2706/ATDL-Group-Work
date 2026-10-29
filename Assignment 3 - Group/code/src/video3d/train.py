@@ -19,6 +19,7 @@ import logging
 import time
 
 import torch
+from tqdm.auto import tqdm
 from video3d.loss import flow_loss
 from video3d.config import ExperimentConfig, config_dict, OptimConfig, LossConfig
 from torch.utils.data import DataLoader, Sampler
@@ -172,9 +173,10 @@ def val_flow_loss(sam3d: typing.Any, encoder: typing.Any, adapter: typing.Any, v
     """Mean flow loss on the first val samples at a fixed τ grid with fixed noise."""
     taus = torch.tensor(list(cfg.val.tau_grid), device=device)
     losses = []
-    for i in range(min(len(val_ds), cfg.val.loss_num_samples)):
+    for i in tqdm(range(min(len(val_ds), cfg.val.loss_num_samples)), desc="Validation loss", unit="video"):
         s = val_ds[i]
-        cond = adapted_condition(sam3d, encoder, adapter, [s], cfg, device)
+        cond = (adapted_condition(sam3d, encoder, adapter, [s], cfg, device) if adapter is not None
+                else sam3d.condition(*reference_images([s], device)))
         cond = {k: v.expand(len(taus), *v.shape[1:]) for k, v in cond.items()}
         x1 = (s["target"] if "target" in s else load_latent(cfg, s["info"]["asset_id"])).to(device)
         x1 = x1.expand(len(taus), *x1.shape)
@@ -192,7 +194,7 @@ def val_viou(sam3d: typing.Any, encoder: typing.Any, adapter: typing.Any, val_ds
     """Mean canonical vIoU of sampled shapes for the first val objects (middle reference)."""
     items = [i for i, x in enumerate(val_ds.index) if "middle" in x["rules"] or "reference" in x["rules"]]
     ious = []
-    for i in items[:cfg.val.sample_num_objects]:
+    for i in tqdm(items[:cfg.val.sample_num_objects], desc="Validation shapes", unit="video"):
         s = val_ds[i]
         info = s["info"]
         cond = adapted_condition(sam3d, encoder, adapter, [s], cfg, device)
@@ -338,6 +340,9 @@ def train(cfg: ExperimentConfig, benchmark: bool = False, stop_at: int | None = 
     previous_handlers = {sig: signal.signal(sig, request_stop) for sig in (signal.SIGTERM, signal.SIGINT)}
     started = time.monotonic()
     update_in_progress = False
+    total_videos = len(train_ds) * tcfg.epochs if use_epochs else max_steps * tcfg.effective_batch_size
+    completed_videos = step // epoch_steps * len(train_ds) + epoch_examples if use_epochs else step * tcfg.effective_batch_size
+    progress = tqdm(total=total_videos, initial=completed_videos, desc="Training", unit="video")
     try:
         while step < max_steps and not stopping_signal and time.monotonic() - started < tcfg.max_seconds:
             update_in_progress = True
@@ -372,6 +377,8 @@ def train(cfg: ExperimentConfig, benchmark: bool = False, stop_at: int | None = 
             step += 1
             update_in_progress = False
             step_times.append(time.perf_counter() - t0)
+            progress.update(update_examples)
+            progress.set_postfix(loss=f"{loss_sum:.4f}", step=step)
 
             record = {"step": step, "loss": loss_sum, "lr": sched.get_last_lr()[0],
                       "grad_norm": grad_norm, "s_per_step": step_times[-1],
@@ -421,6 +428,7 @@ def train(cfg: ExperimentConfig, benchmark: bool = False, stop_at: int | None = 
                 break
 
     finally:
+        progress.close()
         if not benchmark and not update_in_progress:
             save_checkpoint(checkpoint_state(), cfg, f"ckpt_{step}.pt", keep=tcfg.keep_ckpts)
         if update_in_progress:

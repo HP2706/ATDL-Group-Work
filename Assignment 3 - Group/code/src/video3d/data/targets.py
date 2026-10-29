@@ -13,6 +13,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
+from tqdm.auto import tqdm
 from video3d.config import ExperimentConfig
 from scipy import ndimage
 
@@ -127,7 +128,7 @@ def cache_latents(cfg: ExperimentConfig, split: str, sam3d: typing.Any, device: 
             return target_voxels(voxels_file, asset_id, cfg)
     assert assets, 'no target assets'
     ious = {}
-    for i in range(0, len(assets), batch_size):
+    for i in tqdm(range(0, len(assets), batch_size), desc=f"Cache targets ({split})", unit="batch"):
         chunk = assets[i:i + batch_size]
         vox = torch.from_numpy(np.stack([load_voxels(a) for a in chunk])).to(device)
         z = sam3d.encode_voxels(vox)

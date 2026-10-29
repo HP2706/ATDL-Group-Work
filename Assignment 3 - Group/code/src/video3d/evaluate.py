@@ -17,6 +17,7 @@ from pathlib import Path
 import numpy as np
 import torch
 import chz
+from tqdm.auto import tqdm
 from video3d.config import read_config, config_dict
 from video3d.config import ExperimentConfig
 
@@ -153,7 +154,7 @@ def evaluate(cfg: ExperimentConfig, run: str, k: int | None = None, shuffle: boo
     from video3d.logging import RunLogger
     from video3d.media import save_pair
     logger = RunLogger(cfg)
-    for n, i in enumerate(todo[:limit] if limit else todo, start=1):
+    for n, i in enumerate(tqdm(todo[:limit] if limit else todo, desc=f"Evaluate {label}", unit="video"), start=1):
         sample = ds[i]
         if repeated_reference:
             from video3d.evaluate import repeat_reference
@@ -188,6 +189,10 @@ def evaluate(cfg: ExperimentConfig, run: str, k: int | None = None, shuffle: boo
                   **({"video_from": info["video_from"]} if "video_from" in info else {}),
                   **extra, **metrics}
         record = EvaluationRecord.model_validate(record).model_dump()
+        from video3d.storage import atomic_torch
+        atomic_torch(output_dir / "predictions" / label / (sample_id(info).replace("/", "-") + ".pt"),
+                     {"sample_id": sample_id(info), "latent": z[0].float().cpu(),
+                      "prediction": pred, "ground_truth": gt, "metrics": record})
         if len(records) + n <= cfg.logging.media_samples:
             media_dir = output_dir / "media" / label / sample_id(info).replace("/", "-")
             save_pair(sample, pred, gt, record, media_dir, logger.run)
