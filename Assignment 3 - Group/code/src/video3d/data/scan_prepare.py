@@ -136,9 +136,13 @@ def render_gso_object(task: tuple[str, str, int, int]) -> dict[str, Any]:
     light = scene.add(pyrender.DirectionalLight(color=np.ones(3), intensity=2.0))
     renderer = pyrender.OffscreenRenderer(resolution, resolution)
     images, masks, poses = [], [], []
+    # AABB normalization does not bound the radius by 0.5. Fit the entire mesh's
+    # bounding sphere inside the perspective frustum at every orbit angle.
+    distance = max(2.05, float(np.linalg.norm(mesh.vertices, axis=1).max()) / np.sin(np.pi / 8) * 1.1)
     for index in range(frames):
         angle = 2 * np.pi * index / frames
         eye = np.array([1.9*np.cos(angle), 1.9*np.sin(angle), 0.75])
+        eye *= distance / np.linalg.norm(eye)
         z_axis = eye / np.linalg.norm(eye)
         x_axis = np.cross(np.array([0., 0., 1.]), z_axis)
         x_axis /= np.linalg.norm(x_axis)

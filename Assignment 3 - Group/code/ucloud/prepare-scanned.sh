@@ -5,9 +5,11 @@ task_root="${1:-/work/MathiasElmegaardNielsen#6181/omni-gso-data}"
 code_root="$task_root/repo/Assignment 3 - Group/code"
 mkdir -p "$task_root/logs" "$task_root/runtime"
 exec > >(tee -a "$task_root/logs/pipeline.log") 2>&1
+printf '{"state":"RUNNING","started_utc":"%s"}\n' "$(date -u +%FT%TZ)" > "$task_root/logs/pipeline-status.json"
 finish() {
   result=$?
   printf '{"exit_code":%d,"finished_utc":"%s"}\n' "$result" "$(date -u +%FT%TZ)" > "$task_root/logs/pipeline-exit.json"
+  printf '{"state":"FINISHED","exit_code":%d,"finished_utc":"%s"}\n' "$result" "$(date -u +%FT%TZ)" > "$task_root/logs/pipeline-status.json"
 }
 trap finish EXIT
 trap 'exit 130' INT
@@ -34,12 +36,14 @@ with open('pyproject.toml', 'rb') as stream:
 install_archive('facebookresearch/vjepa2', revision, 'atdl-vjepa2', packages=['src', 'app'])
 PY
 "$python_binary" -m pytest tests/test_scanned.py tests/test_pooler.py tests/test_config.py tests/test_adapter.py -q > "$task_root/logs/tests.log" 2>&1
-"$python_binary" scripts/download_gso.py --out "$task_root/data/raw/gso" --workers 4 > "$task_root/logs/gso-download.log" 2>&1
-"$python_binary" -m video3d scanned prepare-gso --root "$task_root/data/raw/gso" --output "$task_root/data/gso" --workers 3 --frames 32 --resolution 384 > "$task_root/logs/gso-prepare.log" 2>&1
-"$python_binary" scripts/check_scanned.py --root "$task_root/data/gso" --source gso > "$task_root/logs/gso-check.log" 2>&1
+# Start the large transfer before auxiliary evaluation rendering, so a bad GSO
+# asset cannot prevent the OmniObject3D download from starting.
 "$python_binary" scripts/download_omniobject.py --out "$task_root/data/raw/omniobject3d" --workers 6 > "$task_root/logs/omni-download.log" 2>&1
 "$python_binary" -m video3d scanned prepare-omni --root "$task_root/data/raw/omniobject3d" --output "$task_root/data/omniobject3d" --workers 3 > "$task_root/logs/omni-prepare.log" 2>&1
 "$python_binary" scripts/check_scanned.py --root "$task_root/data/omniobject3d" --source omniobject3d > "$task_root/logs/omni-check.log" 2>&1
+"$python_binary" scripts/download_gso.py --out "$task_root/data/raw/gso" --workers 4 > "$task_root/logs/gso-download.log" 2>&1
+"$python_binary" -m video3d scanned prepare-gso --root "$task_root/data/raw/gso" --output "$task_root/data/gso" --workers 3 --frames 32 --resolution 384 > "$task_root/logs/gso-prepare.log" 2>&1
+"$python_binary" scripts/check_scanned.py --root "$task_root/data/gso" --source gso > "$task_root/logs/gso-check.log" 2>&1
 TASK_DATA_ROOT="$task_root/data" "$python_binary" - <<'PY'
 import json,os
 from pathlib import Path

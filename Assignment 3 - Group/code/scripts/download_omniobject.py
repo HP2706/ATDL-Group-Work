@@ -5,19 +5,55 @@ overwriting existing files. Only captured videos and raw scans are requested.
 """
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 import hashlib
 import json
 from pathlib import Path
 import shutil
 import subprocess
 import tarfile
+import time
 from typing import Any
 
 import fire
 import requests
 
 API = 'https://opendatalab.com/datasets/api/v3/datasets/6639/r/main'
+
+
+def progress(root: Path, rows: list[dict[str, Any]], started: float,
+             initial_bytes: int = 0) -> dict[str, Any]:
+    downloaded = verified = completed = 0
+    for row in rows:
+        archive = root / 'archives' / Path(row['path']).relative_to('/raw')
+        marker = archive.with_suffix(archive.suffix + '.extracted.json')
+        if marker.exists():
+            downloaded += row['size']
+            verified += row['size']
+            completed += 1
+        elif archive.exists():
+            downloaded += min(row['size'], archive.stat().st_size)
+        else:
+            part = archive.with_suffix(archive.suffix + '.part')
+            if part.exists():
+                stat = part.stat()
+                # Parallel ranges create sparse files: logical file size is not
+                # downloaded progress. Count allocated blocks instead.
+                downloaded += min(row['size'], stat.st_size, stat.st_blocks * 512)
+    elapsed = max(time.monotonic() - started, .001)
+    rate = max(0, downloaded - initial_bytes) / elapsed
+    total = sum(row['size'] for row in rows)
+    return {'archives_complete': completed, 'archives_total': len(rows),
+            'downloaded_bytes': downloaded, 'verified_extracted_bytes': verified,
+            'total_bytes': total, 'elapsed_seconds': elapsed, 'bytes_per_second': rate,
+            'download_eta_hours': (total - downloaded) / rate / 3600 if rate else None}
+
+
+def save_progress(root: Path, payload: dict[str, Any]) -> None:
+    path = root / 'progress.json'
+    temporary = path.with_suffix('.json.tmp')
+    temporary.write_text(json.dumps(payload, indent=2))
+    temporary.replace(path)
 
 
 def catalogue(modality: str) -> list[dict[str, Any]]:
@@ -66,6 +102,7 @@ def fetch_archive(row: dict[str, Any], root: Path) -> dict[str, Any]:
                                  '--min-split-size=8M', '--max-tries=8', '--retry-wait=5',
                                  '--connect-timeout=60', '--file-allocation=none',
                                  '--auto-file-renaming=false', '--summary-interval=0',
+                                 '--auto-save-interval=10',
                                  '--console-log-level=warn', '--download-result=hide',
                                  '--input-file=-'],
                                 input=(payload['data']['url'] + '\n  dir=' + str(part.parent)
@@ -118,15 +155,24 @@ def main(out: str, workers: int = 3, category: str = '') -> None:
         'bytes': sum(row['size'] for row in rows)}, indent=2))
     print(json.dumps({'archives': len(rows), 'bytes': sum(row['size'] for row in rows)}), flush=True)
     failures: dict[str, str] = {}
+    started = time.monotonic()
+    initial_bytes = progress(root, rows, started)['downloaded_bytes']
     with ThreadPoolExecutor(max_workers=workers) as pool:
         futures = {pool.submit(fetch_archive, row, root): row['path'] for row in rows}
-        for future in as_completed(futures):
-            error = future.exception()
-            if error is None:
-                print(json.dumps(future.result()), flush=True)
-            else:
-                failures[futures[future]] = str(error)
-                print(json.dumps({'failed': futures[future], 'error': str(error)}), flush=True)
+        pending = set(futures)
+        while pending:
+            done, pending = wait(pending, timeout=30, return_when=FIRST_COMPLETED)
+            for future in done:
+                error = future.exception()
+                if error is None:
+                    print(json.dumps(future.result()), flush=True)
+                else:
+                    failures[futures[future]] = str(error)
+                    print(json.dumps({'failed': futures[future], 'error': str(error)}), flush=True)
+            report = progress(root, rows, started, initial_bytes)
+            report['failed_archives'] = len(failures)
+            save_progress(root, report)
+            print(json.dumps({'progress': report}), flush=True)
     (root / 'download_failures.json').write_text(json.dumps(failures, indent=2))
     if failures:
         raise RuntimeError(f'{len(failures)} archives failed; rerun resumes completed work')
