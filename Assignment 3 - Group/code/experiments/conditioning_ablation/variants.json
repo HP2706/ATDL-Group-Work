@@ -1,0 +1,9 @@
+[
+  {"name":"fusion-frozen", "strategy":"fusion", "sam_lora":false, "video_lora":false},
+  {"name":"fusion-sam-lora", "strategy":"fusion", "sam_lora":true, "video_lora":false},
+  {"name":"fusion-both-lora", "strategy":"fusion", "sam_lora":true, "video_lora":true},
+  {"name":"pooler-frozen", "strategy":"pooler", "sam_lora":false, "video_lora":false},
+  {"name":"pooler-sam-lora", "strategy":"pooler", "sam_lora":true, "video_lora":false},
+  {"name":"pooler-both-lora", "strategy":"pooler", "sam_lora":true, "video_lora":true},
+  {"name":"sam3d-baseline", "strategy":"fusion", "sam_lora":false, "video_lora":false, "baseline":true}
+]
