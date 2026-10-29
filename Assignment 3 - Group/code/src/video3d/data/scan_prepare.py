@@ -14,7 +14,7 @@ import numpy as np
 from PIL import Image
 import trimesh
 
-from video3d.data.scanned import ScanRecord, object_split
+from video3d.data.scanned import ScanRecord, object_split, read_mask, read_rgb
 
 
 def normalize_mesh(source: Path, output: Path) -> tuple[trimesh.Trimesh, dict[str, Any]]:
@@ -110,6 +110,50 @@ def prepare_available_scans(root: str, output: str, shard: int = 0, shards: int 
     return report
 
 
+def capture_frames(images: Path, report_dir: Path) -> list[Path]:
+    """Retain usable RGB/mask pairs and record exclusions without changing raw data.
+
+    Extracted source archives are immutable. File metadata invalidates this cache
+    when a capture is augmented or repaired.
+    """
+    from video3d.storage import atomic_json
+    candidates = sorted(path for path in images.iterdir() if path.suffix.lower() in {'.jpg', '.jpeg', '.png'})
+    masks = [images.parent / 'matting' / path.name for path in candidates]
+    if not candidates or not all(path.is_file() for path in masks):
+        raise ValueError(f'Incomplete video/masks: {images.parent.parent.name}')
+    signature = [(str(path), path.stat().st_size, path.stat().st_mtime_ns) for path in [*candidates, *masks]]
+    fingerprint = hashlib.sha256(json.dumps(signature).encode()).hexdigest()
+    report = report_dir / 'capture-validation.json'
+    if report.exists():
+        cached = json.loads(report.read_text())
+        if cached['source_signature'] == fingerprint:
+            return [images / name for name in cached['valid_frames']]
+    valid: list[Path] = []
+    excluded: list[dict[str, str]] = []
+    for frame, mask_path in zip(candidates, masks, strict=True):
+        mask = read_mask(mask_path, 0.5)
+        if not mask.any():
+            excluded.append({'frame': frame.name, 'reason': 'empty_mask'})
+            continue
+        image = read_rgb(frame)
+        if image.shape[:2] != mask.shape:
+            excluded.append({'frame': frame.name, 'reason': 'rgb_mask_size_mismatch'})
+            continue
+        valid.append(frame)
+    if len(valid) < 16:
+        raise ValueError(f'Capture has fewer than 16 usable frames: {images.parent.parent.name}')
+    atomic_json(report, {'source_signature': fingerprint, 'valid_frames': [path.name for path in valid],
+                         'excluded': excluded, 'raw_frames': len(candidates)})
+    return valid
+
+
+def prepare_capture(task: tuple[str, str, str]) -> tuple[str, list[str]]:
+    source, output, images = map(Path, task)
+    prepare_scan_mesh((str(source), str(output)))
+    frames = capture_frames(images, output)
+    return images.parent.parent.name, [str(path) for path in frames]
+
+
 def prepare_omniobject(root: str, output: str, seed: int = 42, validation_fraction: float = 0.1,
                       workers: int = 3) -> dict[str, Any]:
     base, destination = Path(root), Path(output)
@@ -125,17 +169,16 @@ def prepare_omniobject(root: str, output: str, seed: int = 42, validation_fracti
     missing: list[str] = []
     captures = sorted((base / 'videos_processed').rglob('standard/images'))
     tasks = [(str(source_meshes[images.parent.parent.name]),
-              str(destination / 'assets' / images.parent.parent.name))
+              str(destination / 'assets' / images.parent.parent.name), str(images))
              for images in captures if images.parent.parent.name in source_meshes]
     with ProcessPoolExecutor(max_workers=workers) as pool:
-        for _ in pool.map(prepare_scan_mesh, tasks):
-            pass
+        validated = dict(pool.map(prepare_capture, tasks))
     for images in captures:
         identity = images.parent.parent.name
         if identity not in source_meshes:
             missing.append(identity)
             continue
-        frames = sorted(path for path in images.iterdir() if path.suffix.lower() in {'.jpg', '.jpeg', '.png'})
+        frames = [Path(path) for path in validated[identity]]
         masks = [images.parent / 'matting' / path.name for path in frames]
         if not frames or not all(path.is_file() for path in masks):
             raise ValueError(f'Incomplete video/masks: {identity}')

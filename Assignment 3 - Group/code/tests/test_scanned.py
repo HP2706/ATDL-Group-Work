@@ -102,3 +102,18 @@ def test_manifest_allows_owned_capture_symlinks_but_rejects_traversal(tmp_path: 
     write_manifest(root, rows)
     with pytest.raises(ValueError, match='Unsafe manifest'):
         records(root)
+
+
+def test_capture_validation_excludes_empty_masks_and_invalidates_cache(tmp_path: Path) -> None:
+    from video3d.data.scan_prepare import capture_frames
+    images, masks, report = tmp_path/'standard/images', tmp_path/'standard/matting', tmp_path/'report'
+    images.mkdir(parents=True)
+    masks.mkdir()
+    for index in range(17):
+        Image.new('RGB', (16,16), (120,120,120)).save(images/f'{index:03d}.png')
+        Image.new('L', (16,16), 255 if index < 16 else 0).save(masks/f'{index:03d}.png')
+    assert len(capture_frames(images, report)) == 16
+    assert (masks/'016.png').exists()
+    assert len(capture_frames(images, report)) == 16
+    Image.new('L', (16,16), 255).save(masks/'016.png')
+    assert len(capture_frames(images, report)) == 17
