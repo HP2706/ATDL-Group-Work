@@ -7,9 +7,11 @@ from __future__ import annotations
 
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 import hashlib
+import fcntl
 import json
 from pathlib import Path
 import shutil
+import struct
 import subprocess
 import tarfile
 import time
@@ -17,8 +19,47 @@ from typing import Any
 
 import fire
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 API = 'https://opendatalab.com/datasets/api/v3/datasets/6639/r/main'
+
+
+def request_json(method: str, **options: Any) -> dict[str, Any]:
+    retry = Retry(total=5, backoff_factor=1, status_forcelist=[429, 500, 502, 503, 504],
+                  allowed_methods={'GET', 'POST'})
+    with requests.Session() as session:
+        session.mount('https://', HTTPAdapter(max_retries=retry))
+        response = session.request(method, API, timeout=60, **options)
+        response.raise_for_status()
+        return response.json()
+
+
+def completed_transfer_bytes(part: Path, expected_size: int) -> int:
+    """Count aria2's saved complete pieces; network filesystems can count holes
+    as allocated blocks, making both file size and st_blocks misleading.
+    The v1 network-order format is defined in aria2 DefaultBtProgressInfoFile.
+    In-flight pieces are excluded, so this is a conservative byte count.
+    """
+    control = part.with_name(part.name + '.aria2')
+    try:
+        data = control.read_bytes()
+    except FileNotFoundError:
+        # The control file is removed atomically when its download finishes.
+        return 0
+    if data[:2] != b'\x00\x01':
+        raise ValueError(f'Unsupported aria2 control version: {control}')
+    hash_length = struct.unpack_from('!I', data, 6)[0]
+    offset = 10 + hash_length
+    piece_size, total, _, field_size = struct.unpack_from('!IQQI', data, offset)
+    if total != expected_size or piece_size == 0:
+        raise ValueError(f'Unexpected aria2 transfer metadata: {control}')
+    field = data[offset + 24:offset + 24 + field_size]
+    complete = sum(byte.bit_count() for byte in field) * piece_size
+    last_piece = (total - 1) // piece_size
+    if field[last_piece // 8] & (1 << (7 - last_piece % 8)):
+        complete -= (piece_size - total % piece_size) % piece_size
+    return min(total, complete)
 
 
 def progress(root: Path, rows: list[dict[str, Any]], started: float,
@@ -35,11 +76,7 @@ def progress(root: Path, rows: list[dict[str, Any]], started: float,
             downloaded += min(row['size'], archive.stat().st_size)
         else:
             part = archive.with_suffix(archive.suffix + '.part')
-            if part.exists():
-                stat = part.stat()
-                # Parallel ranges create sparse files: logical file size is not
-                # downloaded progress. Count allocated blocks instead.
-                downloaded += min(row['size'], stat.st_size, stat.st_blocks * 512)
+            downloaded += completed_transfer_bytes(part, row['size'])
     elapsed = max(time.monotonic() - started, .001)
     rate = max(0, downloaded - initial_bytes) / elapsed
     total = sum(row['size'] for row in rows)
@@ -60,9 +97,7 @@ def catalogue(modality: str) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     after = ''
     while True:
-        response = requests.get(API, params={'prefix': f'/raw/{modality}/', 'after': after, 'limit': 1000}, timeout=60)
-        response.raise_for_status()
-        payload = response.json()
+        payload = request_json('GET', params={'prefix': f'/raw/{modality}/', 'after': after, 'limit': 1000})
         if payload['code'] != 0:
             raise RuntimeError(f'OpenDataLab catalogue: {payload["msg"]}')
         page = payload['data']
@@ -83,6 +118,14 @@ def sha256(path: Path) -> str:
 
 
 def fetch_archive(row: dict[str, Any], root: Path) -> dict[str, Any]:
+    archive = root / 'archives' / Path(row['path']).relative_to('/raw')
+    archive.parent.mkdir(parents=True, exist_ok=True)
+    with archive.with_suffix(archive.suffix + '.lock').open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        return fetch_archive_contents(row, root)
+
+
+def fetch_archive_contents(row: dict[str, Any], root: Path) -> dict[str, Any]:
     relative = Path(row['path']).relative_to('/raw')
     archive = root / 'archives' / relative
     destination = root / relative.parent
@@ -91,9 +134,7 @@ def fetch_archive(row: dict[str, Any], root: Path) -> dict[str, Any]:
         return {'path': str(relative), 'status': 'already_complete'}
     archive.parent.mkdir(parents=True, exist_ok=True)
     if not archive.exists():
-        response = requests.post(API, json={'path': row['path'].lstrip('/'), 'preview': False}, timeout=60)
-        response.raise_for_status()
-        payload = response.json()
+        payload = request_json('POST', json={'path': row['path'].lstrip('/'), 'preview': False})
         if payload['code'] != 0:
             raise RuntimeError(f'OpenDataLab URL: {payload["msg"]}')
         part = archive.with_suffix(archive.suffix + '.part')
@@ -143,16 +184,65 @@ def fetch_archive(row: dict[str, Any], root: Path) -> dict[str, Any]:
     return report
 
 
-def main(out: str, workers: int = 3, category: str = '') -> None:
+def create_plan(root: Path, destination: Path, shards: int) -> dict[str, Any]:
+    if shards < 1 or destination.exists():
+        raise ValueError('Use a fresh plan path and a positive shard count')
+    rows = json.loads((root / 'catalogue.json').read_text())['files']
+    bins: list[list[dict[str, Any]]] = [[] for _ in range(shards)]
+    loads = [0] * shards
+    remaining: dict[str, int] = {}
+    for row in rows:
+        received = progress(root, [row], time.monotonic())['downloaded_bytes']
+        remaining[row['path']] = row['size'] - received
+    for row in sorted(rows, key=lambda row: (-remaining[row['path']], row['path'])):
+        index = min(range(shards), key=lambda i: loads[i])
+        bins[index].append(row)
+        loads[index] += remaining[row['path']]
+    identities = [row['path'] for group in bins for row in group]
+    if len(set(identities)) != len(rows):
+        raise ValueError('Archive ownership must be unique across shards')
+    result = {'schema': 1, 'source': API, 'shards': bins, 'remaining_bytes_per_shard': loads,
+              'total_bytes': sum(row['size'] for row in rows), 'archives': len(rows)}
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(json.dumps(result, indent=2))
+    return {'shards': shards, 'archives': len(rows), 'remaining_bytes_per_shard': loads}
+
+
+def main(out: str, workers: int = 3, category: str = '', measure_seconds: int = 0,
+         plan: str = '', shard: int = -1, create_shards: int = 0) -> None:
     root = Path(out)
     root.mkdir(parents=True, exist_ok=True)
-    rows = [row for modality in ['raw_scans', 'videos_processed'] for row in catalogue(modality)]
+    if create_shards:
+        print(json.dumps(create_plan(root, Path(plan), create_shards), indent=2))
+        return
+    if measure_seconds:
+        rows = json.loads((root / 'catalogue.json').read_text())['files']
+        started = time.monotonic()
+        initial_bytes = progress(root, rows, started)['downloaded_bytes']
+        time.sleep(measure_seconds)
+        report = progress(root, rows, started, initial_bytes)
+        report['progress_method'] = 'aria2_completed_pieces'
+        report['measured_utc'] = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+        (root / 'measured-progress.json').write_text(json.dumps(report, indent=2))
+        print(json.dumps(report, indent=2), flush=True)
+        return
+    progress_root = root
+    if plan:
+        groups = json.loads(Path(plan).read_text())['shards']
+        if not 0 <= shard < len(groups):
+            raise ValueError('Invalid shard index')
+        rows = groups[shard]
+        progress_root = Path(plan).parent / f'shard-{shard:02d}'
+        progress_root.mkdir(parents=True, exist_ok=True)
+    else:
+        rows = [row for modality in ['raw_scans', 'videos_processed'] for row in catalogue(modality)]
     if category:
         rows = [row for row in rows if Path(row['path']).name == category + '.tar.gz']
     if not rows:
         raise ValueError('No source archives selected')
-    (root / 'catalogue.json').write_text(json.dumps({'source': API, 'files': rows,
-        'bytes': sum(row['size'] for row in rows)}, indent=2))
+    if not plan:
+        (root / 'catalogue.json').write_text(json.dumps({'source': API, 'files': rows,
+            'bytes': sum(row['size'] for row in rows)}, indent=2))
     print(json.dumps({'archives': len(rows), 'bytes': sum(row['size'] for row in rows)}), flush=True)
     failures: dict[str, str] = {}
     started = time.monotonic()
@@ -171,9 +261,9 @@ def main(out: str, workers: int = 3, category: str = '') -> None:
                     print(json.dumps({'failed': futures[future], 'error': str(error)}), flush=True)
             report = progress(root, rows, started, initial_bytes)
             report['failed_archives'] = len(failures)
-            save_progress(root, report)
+            save_progress(progress_root, report)
             print(json.dumps({'progress': report}), flush=True)
-    (root / 'download_failures.json').write_text(json.dumps(failures, indent=2))
+    (progress_root / 'download_failures.json').write_text(json.dumps(failures, indent=2))
     if failures:
         raise RuntimeError(f'{len(failures)} archives failed; rerun resumes completed work')
 

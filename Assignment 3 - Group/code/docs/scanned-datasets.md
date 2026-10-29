@@ -38,14 +38,30 @@ Workspace: `/work/MathiasElmegaardNielsen#6181/omni-gso-data`.
 - `data/completion.json`: written only after both full preparations and checks pass.
 
 The foreground Terminal Ubuntu batch script `ucloud/prepare-scanned.sh` installs
-the CPU environment, tests the shared path, downloads and prepares GSO, then
-downloads and prepares OmniObject3D. It uses four GSO download workers, three
+the CPU environment, tests the shared path, downloads and prepares OmniObject3D,
+then completes GSO preparation. It uses four GSO download workers, three
 preparation workers, and six Omni archive workers with up to twelve connections
 per archive. Omni archives total approximately 1.085 TB compressed. Published
 SHA256 checksums are verified; GSO ZIP CRCs are checked. Completed assets are
 reused, partial transfers are resumed, and extraction writes files atomically.
 The job releases its CPU allocation when its foreground pipeline exits. A failed
 stage is retained in its log and prevents a misleading completion report.
+
+For parallel downloads, `scripts/download_omniobject.py --create_shards=8`
+creates an immutable plan at the supplied `--plan` path, balancing remaining bytes
+across eight disjoint archive lists. `ucloud/download-scanned-shard.sh` runs one
+provider-native CPU job per list with four archive workers each. Completed
+archives and partial aria2 transfers are reused. Archive locks guard against
+accidental duplicate writers. Every shard has separate progress, retry and exit
+records. Shard zero waits for all eight verified/extracted completion markers,
+then invokes the same preparation and loader-check pipeline above. Other jobs
+release their allocation when their downloads finish.
+
+Progress counts completed pieces from aria2 control files. File length and
+allocated-block counts overestimate sparse transfers on the shared filesystem.
+Use `--measure_seconds=30` to save a measured transfer rate and ETA in
+`data/raw/omniobject3d/measured-progress.json`; the value includes a UTC sample
+time and does not imply that normalization or loader checks are complete.
 
 Dataset archives, prepared binaries and environments live on persistent storage;
 they are not committed to Git. Source code, configuration, fixed evaluation
