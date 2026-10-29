@@ -1,3 +1,6 @@
+Jeg ved ikke hvor lang tid det ville tage at køre data pipelinen igen og hvor svært det ville være at køre igen, men jeg tror det kunne være fedt at have nogle videor hvor objekterne er mere occluded, f.eks i sam3d paper gør de netop det bevidst så modellen er incentiveret til at forudse objektet ud fra en intern model den bygger af objektet og ikke bare information på billedet. Det samme for vores model skal vi incentivere den til at samle information fra flere billeder hvilket den jo ikke rigtigt behøver hvis det meste af objektet kan ses på alle billederne. igen vi kan også bare nævne det som en weakness, men hvis vi kan nå at have det med kunne det være meget fedt.
+
+
 # Video-conditioned 3D reconstruction research log
 
 Last reconciled: 2026-10-24. This log records completed work and its limits; the linked run reports retain the detailed measurements and artifact locations.

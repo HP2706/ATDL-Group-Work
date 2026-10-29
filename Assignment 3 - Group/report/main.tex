@@ -3,61 +3,121 @@
 \def\input@path{{ISBI_template-master/}{Assignment 3 - Group/report/ISBI_template-master/}}
 \makeatother
 \usepackage{spconf}
-\usepackage{amsmath,amssymb,graphicx,booktabs}
-\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,graphicx}
+\usepackage{booktabs,array,longtable}
 \usepackage[hidelinks]{hyperref}
+\graphicspath{{figures/}{Assignment 3 - Group/report/figures/}}
 \setlength{\parindent}{0pt}
+\pagestyle{plain}
 
 \title{Video-Conditioned 3D Object Reconstruction}
-\name{}
-\address{}
+\name{\shortstack{Group 15: Hans Peter Lyngsøe, Harald Franck, \\ Mathias Elmegaard Nielsen and Julian Barragan}}
+\address{Assignment 3: Mini Research Report \\ \url{https://github.com/HP2706/ATDL-Group-Work}}
 
 \begin{document}
 \maketitle
 
 \begin{abstract}
+Recent breakthroughs in vision foundation models, notably SAM3 and SAM3D, have substantially advanced single-image 3D object reconstruction. However, occluded parts of objects must be inferred from learned priors rather than observed evidence. Recent approaches have proposed training-free multi-view extensions to address this limitation by fusing predictions conditioned on different images. However these techniques remain limited in two ways.First they require repeated forward passes through the main backbone, leading to poor computational efficiency. Secondly for these methods to work, one needs a separate heuristic or models for selecting informative frames, hindering usability. We propose a lightweight adapter that conditions SAM 3D directly on video representations extracted by the pretrained V-JEPA 2.1 encoder. This architecture avoids per-view generator evaluations at each sampling step and remove the dependence on frame selection in the input pipeline. We investigate whether this approach improves coarse object reconstruction, particularly for surfaces revealed beyond the reference view.
+
 \end{abstract}
 
 \section{Introduction}
 \subsection{Research Question and Hypothesis}
+
+The primary research question, this work tries to study is, how easily new input modalities for foundation models, Specifically Sam3d.
+
+Our hypothesis, is that with a relatively small adapter network and no finetuning of the backbone, we would be able to fuse a new input modality into this network.
+
 \subsection{Contributions}
 
-\section{Background and Related Work}
+\section{Related Work}
+
+\subsection{SAM3D}
+
+SAM3D\cite{sam3d} 
+
+\subsubsection{Data Generation}
+
+A central challenge in training image-conditioned 3D reconstruction models is obtaining realistic images paired with complete object geometry. SAM 3D builds its training data in three stages~\cite{sam3d}:
+
+\begin{enumerate}
+    \item \textbf{Pretraining} They render meshes from 24 viewpoints, pairing each image with the complete source geometry. This provides supervision for both visible and hidden surfaces.
+
+    \item \textbf{Mid-training} In this stage the goal is to learn mask-following, shape completion, and object placement. They take natural images and insert rendered objects into the image and provide a mask of the object as input. To incentivize the model to predict parts of objects when they are slightly occluded
+    Flying Occlusions places another rendered object in front of the target, retaining 10--90\% visibility while keeping the complete geometry as the training target. Object Swap instead removes an existing object through inpainting and inserts a synthetic mesh at a matching location and scale. Estimated scene depth determines which parts of the inserted object are visible.
+    \item \textbf{Post-training} Here they bootstrap a real-world dataset by having annotators select the best matching shape and texture from model proposals. Difficult cases are passed to 3D artists. Accepted reconstructions provide supervised training targets, while preferred and rejected candidates provide pairs for preference optimization.
+\end{enumerate}
+
+\subsection{Video Representation Learning}
+
+\subsection{Multi-View 3D Reconstruction}
+
+
+
 
 \section{Method}
-\subsection{Video Encoder}
-\subsection{Linear Adapter and SAM 3D Conditioning}
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\textwidth]{pooling_adapter_source_style_v2.png}
+  \caption{Mask-aware video conditioning for our coarse-geometry pilot. A 64-query attentive pooler and linear projection replace the native RGB token streams while retaining reference-mask tokens and zero point-map slots. The texture and refinement stage is shown for context and is outside the pilot. Adapted from Figure 2 of SAM 3D~\cite{sam3d}; renderings and layout are adapted, with the video-conditioning pathway added.}
+  \label{fig:pooling-adapter}
+\end{figure*}
+
+\subsection{Data Generation}
+
+
+\subsection{Architecture}
+\subsection{Fusion Adapter and SAM 3D Conditioning}
 \subsection{Training Objective}
 
 \section{Experimental Setup}
-\subsection{Datasets and Splits}
+\subsection{Synthetic Dataset and Splits}
 \subsection{Single-Image and Multi-View Baselines}
 \subsection{Visibility Regions and Evaluation Metrics}
+\subsection{Training Settings}
 
 \section{Results}
 \subsection{Reconstruction Quality}
+\subsection{Qualitative Examples}
 \subsection{Ablation Studies}
 
-\section{Discussion and Limitations}
+\section{Discussion and Conclusion}
 
-\section{Conclusion}
+\subsection{Weaknesses}
 
-\section{Initial Ideas}
+A potential weakness of our training data is insufficient occlusion to encourage the model to combine evidence across frames. When most of an object's visible structure can be observed in any single frame, the model may have little incentive to exploit complementary observations from the video. SAM 3D deliberately introduces artificial occluders during mid-training to encourage reconstruction of complete shapes from partial observations~\cite{sam3d}. For our video-conditioned model, the corresponding goal is to create clips in which different frames reveal complementary parts of the target object. Such examples would encourage the adapter to aggregate observed evidence across frames, while retaining learned shape priors for surfaces that remain unseen.
 
-\section{Individual Contributions}
+
+
+\subsection{Hypothesis Assessment}
+\subsection{Limitations and Future Work}
+
+\clearpage
+\IfFileExists{ISBI_template-master/IEEEbib.bst}{%
+  \bibliographystyle{ISBI_template-master/IEEEbib}
+  \bibliography{references}
+}{%
+  \bibliographystyle{Assignment 3 - Group/report/ISBI_template-master/IEEEbib}
+  \bibliography{Assignment 3 - Group/report/references}
+}
 
 \section{Papers to Read}
 \begin{enumerate}
-  \item \href{https://arxiv.org/abs/2511.16624}{\textbf{SAM 3D: 3Dfy Anything in Images}}: generator and conditioning interface.
-  \item \href{https://arxiv.org/abs/2603.14482}{\textbf{V-JEPA 2.1}}: candidate video encoder and course connection.
-  \item \href{https://arxiv.org/abs/2510.13454}{\textbf{VIST3A}}: representation stitching and linear adapters.
-  \item \href{https://arxiv.org/abs/2603.11633}{\textbf{MV-SAM3D}}: multi-view fusion baseline.
-  \item \href{https://arxiv.org/abs/2605.21472}{\textbf{Stream3D}}: streaming reconstruction baseline.
-  \item \href{https://arxiv.org/abs/2403.08768}{\textbf{3DFIRES}}: hidden-surface evaluation.
-  \item \href{https://arxiv.org/abs/1912.10589}{\textbf{Front2Back}}: front/back ambiguity and shape priors.
-  \item \href{https://arxiv.org/abs/2306.09109}{\textbf{NAVI}}: real captures and ground-truth geometry.
+  \item \href{https://arxiv.org/abs/2511.16624}{\textbf{SAM 3D: 3Dfy Anything in Images}}: generator and conditioning interface~\cite{sam3d}.
+  \item \href{https://arxiv.org/abs/2603.14482}{\textbf{V-JEPA 2.1}}: candidate video encoder and course connection~\cite{vjepa21}.
+  \item \href{https://arxiv.org/abs/2510.13454}{\textbf{VIST3A}}: representation stitching and linear adapters~\cite{vist3a}.
+  \item \href{https://arxiv.org/abs/2603.11633}{\textbf{MV-SAM3D}}: multi-view fusion baseline~\cite{mvsam3d}.
+  \item \href{https://arxiv.org/abs/2605.21472}{\textbf{Stream3D}}: streaming reconstruction baseline~\cite{stream3d}.
+  \item \href{https://arxiv.org/abs/2403.08768}{\textbf{3DFIRES}}: hidden-surface evaluation~\cite{fires3d}.
+  \item \href{https://arxiv.org/abs/1912.10589}{\textbf{Front2Back}}: front/back ambiguity and shape priors~\cite{front2back}.
+  \item \href{https://arxiv.org/abs/2306.09109}{\textbf{NAVI}}: real captures and ground-truth geometry~\cite{navi}.
 \end{enumerate}
 
-\section{References}
+\clearpage
+\appendix
+\section{Initial Ideas}
+
+\section{Individual Contributions}
 
 \end{document}
