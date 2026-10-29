@@ -132,9 +132,10 @@ def capture_frame_contents(images: Path, report_dir: Path) -> list[Path]:
     from video3d.storage import atomic_json
     candidates = sorted(path for path in images.iterdir() if path.suffix.lower() in {'.jpg', '.jpeg', '.png'})
     masks = [images.parent / 'matting' / path.name for path in candidates]
-    if not candidates or not all(path.is_file() for path in masks):
-        raise ValueError(f'Incomplete video/masks: {images.parent.parent.name}')
-    signature = [(str(path), path.stat().st_size, path.stat().st_mtime_ns) for path in [*candidates, *masks]]
+    if not candidates:
+        raise UnusableCaptureError(f'No video frames: {images.parent.parent.name}')
+    signature = [(str(path), path.stat().st_size, path.stat().st_mtime_ns)
+                 if path.is_file() else (str(path), None, None) for path in [*candidates, *masks]]
     fingerprint = hashlib.sha256(json.dumps(signature).encode()).hexdigest()
     report = report_dir / 'capture-validation.json'
     if report.exists():
@@ -146,11 +147,18 @@ def capture_frame_contents(images: Path, report_dir: Path) -> list[Path]:
     valid: list[Path] = []
     excluded: list[dict[str, str]] = []
     for frame, mask_path in zip(candidates, masks, strict=True):
-        mask = read_mask(mask_path, 0.5)
+        if not mask_path.is_file():
+            excluded.append({'frame': frame.name, 'reason': 'missing_mask'})
+            continue
+        try:
+            mask = read_mask(mask_path, 0.5)
+            image = read_rgb(frame)
+        except OSError as error:
+            excluded.append({'frame': frame.name, 'reason': f'undecodable_image: {error}'})
+            continue
         if not mask.any():
             excluded.append({'frame': frame.name, 'reason': 'empty_mask'})
             continue
-        image = read_rgb(frame)
         if image.shape[:2] != mask.shape:
             excluded.append({'frame': frame.name, 'reason': 'rgb_mask_size_mismatch'})
             continue

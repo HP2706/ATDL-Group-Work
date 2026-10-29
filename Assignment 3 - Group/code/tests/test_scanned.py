@@ -130,6 +130,26 @@ def test_scan_discovery_retains_nonstandard_wallet_names(tmp_path: Path) -> None
         source_scan_meshes(tmp_path)
 
 
+def test_capture_validation_preserves_and_reports_broken_pairs(tmp_path: Path) -> None:
+    import json
+    from video3d.data.scan_prepare import capture_frames
+    images, masks, report = tmp_path/'standard/images', tmp_path/'standard/matting', tmp_path/'report'
+    images.mkdir(parents=True)
+    masks.mkdir()
+    for index in range(18):
+        Image.new('RGB', (16,16), (120,120,120)).save(images/f'{index:03d}.png')
+        if index != 17:
+            Image.new('L', (16,16), 255).save(masks/f'{index:03d}.png')
+    (images/'016.png').write_bytes(b'broken source image')
+    assert len(capture_frames(images, report)) == 16
+    result = json.loads((report/'capture-validation.json').read_text())
+    assert len(result['excluded']) == 2
+    assert result['excluded'][0]['reason'].startswith('undecodable_image:')
+    assert result['excluded'][1]['reason'] == 'missing_mask'
+    assert (images/'016.png').read_bytes() == b'broken source image'
+    assert len(capture_frames(images, report)) == 16
+
+
 def test_unusable_capture_is_cached_and_rejected_on_reuse(tmp_path: Path) -> None:
     import json
     from video3d.data.scan_prepare import capture_frames, UnusableCaptureError
