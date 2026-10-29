@@ -18,6 +18,10 @@ from tqdm.auto import tqdm
 from video3d.data.scanned import ScanRecord, object_split, read_mask, read_rgb
 
 
+class UnusableCaptureError(ValueError):
+    """A real capture has insufficient usable annotated frames for training."""
+
+
 def normalize_mesh(source: Path, output: Path) -> tuple[trimesh.Trimesh, dict[str, Any]]:
     """Use the project's existing TRELLIS surface voxelizer for both scanned sources."""
     from video3d.data.generation.assets import trellis_voxelize
@@ -136,6 +140,8 @@ def capture_frame_contents(images: Path, report_dir: Path) -> list[Path]:
     if report.exists():
         cached = json.loads(report.read_text())
         if cached['source_signature'] == fingerprint:
+            if len(cached['valid_frames']) < 16:
+                raise UnusableCaptureError(f'Capture has fewer than 16 usable frames: {images.parent.parent.name}')
             return [images / name for name in cached['valid_frames']]
     valid: list[Path] = []
     excluded: list[dict[str, str]] = []
@@ -149,10 +155,11 @@ def capture_frame_contents(images: Path, report_dir: Path) -> list[Path]:
             excluded.append({'frame': frame.name, 'reason': 'rgb_mask_size_mismatch'})
             continue
         valid.append(frame)
-    if len(valid) < 16:
-        raise ValueError(f'Capture has fewer than 16 usable frames: {images.parent.parent.name}')
     atomic_json(report, {'source_signature': fingerprint, 'valid_frames': [path.name for path in valid],
-                         'excluded': excluded, 'raw_frames': len(candidates)})
+                         'excluded': excluded, 'raw_frames': len(candidates),
+                         'usable_for_video_training': len(valid) >= 16})
+    if len(valid) < 16:
+        raise UnusableCaptureError(f'Capture has fewer than 16 usable frames: {images.parent.parent.name}')
     return valid
 
 
@@ -197,15 +204,27 @@ def prepare_omniobject(root: str, output: str, seed: int = 42, validation_fracti
             hashlib.sha256(Path(task[1]).name.encode()).digest()[:8], 'big') % shards == shard]
     status_path = destination / ('preparation-progress.json' if shard < 0 else f'preparation-shard-{shard:02d}.json')
     validated: dict[str, list[str]] = {}
+    excluded: dict[str, str] = {}
     report: dict[str, Any] = {'shard': shard, 'shards': shards, 'workers': workers,
                               'objects_total': len(tasks), 'objects_complete': 0, 'state': 'RUNNING'}
     atomic_json(status_path, report)
     with ProcessPoolExecutor(max_workers=workers) as pool:
-        futures = [pool.submit(prepare_capture, task) for task in tasks]
+        futures = {pool.submit(prepare_capture, task): Path(task[1]).name for task in tasks}
         for future in tqdm(as_completed(futures), total=len(tasks), desc=f'Prepare Omni shard {shard}', unit='object'):
-            identity, paths = future.result()
-            validated[identity] = paths
-            report.update(objects_complete=len(validated), elapsed_seconds=time.monotonic()-started)
+            error = future.exception()
+            if isinstance(error, UnusableCaptureError):
+                excluded[futures[future]] = str(error)
+            elif error is not None:
+                atomic_json(status_path, {**report, 'state': 'FAILED', 'failed_object': futures[future],
+                                         'error_type': type(error).__name__, 'error': str(error)})
+                for pending in futures:
+                    pending.cancel()
+                raise RuntimeError(f'Preparation failed for {futures[future]}') from error
+            else:
+                identity, paths = future.result()
+                validated[identity] = paths
+            report.update(objects_complete=len(validated), objects_processed=len(validated)+len(excluded),
+                          excluded_unusable_captures=excluded, elapsed_seconds=time.monotonic()-started)
             atomic_json(status_path, report)
     if shard >= 0:
         report.update(state='COMPLETE', frames=sum(len(paths) for paths in validated.values()))
@@ -213,6 +232,8 @@ def prepare_omniobject(root: str, output: str, seed: int = 42, validation_fracti
         return report
     for images in captures:
         identity = images.parent.parent.name
+        if identity in excluded:
+            continue
         if identity not in source_meshes:
             (multiobject if ',' in identity else missing).append(identity)
             continue
@@ -238,6 +259,7 @@ def prepare_omniobject(root: str, output: str, seed: int = 42, validation_fracti
     write_manifest(destination, rows)
     result = {'objects': len(rows), 'missing_scan_objects': missing,
               'excluded_multiobject_captures': multiobject,
+              'excluded_unusable_captures': excluded,
               'available_scan_objects': len(source_meshes),
               'all_retained_objects_have_mesh': True,
               'dataset_scope': 'available_matched_single_object_processed_captures',

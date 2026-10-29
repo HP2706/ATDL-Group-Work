@@ -128,3 +128,19 @@ def test_scan_discovery_retains_nonstandard_wallet_names(tmp_path: Path) -> None
     (scan/'Scan.obj').write_text('ambiguous fixture')
     with pytest.raises(ValueError, match='Ambiguous mesh'):
         source_scan_meshes(tmp_path)
+
+
+def test_unusable_capture_is_cached_and_rejected_on_reuse(tmp_path: Path) -> None:
+    import json
+    from video3d.data.scan_prepare import capture_frames, UnusableCaptureError
+    images, masks, report = tmp_path/'standard/images', tmp_path/'standard/matting', tmp_path/'report'
+    images.mkdir(parents=True)
+    masks.mkdir()
+    Image.new('RGB', (16,16), (120,120,120)).save(images/'000.png')
+    Image.new('L', (16,16), 0).save(masks/'000.png')
+    for _ in range(2):
+        with pytest.raises(UnusableCaptureError, match='fewer than 16'):
+            capture_frames(images, report)
+    result = json.loads((report/'capture-validation.json').read_text())
+    assert not result['usable_for_video_training'] and result['valid_frames'] == []
+    assert (images/'000.png').exists() and (masks/'000.png').exists()
