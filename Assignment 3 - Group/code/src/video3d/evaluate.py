@@ -50,11 +50,10 @@ def load_run(cfg: ExperimentConfig, run: str, device: typing.Any) -> tuple[Exper
     run_cfg = read_config(run_dir / "config.json")
     cfg = chz.replace(cfg, adapter=run_cfg.adapter, encoder=run_cfg.encoder,
                       target=run_cfg.target, sam3d=run_cfg.sam3d,
-                      data=chz.replace(cfg.data, crop=run_cfg.data.crop, source=run_cfg.data.source,
+                      data=chz.replace(cfg.data, crop=run_cfg.data.crop,
                                        video_input=run_cfg.data.video_input, frames=run_cfg.data.frames,
                                        frame_stride=run_cfg.data.frame_stride,
-                                       num_subset_frames=run_cfg.data.num_subset_frames,
-                                       prepared=run_cfg.data.prepared),
+                                       num_subset_frames=run_cfg.data.num_subset_frames),
                       provenance=run_cfg.provenance,
                       condition=run_cfg.condition, run_name=run_cfg.run_name)
     ckpt_path = run_dir / "best.pt"
@@ -128,7 +127,7 @@ def evaluate(cfg: ExperimentConfig, run: str, k: int | None = None, shuffle: boo
     if adapter is not None:
         from video3d.checkpoint import extra_parameters, restore_extra
         restore_extra(extra_parameters(encoder, sam3d), adapter.extra_ema_state)
-    if cfg.data.source == "navi" and run == "best-frame":
+    if cfg.data.source != "synthetic" and run == "best-frame":
         raise ValueError("The visibility-based oracle requires synthetic visibility metadata")
     ds = build_dataset(cfg, split or cfg.data.eval_split, train=False, clip_len=clip_len)
 

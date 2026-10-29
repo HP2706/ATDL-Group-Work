@@ -99,6 +99,15 @@ def generation(command: str, **options: Any) -> None:
     module.run(**options)
 
 
+def scanned(command: str, **options: Any) -> None:
+    from video3d.data.scan_prepare import prepare_gso, prepare_omniobject
+    from video3d.data.scanned import audit
+    commands = {'prepare-omni': prepare_omniobject, 'prepare-gso': prepare_gso, 'audit': audit}
+    if command not in commands:
+        raise ValueError(f'Choose from {list(commands)}')
+    print(json.dumps(commands[command](**options), indent=2))
+
+
 def prepare(*overrides: str, condition: str = "c3", env: str | None = None,
             **keywords: Any) -> None:
     from video3d.prepare import prepare as execute
@@ -123,7 +132,7 @@ def main(argv: list[str] | None = None) -> None:
                "cache-latents": cache_latents, "inspect": inspect, "check-env": check_env,
                "validate-data": validate_data, "analyze": analyze,
                "inspect-sam3d": inspect_sam3d, "frame-test": frame_test,
-               "generation": generation}, command=argv)
+               "generation": generation, "scanned": scanned}, command=argv)
 
 
 if __name__ == "__main__":
