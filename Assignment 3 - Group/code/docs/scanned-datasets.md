@@ -97,6 +97,25 @@ frames. Full OmniObject3D preparation is still in progress. Consult the batch
 logs and `data/completion.json` for full-dataset completion, independently of the
 subset validation below.
 
+The extracted release contains approximately 5,911 scan meshes but 4,810 candidate
+matched single-object processed captures. Four wallets legitimately name their
+mesh `wallet.obj`. The supplied `duo.tar.gz` contains multi-object scenes and has
+no single matching mesh per capture. `book_023` and `watermelon_015` lack matching
+source meshes. These raw captures are preserved and reported respectively in
+`excluded_multiobject_captures` and `missing_scan_objects`; neither list means a
+retained manifest object lacks ground truth. Completion requires
+`all_retained_objects_have_mesh=true`, the scope
+`available_matched_single_object_processed_captures`, and matching audited
+manifest counts. The advertised 6,000 objects must not be presented as 6,000
+available real training videos.
+
+Full preparation uses eight CPU batch jobs with three processes per job. The
+shared command supports `scanned prepare-omni --shard N --shards 8 --workers 3`.
+Each shard only populates locked geometry/frame caches and a
+`preparation-shard-NN.json` progress report. A final unsharded invocation reuses
+those caches and publishes the complete manifest. The final training-ready count
+comes from the completed audit, not the candidate count above.
+
 On 2026-10-29, B200 batch `12439140` completed a real pretrained smoke run with
 100 distinct Omni captures, 16 sampled frames per video, and 10 fixed GSO objects
 drawn from the separate 250-object evaluation panel. One epoch produced four
