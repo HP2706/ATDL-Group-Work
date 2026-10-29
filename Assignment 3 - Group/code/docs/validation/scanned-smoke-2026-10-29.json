@@ -1,0 +1,80 @@
+{
+  "status": "PASS",
+  "training_videos": 100,
+  "evaluation_videos": 10,
+  "optimizer_steps": 4,
+  "checkpoint_reload": "strict state load passed; full automatic resume also run",
+  "parameters": {
+    "adapter": 17869828,
+    "sam_lora": 0,
+    "video_lora": 0,
+    "trainable_total": 17869828,
+    "sam_total": 1727417286,
+    "video_total": 304680960
+  },
+  "geometry": {
+    "c0": {
+      "objects": 10,
+      "mean_viou": 0.2864894136855115,
+      "empty_predictions": 0
+    },
+    "fusion-smoke-2026-10-29-23-07-55": {
+      "objects": 10,
+      "mean_viou": 0.28643049798376224,
+      "empty_predictions": 0
+    }
+  },
+  "losses": {
+    "baseline": {
+      "Dell_Ink_Cartridge_Yellow_31": 0.7374230623245239,
+      "Ecoforms_Plant_Bowl_Turquoise_7": 0.6658386588096619,
+      "HeavyDuty_Flashlight": 0.7774437665939331,
+      "Jarrow_Formulas_Glucosamine_Hci_Mega_1000_100_ct": 0.7115134596824646,
+      "Mastic_Gum": 0.7058364748954773,
+      "Office_Depot_HP_75_Remanufactured_Ink_Cartridge_TriColor": 0.7334641218185425,
+      "QAbsorb_CoQ10": 0.7162541151046753,
+      "Rayna_BootieWP": 0.787551760673523,
+      "Timberland_Mens_Earthkeepers_Stormbuck_Chukka": 0.7895628213882446,
+      "Womens_Multi_13": 0.7232577800750732
+    },
+    "fusion": {
+      "Dell_Ink_Cartridge_Yellow_31": 0.7373969554901123,
+      "Ecoforms_Plant_Bowl_Turquoise_7": 0.665762186050415,
+      "HeavyDuty_Flashlight": 0.7774555087089539,
+      "Jarrow_Formulas_Glucosamine_Hci_Mega_1000_100_ct": 0.7115253210067749,
+      "Mastic_Gum": 0.7058457136154175,
+      "Office_Depot_HP_75_Remanufactured_Ink_Cartridge_TriColor": 0.7334537506103516,
+      "QAbsorb_CoQ10": 0.7163538336753845,
+      "Rayna_BootieWP": 0.7876601219177246,
+      "Timberland_Mens_Earthkeepers_Stormbuck_Chukka": 0.7896310687065125,
+      "Womens_Multi_13": 0.7232174873352051
+    },
+    "baseline_mean": 0.734814602136612,
+    "fusion_mean": 0.7348301947116852
+  },
+  "profiling": {
+    "measurements": [
+      {
+        "microbatch": 4,
+        "seconds": 14.995449251990067,
+        "videos_per_second": 0.2667475934053229,
+        "peak_allocated_gb": 13.097466468811035,
+        "peak_reserved_gb": 14.837890625,
+        "device_capacity_gb": 178.3907470703125
+      },
+      {
+        "microbatch": 8,
+        "seconds": 1.7552421349973883,
+        "videos_per_second": 4.557775728197126,
+        "peak_allocated_gb": 16.194448947906494,
+        "peak_reserved_gb": 19.029296875,
+        "device_capacity_gb": 178.3907470703125
+      }
+    ],
+    "selected_microbatch": 8,
+    "effective_batch": 32,
+    "accumulation": 4,
+    "further_growth": "bounded smoke-test profile; full-run tuning still required"
+  },
+  "scope": "execution smoke; alignment not established"
+}

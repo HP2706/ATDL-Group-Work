@@ -92,12 +92,44 @@ finite CPU smoke forward/backward pass. Tests also cover deterministic sampling,
 safe manifest paths, common training, checkpoint resume and switching an
 Omni-trained checkpoint to GSO inputs.
 
-The antique source test matched nine meshes to nine captures with 1,800 frames.
-Three real GSO meshes rendered successfully for the initial loader test. These
-subset checks do not establish full-dataset completion; consult the batch logs
-and `data/completion.json` for the full run.
+The complete official GSO set has 1,030 prepared objects and 32,960 rendered
+frames. Full OmniObject3D preparation is still in progress. Consult the batch
+logs and `data/completion.json` for full-dataset completion, independently of the
+subset validation below.
+
+On 2026-10-29, B200 batch `12439140` completed a real pretrained smoke run with
+100 distinct Omni captures, 16 sampled frames per video, and 10 fixed GSO objects
+drawn from the separate 250-object evaluation panel. One epoch produced four
+optimizer updates with effective batch 32 and physical batch 8. The 17,869,828
+fusion-adapter parameters trained; SAM 3D and V-JEPA stayed frozen, with no LoRA.
+Training, full-state checkpoint resume, native baseline caching, paired flow
+losses and both geometry evaluations passed. All 20 predictions were non-empty.
+The dedicated B200 batch exited with code 0 and released its allocation.
+
+The complete capture audit found 48 empty-mask frames across seven of the 100
+videos. Preparation now records and excludes unusable RGB/mask pairs while
+preserving original files. Cached `capture-validation.json` reports invalidate
+when source metadata changes. The audited subset retains 19,924 usable frames;
+all of its RGB/mask pairs were decoded before training.
+
+Mean training flow loss was 0.810445. The 10-object evaluation flow loss was
+0.734815 for frozen SAM 3D and 0.734830 for the trained EMA fusion adapter.
+Canonical coarse voxel IoU was 0.286489 and 0.286430 respectively. Four updates
+provide an execution check, not evidence of improved model quality. These
+predictions use four-step Stage-1 sampling without mesh refinement. See the
+[validated summary](validation/scanned-smoke-2026-10-29.json).
+
+Full artifacts, configurations, source hashes, exclusions, checkpoints and
+per-object baseline caches remain on UCloud at
+`/work/MathiasElmegaardNielsen#6181/omni-gso-data/smoke-100-10-2026-10-29-23-07-55`.
+The runtime source was commit `074542f`; 58 source files matched and 34 CPU tests
+passed with one GPU-only test skipped. Measured training peak allocation was
+17.35 GiB. The first profiling batch includes startup overhead, so its throughput
+is not directly comparable with the subsequent batch. Larger physical batches
+and full-run throughput still need tuning within effective batch 32.
 
 OmniObject3D's scan-to-COLMAP registration and SAM canonical-axis calibration
 remain unverified. Do not report pose-dependent or visibility-region metrics as
 validated. GSO render cameras are exact. Real pretrained GPU forward/backward
-and SAM VAE round-trip checks remain a subsequent GPU validation stage.
+and SAM VAE round-trip checks passed on the smoke subset; the Omni round-trip
+mean IoU was 0.999999. Full-corpus pretrained validation remains pending.
