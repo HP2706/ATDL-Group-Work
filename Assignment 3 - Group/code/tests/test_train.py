@@ -94,6 +94,15 @@ def test_validation_sampling_and_best_checkpoint(fake_root: typing.Any, tmp_path
     shapes = json.loads((tmp_path / "out/c3_seed0/validation/step-00000004.json").read_text())
     assert len(shapes["objects"]) == record["val_shape_objects"]
     assert shapes["summary"]["val_chamfer"] == record["val_chamfer"]
+    for item in shapes["objects"]:
+        path = tmp_path / "out/c3_seed0/validation" / item["prediction_file"]
+        saved = torch.load(path, weights_only=False)
+        assert saved["sample_id"] == f"{item['clip_id']}/{item['k']}/{item['r']}"
+        assert saved["prediction"].shape == saved["ground_truth"].shape
+        assert saved["latent"].device.type == "cpu"
+        from video3d.metrics import voxel_iou
+        assert voxel_iou(saved["prediction"], saved["ground_truth"]) == item["viou"]
+        assert saved["frame_ids"]
     best = json.loads((tmp_path / "out/c3_seed0/best.json").read_text())
     assert (tmp_path / "out/c3_seed0/best.pt").is_file() and best["step"] in (2, 4)
 

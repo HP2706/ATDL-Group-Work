@@ -422,3 +422,60 @@ artifacts, so its GSO scores cannot establish a trained-versus-frozen ranking on
 the synthetic panel. Provider states and live scratch metrics were read directly;
 the old native-control `batch-exit.json` with exit 1 belongs to its retained
 packaging-failure attempt, not the running retry.
+
+### Intermediate prediction persistence repair and matched GSO backfill
+
+The epoch shape-validation writer previously persisted per-object metrics but
+discarded sampled predictions. It now saves every scored sample's raw latent,
+prediction voxels, ground-truth voxels, metrics, frame IDs and sampler settings
+beside the validation JSON, with an explicit relative `prediction_file` link.
+This reuses the existing validation inference; it adds no sampling pass. Two
+focused remote CPU tests passed, including exact training-resume equivalence
+and loading saved predictions to reproduce their recorded IoU. This source fix
+applies to future launches; currently running immutable sources are untouched.
+
+Current runs are covered by a separate native CPU coordinator
+[12439762](https://cloud.sdu.dk/app/jobs/properties/12439762), which launches
+bounded native B200 jobs only when all six immutable epoch checkpoints exist.
+It does not run inference on CPU. The first GPU wave is
+[12439763](https://cloud.sdu.dk/app/jobs/properties/12439763), verified RUNNING
+and producing saved outputs: 52 prediction tensors, exported coarse meshes and
+input videos were present at the first persistence check. This is partial
+progress, not completion of the first 1,200-prediction wave.
+
+The coordinator backfills epochs 1–4 for all six trained models on exactly the
+same 200 GSO objects. It invokes the existing standalone evaluator unchanged,
+loads EMA weights from each immutable epoch checkpoint, and saves every sample's
+latent/prediction/target tensor, metric record, input video/reference/mask, coarse
+prediction mesh and target mesh. W&B receives metrics and artifacts. Empty
+predictions remain explicit failures rather than silently missing records.
+The existing training pipelines handle final epoch-5 evaluation and prediction
+saving on the same 200 objects. Intermediate outputs are isolated from those
+final results and from live training checkpoints.
+
+Exact data audit: all 200 manifest rows equal the first 200 rows of the earlier
+250-object baseline manifest, in order. Both resolve to the same asset and
+visibility directories. All 200 sample IDs are present in each cached SAM3D,
+MV-SAM3D and Stream3D baseline. Their output directories are indexed in the
+backfill manifest; refined baseline outputs remain distinctly labelled from
+coarse model outputs and retain their original sampling/view budgets.
+
+Persistent root:
+`/work/MathiasElmegaardNielsen#6181/epoch-eval-2026-10-30-11-30`.
+One-off scripts `coordinator.py`, `worker.py`, per-epoch foreground scripts and
+payloads are saved there. Each wave checks exact sample-ID equality, 200 metric
+rows and prediction tensors, paired media, and summary completeness before
+writing a completion marker. Only one evaluation GPU wave runs at a time; each
+GPU releases on exit. CPU coordination has a six-hour fallback and each GPU
+wave a one-hour fallback. Later checkpoints wait on CPU without holding a GPU.
+
+At 11:23:44 CET, median last-100-update timing projected 4.49 training hours
+remaining for fusion + SAM LoRA and 4.43 for native SAM LoRA, the slowest runs.
+Allowing validation/final evaluation gives an estimated full-run completion of
+16:00–16:30 CET, subject to throughput changes and evaluator queue delays.
+
+All three SAM-LoRA conditions use rank 8 and alpha 8 throughout training,
+1,376,256 trainable parameters each, on native shape cross-attention `to_q`,
+`to_kv` and `to_out` projections. Rank/alpha and insertion sites are matched
+across conditions; learned weights are separate per run and shared across all
+objects/videos within that run. Vision encoder LoRA is disabled.

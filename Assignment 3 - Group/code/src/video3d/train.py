@@ -219,6 +219,18 @@ def val_shape_metrics(sam3d: typing.Any, encoder: typing.Any, adapter: typing.An
                                     seed=sample_seed(info["clip_id"], info["k"], info["r"]))
         records.append({"clip_id": info["clip_id"], "asset_id": info["asset_id"],
                         "k": info["k"], "r": info["r"], **metrics})
+        if records_path is not None:
+            from video3d.storage import atomic_torch
+            sample_id = f"{info['clip_id']}/{info['k']}/{info['r']}"
+            prediction_path = (records_path.parent / records_path.stem / "predictions"
+                               / f"{sample_id.replace('/', '-')}.pt")
+            atomic_torch(prediction_path, {
+                "sample_id": sample_id, "latent": z[0].float().cpu(),
+                "prediction": prediction, "ground_truth": torch.from_numpy(gt),
+                "metrics": records[-1], "sampler": chz.asdict(cfg.sampler),
+                "frame_ids": info["frame_ids"],
+            })
+            records[-1]["prediction_file"] = str(prediction_path.relative_to(records_path.parent))
     if not records:
         raise ValueError("Shape validation requires at least one selected object")
     summary: dict[str, typing.Any] = {
