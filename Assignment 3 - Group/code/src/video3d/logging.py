@@ -66,7 +66,10 @@ class RunLogger:
                 columns=['sample_id', *keys],
                 data=[[row['sample_id'], *[values.get(key) for key in keys]]
                       for row,values in zip(records,metrics,strict=True)])})
-            artifact = wandb.Artifact(f'{label}-evaluation', type='evaluation', metadata=summary)
+            artifact = wandb.Artifact(f'{label}-evaluation', type='evaluation', metadata={
+                'objects':len(records), 'expected_objects':expected_count,
+                'complete':summary['eval/complete'], 'metric_count':len(keys),
+                'summary_file':f'{label}.summary.json'})
             for suffix in ['jsonl', 'meta.json', 'summary.json']:
                 path = directory/f'{label}.{suffix}'
                 if path.exists():

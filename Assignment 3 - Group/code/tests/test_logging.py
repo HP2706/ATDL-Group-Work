@@ -42,3 +42,15 @@ def test_partial_evaluation_is_explicit_and_saved_without_wandb(tmp_path: Path) 
     summary = logger.finish_evaluation([{'sample_id':'a','viou':.2}], tmp_path, 'partial', 250)
     assert not summary['eval/complete'] and summary['eval/objects'] == 1
     assert (tmp_path/'partial.summary.json').exists()
+
+
+def test_large_metric_set_keeps_artifact_metadata_bounded(tmp_path: Path) -> None:
+    logger = RunLogger(load_config('c3'))
+    logger.run = MagicMock()
+    logger.run.summary = {}
+    row = {'sample_id':'object', **{f'metric-{index}':float(index) for index in range(150)}}
+    summary = logger.finish_evaluation([row], tmp_path, 'large', 1)
+    artifact = logger.run.log_artifact.call_args.args[0]
+    assert len(artifact.metadata) < 100
+    assert artifact.metadata['metric_count'] == 150
+    assert len([key for key in summary if key.startswith('eval/mean/')]) == 150
