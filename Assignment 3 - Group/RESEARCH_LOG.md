@@ -302,3 +302,14 @@ Persistent experiment root:
 Submission receipts are in `first-five-submitted.json`; resolved configs,
 per-variant profiles, logs, checkpoints, validation records and predictions are
 under that root. DINOv2 is handled separately after these five accepted jobs.
+
+At the next provider check all four trainable priority allocations were RUNNING;
+the native SAM 3D baseline `12439377` had completed with exit code zero. Fresh
+full-q98 profiles selected batch 32 and measured 6.868 seconds/update for fusion,
+7.271 for fusion + SAM LoRA, and 6.242 for V-JEPA pooling. Their respective
+training-only five-epoch projections are 6.18, 6.54 and 5.62 hours; these short
+profiles exclude validation and final evaluation and carry sampling uncertainty.
+The separate DINOv2 one-hour real-GPU check is
+[12439392](https://cloud.sdu.dk/app/jobs/properties/12439392). It does not change,
+stop or delay the first five allocations. The sixth long DINOv2 run remains
+conditional on that check passing.
