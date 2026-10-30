@@ -1,6 +1,6 @@
 # Video-conditioned 3D reconstruction research log
 
-Last reconciled: 2026-10-24. This log records completed work and its limits; the linked run reports retain the detailed measurements and artifact locations.
+Last reconciled: 2026-10-29. This log records completed work and its limits; the linked run reports retain the detailed measurements and artifact locations.
 
 On 2026-10-24, the training branch was consolidated into `main`. Local contract verification passed 18 tests; six tests were skipped because optional upstream source trees were unavailable. This local check does not repeat the earlier remote GPU runs. Local result copies, datasets, notebook assets, and environments were preserved in the main checkout.
 
@@ -42,8 +42,190 @@ All 24 contract tests passed at the recorded run, all enabled trainable groups h
 
 Evidence: [complete pooler results and W&B links](code/RUN_RESULTS_POOLER.md), [run specification](code/RUN_SPEC.md), [architecture](architecture.md), [comparison notebook](code/notebooks/compare_reconstructions.ipynb).
 
+## 2026-10-29: Matched epoch 1 and epoch 10 reconstruction diagnostics
+
+The synthetic-data fusion variants and DINO attention pooler were compared with
+untouched pretrained SAM 3D on the same ten in-sample reference frames, using
+matched generation seeds and four sampling steps. Flow loss below is matched
+evaluation loss, not epoch-average training loss. These are overfit/in-sample
+diagnostics, not evidence of held-out generalization.
+
+### Epoch 1
+
+| Model | Flow loss ↓ | Canonical voxel IoU ↑ | Empty predictions |
+|---|---:|---:|---:|
+| Pretrained SAM 3D | 0.8074 | 0.1371 | 0/10 |
+| Fusion adapter | 0.8074 | 0.1371 | 0/10 |
+| Fusion + SAM LoRA | 0.8072 | 0.1372 | 0/10 |
+| Fusion + SAM LoRA + V-JEPA LoRA | 0.8072 | 0.1372 | 0/10 |
+| DINO attention pooler | 0.6796 | 0.0324 | 6/10 |
+
+### Epoch 10
+
+| Model | Flow loss ↓ | Canonical voxel IoU ↑ | Empty predictions |
+|---|---:|---:|---:|
+| Pretrained SAM 3D, unchanged baseline | 0.8074 | 0.1371 | 0/10 |
+| Fusion adapter | 0.8006 | 0.1255 | 0/10 |
+| Fusion + SAM LoRA | 0.7749 | 0.1233 | 0/10 |
+| Fusion + SAM LoRA + V-JEPA LoRA | 0.7749 | 0.1237 | 0/10 |
+| DINO attention pooler | 0.3472 | 0.0729 | 0/10 |
+
+The fusion variants were essentially unchanged after one epoch. After ten
+epochs all adapted models reduced matched flow loss but remained below the
+pretrained baseline in canonical overlap. DINO recovered from six empty
+predictions at epoch 1 to none in its final ten previews, but its final IoU
+remained lower than both pretrained SAM 3D and the fusion variants.
+
+The canonical scan/SAM orientation convention remains a limitation of these
+scores. Do not compare these voxel-IoU diagnostics directly with the earlier
+NAVI Chamfer tables. The rounded values were recovered from the earlier results
+conversation and checked against the original saved summary JSON on the new
+UCloud B200 workstation. Both summaries contain exactly the same ten sample IDs.
+No training or checkpoint inference was repeated to recover these results.
+
+Evidence: [matched comparison](https://forge.coreweave.com/wandb/hprjdk/atdl-video-to-3d/runs/sam3d-exact-preview-comparison-2026-10-29-19-43-12),
+[DINO training run](https://forge.coreweave.com/wandb/hprjdk/atdl-video-to-3d/runs/dino-frame-attention-pooler-2026-10-29-19-29-45),
+and [recovered table and protocol](code/docs/epoch-comparison-2026-10-29.md).
+
+## 2026-10-29: Installed multi-view baselines verified on UCloud
+
+Added importable coarse-stage MV-SAM3D and Stream3D integrations, using pinned
+upstream libraries in mutually exclusive uv environments. Both use the SAM 3D
+backend and the shared dataset, frame selection, sample identity, seeds and
+geometry evaluator. No upstream source repository is nested inside the project.
+
+Both completed real checkpoint inference on the same four-frame training sample
+with four shortcut steps on UCloud B200 job
+[12439107](https://cloud.sdu.dk/app/jobs/properties/12439107).
+MV-SAM3D produced 11,192 occupied cells; Stream3D produced 16,561. Stream3D
+processed two chunks and selected frame positions 0 and 3 at the end, retaining
+evidence from the first chunk. Both produced nonempty 64³ outputs and completed
+the shared metrics. This verifies integration only; one sample with different
+view-selection budgets does not rank the methods.
+
+The ten-hour interactive workstation remains available until 30 October,
+07:56 CET. The task-created Modal apps are stopped. Evidence, source revisions,
+runtime details and limitations are in the
+[verification record](code/docs/baseline-verification-2026-10-29.md).
+
 ## Interpretation and next experiment
 
 Both runs are single-seed integration pilots with only two validation objects and 25 updates. Canonical scan/SAM rotation remains unresolved; normalization does not establish alignment. The data demonstrate a working training/evaluation pipeline and an observed regression, rather than a successful reconstruction improvement.
 
-The next controlled experiment should preserve native RGB/mask conditioning and add video through a zero-initialized gate, checking equality to the native baseline at initialization. A longer single-configuration overfit/calibration test should precede scaling or ranking LoRA choices. These are proposals; no additional experiment is recorded as launched.
+The October 29 diagnostics extend the earlier short pilots with ten-epoch
+in-sample checks. Lower flow loss still does not establish improved generated
+geometry. The next comparison should resolve canonical conventions, measure
+aligned geometry alongside canonical overlap, and evaluate held-out objects
+against native SAM 3D and the coarse SAM 3D backends of MV-SAM3D and Stream3D.
+
+## 2026-10-29: GSO random-250 full-mesh baseline jobs submitted
+
+GSO is the held-out evaluation source. OmniObject3D was the training source for this launch plan; the October 30 training plan below replaces it with the full synthetic export.
+Froze a random, without-replacement 250-object subset of the official 1,030-object
+GSO collection with seed 42. Reused the dataset task's completed 32-frame renders
+instead of producing a duplicate dataset. The selected data and all visibility
+caches passed their audit; ten integration tests passed on UCloud.
+
+Submitted three separate B200 batch jobs: native SAM 3D
+[12439137](https://cloud.sdu.dk/app/jobs/properties/12439137), MV-SAM3D
+[12439138](https://cloud.sdu.dk/app/jobs/properties/12439138), and Stream3D
+[12439139](https://cloud.sdu.dk/app/jobs/properties/12439139). All three subsequently completed and validated 250 objects each; final aggregates are recorded below. All use
+25-step full refinement plus saved coarse outputs. Selected frames, sample seeds,
+GT points and visibility regions are matched. Exact geometry, shared geometry
+metrics, per-point surface errors, poses/latents, fusion diagnostics and resource
+measurements are persisted per object. Training flow loss is explicitly not
+computed by this generated-geometry runner.
+
+The full protocol, artifact locations, caveats and validation evidence are in
+[the GSO-250 run record](code/docs/evaluations/gso-250-2026-10-29.md).
+
+
+## 2026-10-30: Completed GSO-250 baselines and launch recovery
+
+All three native batch jobs finished with a validated 250-record result file and
+zero empty predictions. Every method was scored on the same randomly selected
+GSO objects. SAM 3D receives one reference image; the two video methods receive
+the matched four selected frames. These input budgets must remain explicit.
+
+| Method | Canonical voxel IoU ↑ | Aligned voxel IoU ↑ | Aligned refined-mesh F-score at 0.02 ↑ | Aligned refined-mesh Chamfer L1 sum ↓ |
+|---|---:|---:|---:|---:|
+| SAM 3D | 0.208078 | 0.251989 | 0.629658 | 0.074598 |
+| MV-SAM3D | 0.249300 | 0.298237 | 0.729998 | 0.047774 |
+| Stream3D | 0.251513 | 0.301418 | 0.740809 | 0.046882 |
+
+Refined-mesh distances use area-uniform surface samples and exact closest-triangle
+distances, with the GT normalized longest side equal to one and single-start
+similarity ICP. They are different from the coarse voxel-surface Chamfer used
+by training validation, whose normalized longest side is two. Canonical
+registration and globally optimal alignment are not established. Stream3D and
+MV-SAM3D improve these aggregate scores over the single-image baseline; this
+single-seed comparison does not establish significance or isolate view budget.
+
+Evidence: persistent root
+`/work/MathiasElmegaardNielsen#6181/gso-baselines-250-2026-10-29-22-33-26`,
+method-specific `results/<method>/evaluation.jsonl` and `complete.json`.
+All 750 existing records were mirrored to W&B, including every numeric metric,
+per-object tables, means/counts, completion status, and downloadable result files;
+server-side checks confirmed 250 objects per method and matching IoU aggregates.
+
+The separate 100-video Omni smoke job `12439140` completed one epoch/four updates
+and a 10-object GSO panel. Fusion scored 0.2864305 canonical IoU versus native
+SAM 3D 0.2864894; matched evaluation flow losses were 0.7348302 and 0.7348146.
+This is an execution test with essentially unchanged geometry, not a result on
+the 250-object panel. Checkpoint saving and strict automatic resume passed.
+
+The delayed coordinator `12439166` started target preparation `12439197` at the
+requested time. It cached 4,318 Omni training targets, 490 validation targets and
+250 GSO targets, then profiled the fusion variants. Pooler profiling stopped on
+`strawberry_001`: maximum foreground tubelet coverage was 0.49106, below the
+configured 0.5 threshold. Consequently no full training jobs were submitted.
+Recovery `12439297` completed all six original architecture profiles after the
+pooler was fixed to retain the most-covered positive-coverage tubelet(s) when
+no token reaches the threshold, excluding padding/background and still rejecting
+empty foreground. Batch sizes 8/16/32 were measured; all six selected physical
+batch 32 at effective batch 32. These measurements use Omni, not the replacement
+synthetic training dataset.
+
+Loss-only W&B evaluation runs from October 29 contain 43 fixed-grid losses each,
+not training trajectories. Their three curves differ by at most about 0.00027
+and visually overlap. One run was marked failed and lacked its final table.
+The shared evaluator now logs every computed finite scalar, full per-object
+metric tables, aggregate means and valid counts, explicit partial/full completion,
+and result artifacts. Evaluation uses a separate sample axis rather than resetting
+the optimizer-step axis. No uncomputed geometry metric was synthesized for a
+loss-only run. The shared training validation now records canonical/aligned IoU,
+Chamfer, F-scores, empty-prediction counts and per-object JSON on the same decoded
+outputs; BF16 training contexts are disabled around FP32 ICP/KNN scoring.
+
+## 2026-10-30: Full-q98 training plan and run priority
+
+Training switches to Harald's immutable full-q98 synthetic export, revision
+`16f95cb82a2fbb8b50f866ca2c711bc1146ff223`, at
+`/work/MathiasElmegaardNielsen#6181/sam3dvid-full-q98/snapshot/full-q98`.
+The native reader sees 10,000 clips. Existing CRC32 asset splitting gives 9,358
+training clips / 4,378 target assets / 20,716 clip-object training samples and
+642 validation clips / 131 target assets / 1,306 reference samples. Train/val
+clips and target assets do not overlap. Sample decoding was verified at the
+first, middle and final training and validation positions. Source indices,
+explicit split maps, and audit evidence are retained without copying shards.
+
+The requested run length is now **five epochs**, with **200 final GSO objects**
+shared across methods. The 200-row evaluation manifest is a fixed prefix of the
+previous frozen 250-row selection; the original selection and predictions are
+preserved. At effective batch 32 there are 648 updates per epoch, 3,240 total,
+including the exact final partial batch. Learning rate is 1e-4, warmup 162 updates,
+EMA decay .99, seed 42, 16 frames per video. Physical batch is selected by bounded
+GPU profiling while effective batch remains 32. Per-epoch validation uses the
+same 50 held-out samples and includes the new Chamfer/F-score metrics. Epoch
+checkpoints and recovery checkpoints every 50 updates preserve full optimizer,
+scheduler, EMA, RNG, progress and provenance. Evaluation must not be reported as
+completed training if a wall-time stop leaves fewer than 3,240 updates.
+
+Vision-encoder fine-tuning is removed from the requested next matrix. Fusion
+variants have first priority, followed by native SAM 3D; attention-pooling
+alternatives are backup runs and must be submitted last. DINOv2 and DINOv3 token
+pooling are requested in addition to direct video-encoder pooling. The exact
+seven-model lineup is awaiting confirmation because the newly enumerated list
+sums to six without a separate DINOv3 variant. No revised model job has been
+submitted at this entry. A bounded real-B200 check of training, checkpoint resume,
+Chamfer validation and W&B evaluation logging must pass before model fan-out.

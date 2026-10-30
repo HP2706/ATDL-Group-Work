@@ -131,7 +131,8 @@ def test_resolve_full_matrix_and_foreground_launcher(tmp_path: Path) -> None:
     assert json.loads((root/'logs/sam3d-baseline-exit.json').read_text())['exit_code'] == 0
 
 
-def test_batch_profiling_preserves_effective_batch_and_model(tmp_path: Path) -> None:
+@pytest.mark.parametrize('only', ['', 'profile-test'])
+def test_batch_profiling_preserves_effective_batch_and_model(tmp_path: Path, only: str) -> None:
     from experiments.conditioning_ablation.profile import profile
     from tests.fixtures.fake_config import fake_train_cfg
     from tests.fixtures.make_fake_dataset import make_fake_dataset
@@ -143,8 +144,9 @@ def test_batch_profiling_preserves_effective_batch_and_model(tmp_path: Path) -> 
         path.write_text(json.dumps(config_dict(cfg)))
     (tmp_path/'matrix.json').write_text(json.dumps({'entries':[{
         'name':'profile-test', 'baseline':False, 'config':str(train_path), 'evaluation':str(eval_path)}]}))
-    profile(str(tmp_path), batches=(1,2), steps=2)
-    report = json.loads((tmp_path/'profiles-ready.json').read_text())['profile-test']
+    profile(str(tmp_path), batches=(1,2), steps=2, only=only)
+    ready = tmp_path/'profiles/profile-test-ready.json' if only else tmp_path/'profiles-ready.json'
+    report = json.loads(ready.read_text())['profile-test']
     assert len(report['candidates']) == 2
     assert report['selected']['batch_size'] in [1,2]
     resolved = read_config(train_path)

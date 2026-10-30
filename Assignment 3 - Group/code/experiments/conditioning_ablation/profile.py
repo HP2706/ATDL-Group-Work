@@ -14,14 +14,16 @@ from video3d.storage import atomic_json
 
 
 def profile(root: str, batches: tuple[int, ...] = (8, 16, 32), steps: int = 5,
-            resume: bool = False, attempt: str = "") -> None:
+            resume: bool = False, attempt: str = "", only: str = "") -> None:
     folder = Path(root)
     matrix = json.loads((folder/'matrix.json').read_text())
-    progress = folder/'profiles/progress.json'
+    if only and only not in {row['name'] for row in matrix['entries'] if not row['baseline']}:
+        raise ValueError(f'Unknown trainable variant: {only}')
+    progress = folder/'profiles'/f'{only}-progress.json' if only else folder/'profiles/progress.json'
     reports: dict[str, Any] = json.loads(progress.read_text()) if resume and progress.exists() else {}
     suffix = f'-{attempt}' if attempt else '' 
     for entry in matrix['entries']:
-        if entry['baseline']:
+        if entry['baseline'] or (only and entry['name'] != only):
             continue
         cfg = read_config(entry['config'])
         if entry['name'] in reports:
@@ -64,7 +66,8 @@ def profile(root: str, batches: tuple[int, ...] = (8, 16, 32), steps: int = 5,
             'accumulation_steps':cfg.train.effective_batch_size//selected['batch_size'],
             'stopped_at':'OOM or effective-batch ceiling 32'}
         atomic_json(folder/'profiles/progress.json', reports)
-    atomic_json(folder/'profiles-ready.json', reports)
+    ready = folder/'profiles'/f'{only}-ready.json' if only else folder/'profiles-ready.json'
+    atomic_json(ready, reports)
 
 
 if __name__ == '__main__':
