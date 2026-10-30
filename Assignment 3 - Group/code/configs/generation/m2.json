@@ -1,0 +1,5 @@
+{
+  "dataset_root": "dataset",
+  "bg_pool_dir": "data/bg_pools",
+  "blender_custom_path": ".blender/blender-4.5.15-linux-x64"
+}

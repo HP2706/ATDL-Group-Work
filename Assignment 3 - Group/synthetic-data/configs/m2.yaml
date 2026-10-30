@@ -1,7 +1,0 @@
-# M2: 10,000 train clips (Objaverse) on the cluster. Defaults live in src/sam3dvid/config.py.
-# Use seeds 1000000-1009999: the per-seed streams don't depend on the split, so train seed s
-# would otherwise share N, layout and camera path with eval seed s.
-dataset_root: dataset
-bg_pool_dir: data/bg_pools
-# Blender 4.2.1 has no kernels for Blackwell GPUs (B200).
-blender_custom_path: .blender/blender-4.5.15-linux-x64

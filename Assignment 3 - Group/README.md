@@ -65,8 +65,8 @@ The following reproduces the relevant wording from [Course information](https://
 
 ## Code
 
-- [`code/`](code/): video-conditioned SAM 3D training and experiments on NAVI.
-- [`synthetic-data/`](synthetic-data/): generator for synthetic multi-object videos with exact 3D ground truth. Rendered data is not committed; see its [README](synthetic-data/README.md) and [`DATASET.md`](synthetic-data/DATASET.md).
+- [`code/`](code/): shared synthetic-data generation, NAVI preparation, video-conditioned SAM 3D training and evaluation. See the [active setup and commands](code/README.md).
+- Generator source: [`code/src/video3d/data/generation/`](code/src/video3d/data/generation/); existing generation documentation is preserved under [`code/docs/generation/`](code/docs/generation/). Rendered datasets remain outside version control.
 
 ## Local template
 

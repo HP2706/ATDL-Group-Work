@@ -33,9 +33,9 @@ def rng_state() -> dict[str, Any]:
 def restore_rng(state: dict[str, Any]) -> None:
     random.setstate(state["python"])
     np.random.set_state(state["numpy"])
-    torch.set_rng_state(state["torch"])
+    torch.set_rng_state(state["torch"].cpu())
     if state["cuda"]:
-        torch.cuda.set_rng_state_all(state["cuda"])
+        torch.cuda.set_rng_state_all([tensor.cpu() for tensor in state["cuda"]])
 
 
 def append_log(path: Path, payload: dict[str, Any]) -> None:

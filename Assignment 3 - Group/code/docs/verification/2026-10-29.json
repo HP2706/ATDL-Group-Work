@@ -1,0 +1,57 @@
+{
+  "date": "2026-10-29",
+  "branch": "unify-video-pipeline",
+  "python": "3.11.5",
+  "torch": "2.7.1+cu128",
+  "gpu": "NVIDIA L40S",
+  "cpu_suite": {
+    "passed": 139,
+    "skipped": 29,
+    "report": "atdl-unified-verification/unified-verification-2026-10-29-18-29-57/cpu-tests.xml"
+  },
+  "gpu_suite": {
+    "passed": 13,
+    "report": "atdl-unified-verification/unified-verification-2026-10-29-18-15-06/cpu-tests.xml"
+  },
+  "rendered_generation_suite": {
+    "passed": 31,
+    "report": "atdl-unified-verification/unified-verification-2026-10-29-18-15-17/cpu-tests.xml"
+  },
+  "seed_regeneration": {
+    "passed": 1,
+    "report": "atdl-unified-verification/unified-verification-2026-10-29-18-21-42/cpu-tests.xml"
+  },
+  "real_loss_parity": {
+    "upstream": 0.23598560690879822,
+    "copied": 0.23598560690879822,
+    "conditioning_gradients_match": true
+  },
+  "real_training_resume_evaluation": {
+    "fusion-lora0": {
+      "results": "/cache/unified-verification-2026-10-29-16-52-28/outputs/eval/fusion-lora0-unified-verification-2026-10-29-16-52-28.jsonl",
+      "steps": 2
+    },
+    "pooler-lora0": {
+      "results": "/cache/unified-verification-2026-10-29-16-52-28/outputs/eval/pooler-lora0-unified-verification-2026-10-29-16-52-28.jsonl",
+      "steps": 2
+    },
+    "fusion-lora1": {
+      "results": "/cache/unified-verification-2026-10-29-16-52-28/outputs/eval/fusion-lora1-unified-verification-2026-10-29-16-52-28.jsonl",
+      "steps": 2
+    },
+    "pooler-lora1": {
+      "results": "/cache/unified-verification-2026-10-29-16-52-28/outputs/eval/pooler-lora1-unified-verification-2026-10-29-16-52-28.jsonl",
+      "steps": 2
+    }
+  },
+  "render": {
+    "frames": 4,
+    "width": 128,
+    "height": 128,
+    "cycles_samples": 2,
+    "denoiser": "INTEL",
+    "masks_poses_voxels": "bit-exact export roundtrip",
+    "rgb_psnr_db_minimum": 40,
+    "data": "atdl-unified-verification/unified-verification-2026-10-29-16-52-28/generation-smooth-smoke"
+  }
+}

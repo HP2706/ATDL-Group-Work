@@ -1,5 +1,0 @@
-# C2: keys/values = DINOv2 tokens of the K clip frames, averaged in pairs (token parity with V-JEPA).
-encoder:
-  kv_source: dinov2_clip
-  dinov2:
-    pair_average: true

@@ -1,44 +1,17 @@
+"""NAVI preparation using the same SAM wrapper as synthetic training."""
 from __future__ import annotations
-
 import hashlib
 import json
-import sys
 from pathlib import Path
 from typing import Any
 import chz
 import numpy as np
 from PIL import Image, ImageOps
 import torch
-from hydra.utils import instantiate
-from omegaconf import OmegaConf
 from .config import ExperimentConfig
-from .data import Example, read_manifest
-from .model import NativeSAM, load_component
+from .data.navi import Example, read_manifest
+from .models.sam3d import build_sam3d
 from .storage import atomic_json, atomic_torch
-
-
-def image_tensor(image: Image.Image, size: int, nearest: bool = False) -> torch.Tensor:
-    image = image.resize((size, size), Image.Resampling.NEAREST if nearest else Image.Resampling.BILINEAR)
-    array = np.array(image, copy=True)
-    if array.ndim == 2:
-        array = np.repeat(array[:, :, None], 3, axis=2)
-    return torch.from_numpy(array).permute(2, 0, 1).float()[None].cuda() / 255
-
-
-def reference_inputs(image_path: Path, mask_path: Path) -> dict[str, torch.Tensor]:
-    image = ImageOps.exif_transpose(Image.open(image_path)).convert("RGB")
-    mask = Image.open(mask_path).convert("L")
-    y, x = np.nonzero(np.asarray(mask) > 0)
-    if not len(x):
-        raise ValueError(f"Empty mask: {mask_path}")
-    cx, cy = (int(x.min()) + int(x.max())) / 2, (int(y.min()) + int(y.max())) / 2
-    side = max(int(x.max() - x.min() + 1), int(y.max() - y.min() + 1)) * 1.2
-    crop_box = tuple(round(value) for value in [cx - side / 2, cy - side / 2, cx + side / 2, cy + side / 2])
-    image_crop, mask_crop = image.crop(crop_box), mask.crop(crop_box)
-    full_image = ImageOps.pad(image, (max(image.size), max(image.size)))
-    full_mask = ImageOps.pad(mask, full_image.size)
-    return {"image": image_tensor(image_crop, 518), "mask": image_tensor(mask_crop, 518, True), "rgb_image": image_tensor(full_image, 518), "rgb_image_mask": image_tensor(full_mask, 518, True), "pointmap": torch.zeros(1, 3, 256, 256, device="cuda"), "rgb_pointmap": torch.zeros(1, 3, 256, 256, device="cuda")}
-
 
 def visibility(points: np.ndarray, annotation: dict[str, Any], scene: Path) -> np.ndarray:
     # Reuse NAVI's published camera/depth convention instead of guessing q/t axes.
@@ -63,18 +36,16 @@ def visibility(points: np.ndarray, annotation: dict[str, Any], scene: Path) -> n
     expected = camera[:, 2]
     return inside & (np.abs(sampled - expected) < np.maximum(np.abs(expected) * 0.01, 1e-3))
 
-
 def prepare(config: ExperimentConfig) -> None:
     import imageio.v2 as imageio
     import trimesh
     if not torch.cuda.is_available():
         raise RuntimeError("Dataset encoding belongs on the remote allocation")
-    sys.path.insert(0, "/work/dependencies/navi")
-    root, output = Path(config.data.root), Path(config.data.prepared)
+    root, output = Path(config.paths.data_root), Path(config.data.prepared)
     output.mkdir(parents=True, exist_ok=True)
     prepared_data = chz.asdict(config.data)
     del prepared_data["video_input"]  # Runtime pixel preprocessing does not change cached native features or geometry.
-    signature = {"schema_version": 1, "data": prepared_data, "sam_weights": config.model.sam_weights, "sam_revision": config.model.sam_revision, "sam_commit": config.model.sam_commit, "coordinates": "z-up-aabb-unit-cube-surface64-v1", "visibility": "navi-positive-z-positive-image-y-v2"}
+    signature = {"schema_version": 3, "data": prepared_data, "sam_weights": config.sam3d.hf_repo, "sam_revision": config.sam3d.checkpoint_revision, "sam_commit": config.provenance.sam_commit, "coordinates": "z-up-aabb-unit-cube-surface64-v1", "visibility": "navi-positive-z-positive-image-y-v2"}
     metadata = output / "preparation.json"
     if (output / "manifest.jsonl").is_file():
         if not metadata.is_file() or json.loads(metadata.read_text())["signature"] != signature:
@@ -86,18 +57,10 @@ def prepare(config: ExperimentConfig) -> None:
     required = config.data.train_objects + config.data.val_objects + config.data.test_objects
     if len(objects) < required:
         raise ValueError(f"Expected {required} objects with video; found {len(objects)}")
-    order = np.random.default_rng(config.data.seed).permutation(objects).tolist()
+    order = np.random.default_rng(config.seed).permutation(objects).tolist()
     splits = {name: "train" if index < config.data.train_objects else "val" if index < config.data.train_objects + config.data.val_objects else "test" for index, name in enumerate(order)}
     atomic_json(output / "object_splits.json", splits)
-    model = NativeSAM(config.model, config.data.frames, torch.device("cuda"))
-    checkpoint = Path(model.checkpoint_root)
-    fuser_config = OmegaConf.load(checkpoint / "ss_generator.yaml")["module"]["condition_embedder"]["backbone"]
-    for embedder, _ in fuser_config["embedder_list"]:
-        if "dino_model" in embedder:
-            embedder["repo_or_dir"] = "/work/dependencies/dinov2"
-            embedder["source"] = "local"
-    fuser = load_component(fuser_config, checkpoint / "ss_generator.ckpt", "_base_models.condition_embedder.").cuda()
-    fuser.force_drop_modalities = ["pointmap", "rgb_pointmap"]
+    model = build_sam3d(config, torch.device("cuda"))
     rows: list[Example] = []
     for object_id in order:
         split = splits[object_id]
@@ -131,9 +94,8 @@ def prepare(config: ExperimentConfig) -> None:
         occupancy = torch.zeros(1, 1, 64, 64, 64, device="cuda")
         occupancy[0, 0, indices[:, 0], indices[:, 1], indices[:, 2]] = 1
         with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16):
-            encoded = model.encode_geometry(occupancy)
-            latent = encoded["shape"].transpose(1, 2).reshape(1, 8, 16, 16, 16)
-            reconstruction = model.decoder(latent)
+            encoded = {"shape": model.encode_voxels(occupancy[:, 0])}
+            reconstruction = model.decode_latent(encoded["shape"])[:, None]
         if not torch.isfinite(encoded["shape"]).all() or not torch.isfinite(reconstruction).all():
             raise FloatingPointError("Non-finite upstream VAE round trip")
         reconstructed = reconstruction > 0
@@ -158,7 +120,9 @@ def prepare(config: ExperimentConfig) -> None:
                 for path in frames:
                     writer.append_data(np.array(ImageOps.exif_transpose(Image.open(path)).convert("RGB").resize((512, 512))))
             with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16):
-                tokens = fuser(**reference_inputs(Path(frames[0]), Path(masks[0])))
+                rgb = torch.from_numpy(np.array(ImageOps.exif_transpose(Image.open(frames[0])).convert("RGB")))[None].cuda()
+                mask = torch.from_numpy(np.asarray(Image.open(masks[0]).convert("L")) > 0)[None].cuda()
+                tokens = torch.cat(list(model.condition(rgb, mask).values()), dim=1)
             token_path = directory / "reference_tokens.pt"
             torch.save(tokens[0].float().cpu(), token_path)
             observed = [visibility(original_points, item, scene) for item in selected]
