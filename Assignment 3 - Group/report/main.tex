@@ -83,10 +83,43 @@ Here $A\in\{0,\ldots,63\}^{N\times3}$ is derived from positive occupancy logits,
 
 
 
-MV-SAM3D~\cite{mvsam3d} extends frozen SAM 3D to multiple views through diffusion in a shared 3D latent space.
-Concretely it accomplishes this in a training free way by combining view-conditioned predictions using adaptive attention-entropy or visibility-based weights, allowing complementary observations to guide reconstruction without additional training.
+MV-SAM3D~\cite{mvsam3d} extends frozen SAM 3D to multiple input views without additional training. At each flow step, it evaluates the velocity field separately for each view's conditioning $C_i$, while keeping the current latent state $z_\tau$ fixed. The resulting predictions are combined at each latent token $q$ by a weighted combination:
+\begin{equation}
+\begin{aligned}
+    \overline v_\theta(z_\tau,\tau)_q
+        &=\sum_{i=1}^{N}w_i(q)\,v_\theta(z_\tau,\tau,C_i)_q,\\
+    \sum_{i=1}^{N}w_i(q)&=1.
+\end{aligned}
+\end{equation}
 
-Stream3D~\cite{stream3d} extends frozen view-conditioned generators to sequential observations. It maintains a bounded evidential memory of informative views and selects a conditioning bundle as new frames arrive. This bounds retained context over long sequences while allowing reconstruction to incorporate observations beyond the current frame. In contrast, our approach learns to aggregate video evidence into the conditioning sequence before flow sampling.
+for computing non-uniform weight, they use a technique called 'attention-entropy weighting' where greater weight is assigned to views with more concentrated cross-attention .
+\begin{equation}
+    w_i(q)=\frac{\exp[-\alpha H_i(q)]}
+    {\sum_{j=1}^{N}\exp[-\alpha H_j(q)]},
+\end{equation}
+where $H_i(q)$ is the normalized entropy of token $q$'s attention over view $i$'s image patches, and $\alpha$ controls the weighting sharpness.
+
+Stream3D~\cite{stream3d} extends frozen SAM 3D to streaming inputs without additional training. For each chunk, it probes SAM 3D's structure-stage flow model from fixed noise. Cross-attention between 3D grid tokens and image patches yields evidence scores $e_i(q)$, rewarding strong, concentrated attention. Each token's memory stores its $D$ highest scores and corresponding frame indices, updated for chunk $\mathcal C_k$ as
+\begin{equation}
+    \mathcal M_k(q)=\operatorname{TopD}_{e}\!\left(
+    \mathcal M_{k-1}(q)\cup\{(e_i(q),i):i\in\mathcal C_k\}
+    \right).
+\end{equation}
+The $K$ frames appearing most often in memory form $\mathcal V_k$. Reconstruction starts from fresh noise; SAM 3D predicts per-view velocities at the shared latent $z_\tau$ and fuses them using normalized evidence:
+\begin{equation}
+\begin{aligned}
+    \overline v_\theta(z_\tau,\tau)_q
+        &=\sum_{i\in\mathcal V_k}w_i(q)\,v_\theta(z_\tau,\tau,C_i)_q,\\
+    w_i(q)&=\frac{e_i(q)}{\sum_{j\in\mathcal V_k}e_j(q)}.
+\end{aligned}
+\end{equation}
+Thus, historical frame references and scores persist across chunks, while SAM 3D generates a new reconstruction from the selected observations.
+
+Both methods therefore incorporate information from multiple observations into a shared latent $z_\tau$ during sampling. Each forward pass predicts a velocity; the solver updates the latent, for example with an Euler step:
+\begin{equation}
+    z_{\tau+\Delta\tau}=z_\tau+\Delta\tau\,\overline v_\theta(z_\tau,\tau).
+\end{equation}
+Our approach instead learns to combine video evidence in the conditioning sequence before these sampling steps.
 
 
 \section{Method}
@@ -209,6 +242,60 @@ Random seed & 42 \\
 Adapter biases, normalization parameters, group/time embeddings, and gates are excluded from weight decay. Flow times are sampled as $\tau=\operatorname{sigmoid}(u)$ with $u\sim\mathcal{N}(0,1)$. EMA weights are used for checkpoint evaluation.
 
 \section{Results}
+\subsection{Native Validation}
+
+Table~\ref{tab:validation-results} reports full-set coarse reconstruction results on the held-out synthetic validation split. We report only completed evaluations; the multi-view baselines remain in progress.
+
+\begin{table*}[t]
+\centering
+\scriptsize
+\setlength{\tabcolsep}{2pt}
+\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}lccccc@{}}
+\toprule
+Method & IoU $\uparrow$ & Aligned IoU $\uparrow$ & Chamfer $\downarrow$ & F@2\% $\uparrow$ & F@5\% $\uparrow$ \\
+\midrule
+SAM 3D (frozen) & 9.74 & 13.48 & 0.3085 & 35.13 & 52.89 \\
+MV-SAM3D & - & - & - & - & - \\
+Stream3D & - & - & - & - & - \\
+SAM 3D + LoRA (single frame) & 12.29 & 17.21 & 0.2550 & 42.56 & 61.42 \\
+Fusion adapter & 11.41 & 15.36 & 0.2616 & 40.19 & 60.07 \\
+Fusion adapter + SAM LoRA & \textbf{14.05} & \textbf{19.26} & \textbf{0.2238} & \textbf{46.86} & \textbf{66.55} \\
+V-JEPA attention pooling & 5.71 & 7.00 & 0.4113 & 20.78 & 35.60 \\
+V-JEPA pooling + SAM LoRA & 9.63 & 12.20 & 0.3108 & 32.61 & 51.32 \\
+DINOv2 attention pooling & 6.51 & 7.85 & 0.4126 & 22.34 & 37.22 \\
+\bottomrule
+\end{tabular*}
+\caption{Native synthetic validation on all 1,306 held-out reference cases (642 clips, 131 target assets). Trained variants use epoch-5 EMA checkpoints. All methods use 25-step Stage-1 flow sampling and the same reference cases; video and multi-view methods use a common 16-frame window, while single-image methods use its selected reference. Metrics score coarse geometry against $64^3$ surface-occupancy ground truth, using up to 20,000 surface points and 100 similarity-ICP iterations. IoU is before alignment; aligned IoU, Chamfer and F-scores use similarity alignment. Coarse Chamfer uses longest-side-two normalization; IoU and F-scores are percentages. V-JEPA pooling produces three empty predictions: they contribute zero IoU, while its aligned metrics average the 1,303 non-empty predictions. A dash denotes a full evaluation still in progress; partial-set scores are omitted. Bold indicates the best completed score in each column.}
+\label{tab:validation-results}
+\end{table*}
+
+\subsection{GSO Reconstruction}
+
+Table~\ref{tab:gso-results} reports coarse and refined reconstruction on GSO. The native-validation and GSO Chamfer values use different geometry targets and normalization protocols and should not be compared numerically across tables.
+
+\begin{table*}[t]
+\centering
+\scriptsize
+\setlength{\tabcolsep}{2pt}
+\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}lcccc@{}}
+\toprule
+Method & Coarse IoU $\uparrow$ & Mesh Chamfer $\downarrow$ & Mesh F@2\% $\uparrow$ & Mesh F@5\% $\uparrow$ \\
+\midrule
+SAM 3D (frozen) & 20.41 & 0.0736 & 62.90 & 80.44 \\
+MV-SAM3D & 24.75 & 0.0439 & 73.66 & 89.81 \\
+Stream3D & \textbf{25.13} & \textbf{0.0420} & \textbf{75.38} & \textbf{91.10} \\
+SAM 3D + LoRA (single frame) & 20.18 & 0.0690 & 62.22 & 81.89 \\
+Fusion adapter & 18.29 & 0.0830 & 58.30 & 77.54 \\
+Fusion adapter + SAM LoRA & 19.46 & 0.0736 & 60.38 & 80.28 \\
+V-JEPA attention pooling & 5.21 & 0.2075 & 23.06 & 39.00 \\
+V-JEPA pooling + SAM LoRA & 10.43 & 0.1374 & 38.59 & 58.06 \\
+DINOv2 attention pooling & 8.10 & 0.1612 & 33.00 & 50.84 \\
+\bottomrule
+\end{tabular*}
+\caption{GSO reconstruction on the same 200 objects for every method. Trained variants use epoch-5 EMA checkpoints; all methods use 25 Stage-1 flow steps and 25 Stage-2 refinement steps. Coarse IoU is a percentage before alignment. Refined-mesh metrics use 8,192 samples per direction, exact point-to-triangle distances and 100 similarity-ICP iterations; Mesh Chamfer is the sum of directional means in units of the ground-truth longest side, and F-scores are percentages at 2\% and 5\% of that side. Video-conditioned methods use 16 frames, MV-SAM3D and Stream3D use four fixed views, and single-image methods use one reference. Bold indicates the best score in each column.}
+\label{tab:gso-results}
+\end{table*}
+
 \subsection{Ablation Studies}
 
 \section{Discussion and Conclusion}
