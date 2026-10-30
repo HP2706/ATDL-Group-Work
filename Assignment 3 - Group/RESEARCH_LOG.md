@@ -313,3 +313,56 @@ The separate DINOv2 one-hour real-GPU check is
 [12439392](https://cloud.sdu.dk/app/jobs/properties/12439392). It does not change,
 stop or delay the first five allocations. The sixth long DINOv2 run remains
 conditional on that check passing.
+
+### All six launches verified after GPU checks
+
+The independent DINOv2 one-hour check `12439392` passed and exited zero at
+2026-10-30 09:13:20 Europe/Copenhagen, releasing its GPU. It performed three real
+optimizer updates with checkpoint resume from step 1 to 3, native shape
+validation, one GSO evaluation, and W&B scalar/media/table/artifact uploads.
+`dinov2-check-ready.json` records the PASS and finite IoU, Chamfer and F-scores;
+these tiny checks are execution diagnostics, not scientific results. Two focused
+CPU contract tests also passed. Native DINOv2 encodes all 16 frames into 4,096
+patch tokens, excluding CLS/register tokens; the backbone remains frozen while
+the 12.66M-parameter pooler/projection trains. Native mask/pointmap conditioning
+is retained. The selected batch 32 profile used 29.13 GiB and 5.750 seconds per
+update. A checkpointed warm measurement was 6.930 seconds/update, so the short
+profile's 5.17-hour training-only projection is optimistic relative to the
+6.24-hour warm estimate. Both exclude validation and final evaluation.
+
+Only after the first five accepted launches and the DINOv2 PASS, the sixth
+separate native foreground job was submitted:
+[12439418](https://cloud.sdu.dk/app/jobs/properties/12439418). It uses the same
+immutable `de7f8d8` source, five epochs/3,240 updates, effective batch 32, fixed
+200-object GSO evaluation, 12-hour provider fallback and automatic release.
+Its receipt is `dinov2-pooler-submitted.json` in the persistent experiment root.
+
+All five trainable jobs were verified doing optimizer updates, beyond provider
+RUNNING/setup: fusion `12439375` at step 61, fusion + SAM LoRA `12439376` at
+step 56, V-JEPA pooler `12439378` at step 67, pooler + SAM LoRA `12439379` at
+step 40, and DINOv2 pooler `12439418` at step 9. All five provider states were
+RUNNING at this check. Live metrics are in `scratch/<run_name>/metrics.jsonl`;
+the persistent `results/<run_name>/metrics.jsonl` copy advances on checkpoint
+flushes every 50 updates. Missing pre-checkpoint copies do not imply missing
+training logs. W&B receives the training history during the run.
+
+Frozen SAM 3D `12439377` completed SUCCESS with its own batch exit code zero and
+`results/eval/c0.summary.json` confirms 200/200 objects, complete=true:
+
+| Metric | Frozen SAM 3D, GSO 200 |
+|---|---:|
+| Canonical voxel IoU | 0.211125 |
+| Aligned voxel IoU | 0.258143 |
+| Coarse-surface aligned Chamfer L1 sum | 0.181470 |
+| F-score at 0.02 | 0.359412 |
+| F-score at 0.05 | 0.787710 |
+| Empty predictions | 0/200 |
+
+These scores use the current coarse voxel-surface, longest-side-2 protocol and
+200-object subset. They must not be ranked directly against the earlier
+250-object refined-mesh, longest-side-1 results. No trained-model comparison is
+available yet. The temporary CPU staging allocation `12439285` was released
+after its consumers finished and verified terminal SUCCESS. The obsolete
+seven-model delayed-launch follow-up was paused after all six confirmed jobs
+were verified; it must not submit duplicate jobs. Active training allocations
+were retained.
