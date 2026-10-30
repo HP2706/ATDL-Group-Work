@@ -109,3 +109,19 @@ def test_baseline_partial_resume_has_unique_records(fake_root: Any, tmp_path: Pa
     module.evaluate(str(path),'sam3d',str(output),split='val',limit=2,k=16)
     rows = [json.loads(line) for line in (output/'evaluation.jsonl').read_text().splitlines()]
     assert len(rows) == len({row['sample_id'] for row in rows}) == 2
+
+
+def test_training_recovers_selected_epoch_evaluations(fake_root: Any, tmp_path: Path,
+                                                      monkeypatch: pytest.MonkeyPatch) -> None:
+    import importlib
+    from video3d.train import train
+    module = importlib.import_module('video3d.evaluate')
+    calls: list[tuple[str,int]] = []
+    monkeypatch.setattr(module,'evaluate_training_epoch',lambda cfg,run,epoch: calls.append(('heavy',epoch)))
+    monkeypatch.setattr(module,'evaluate_full_validation',lambda cfg,run,epoch: calls.append(('full',epoch)))
+    cfg = fake_train_cfg(fake_root,tmp_path,**{'train.epochs':1,'val.heavy_epochs':'[1,-1]',
+        'val.heavy_data_root':'/data/gso200','val.final_full_validation':'true'})
+    train(cfg)
+    assert calls == [('heavy',1),('full',1)]
+    train(cfg)
+    assert calls == [('heavy',1),('full',1),('heavy',1),('full',1)]

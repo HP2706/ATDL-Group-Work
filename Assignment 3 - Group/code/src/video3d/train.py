@@ -368,6 +368,9 @@ def train(cfg: ExperimentConfig, benchmark: bool = False, stop_at: int | None = 
         from video3d.evaluate import evaluate_training_epoch, heavy_epoch_selected
         if heavy_epoch_selected(cfg.val.heavy_epochs, step // epoch_steps, tcfg.epochs):
             evaluate_training_epoch(cfg, output_dir, step // epoch_steps)
+    if use_epochs and step == max_steps and cfg.val.final_full_validation:
+        from video3d.evaluate import evaluate_full_validation
+        evaluate_full_validation(cfg, output_dir, tcfg.epochs)
 
     def checkpoint_state() -> dict:
         return {"adapter": adapter.state_dict(), "ema": ema.state_dict(),
