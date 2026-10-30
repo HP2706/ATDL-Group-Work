@@ -22,7 +22,7 @@ from video3d.storage import atomic_json
 class Variant(BaseModel):
     model_config = ConfigDict(extra='forbid')
     name: str
-    strategy: Literal["fusion", "pooler", "native"]
+    strategy: Literal["fusion", "pooler", "native", "append_video_mask"]
     sam_lora: bool
     video_lora: bool
     baseline: bool = False

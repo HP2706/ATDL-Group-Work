@@ -29,9 +29,9 @@ from video3d.config import save_config
 from video3d.data.samples import VAL
 from video3d.data.targets import load_latent
 from video3d.metrics import shape_metrics
-from video3d.models.adapter import build_adapter, count_parameters, pad_video_batch
-from video3d.models.encoders import build_kv_encoder, kv_tokens
-from video3d.models.sam3d import apply_adapter, build_sam3d
+from video3d.models.adapter import build_adapter, count_parameters
+from video3d.models.encoders import build_kv_encoder, encode_video_features, pad_feature_batch
+from video3d.models.sam3d import build_sam3d
 from video3d.utils import (append_jsonl, copy_to_output, find_resume_checkpoint, pick_device,
                             read_jsonl, rng_state, run_dirs, sample_seed, save_checkpoint,
                             seed_everything, set_rng_state, setup_logging)
@@ -134,12 +134,11 @@ def adapted_condition(sam3d: typing.Any, encoder: typing.Any, adapter: typing.An
         return cond
     feature_context = nullcontext() if cfg.encoder.vjepa.video_lora else torch.no_grad()
     with feature_context:
-        kv = [kv_tokens(encoder, to_device(s["inputs"], device), cfg.encoder.kv_source)
-              for s in batch]
-    v = pad_video_batch(*map(list, zip(*kv)))
-    return apply_adapter(cond, adapter, v["tokens"], v["coverage"], v["dt"],
-                         list(cfg.adapter.query_sets), v["kv_padding_mask"],
-                         video_disabled=video_disabled, diagnostics=diagnostics)
+        features = [encode_video_features(encoder, to_device(s["inputs"], device), cfg.encoder.kv_source)
+                    for s in batch]
+    video = pad_feature_batch(features)
+    return adapter.condition(cond, video, list(cfg.adapter.query_sets),
+                             video_disabled=video_disabled, diagnostics=diagnostics)
 
 
 

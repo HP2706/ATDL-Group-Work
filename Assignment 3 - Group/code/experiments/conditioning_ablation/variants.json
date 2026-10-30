@@ -42,5 +42,17 @@
     "strategy": "native",
     "sam_lora": true,
     "video_lora": false
+  },
+  {
+    "name": "append-frozen",
+    "strategy": "append_video_mask",
+    "sam_lora": false,
+    "video_lora": false
+  },
+  {
+    "name": "append-sam-lora",
+    "strategy": "append_video_mask",
+    "sam_lora": true,
+    "video_lora": false
   }
 ]

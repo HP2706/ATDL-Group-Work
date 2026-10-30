@@ -86,3 +86,56 @@ Occlusion-biased sampling is disabled; only that one frame is decoded. The
 existing visibility filter excludes frames where the target is not visible.
 Validation and final evaluation retain the fixed reference-frame protocol.
 The maintained trainer, checkpoint/EMA handling, and evaluator are reused.
+
+## Separate appended video and mask conditioning
+
+`append-frozen` and `append-sam-lora` extend this same matrix. Both freeze
+V-JEPA 2.1 ViT-L/16 and retain every native SAM conditioning set. The new
+`append_video_mask` strategy emits 1,370 video summaries and 1,370 mask
+summaries, each of width 1,024, producing 10,268 conditioning tokens for the
+pinned 7,528-token native configuration. SAM shape cross-attention LoRA is the
+only difference between the two runs; its existing rank/targets remain unchanged.
+
+A 4x4 mask descriptor for each of the two tubelet frames preserves local
+silhouette structure. A learned MLP encodes its 32 values. Video and mask
+features plus (relative tubelet offset, y, x) determine shared pooling keys;
+the two value streams use identical attention weights, learned queries and
+query identities, then separate output projections, normalizations and modality
+embeddings. Padding is excluded. Invisible frames and background remain valid
+context rather than being discarded by a foreground threshold. Relative time
+uses the existing frame-offset units, not seconds or camera pose.
+
+The encoder boundary is `VideoFeatures`; each strategy implements
+`condition(native, video, query_sets, video_disabled, diagnostics)`. A new encoder
+implements `TokenEncoder`; a new strategy is selected by the adapter factory.
+SAM assembly no longer checks adapter classes. Legacy low-level tensor callers
+remain supported through `apply_adapter`.
+
+Run protocol: fresh adapter initialization; same full-q98 asset-disjoint split,
+16 frames, five epochs (3,240 updates), effective batch 32, seed 42, existing
+AdamW/flow loss/warmup/EMA/clipping/bfloat16 configuration and checkpoint cadence.
+Microbatch is selected by bounded remote profiling at effective batch 32.
+Checkpoints include optimizer, scheduler, RNG, data position, adapter, EMA and
+optional SAM LoRA. Evaluation uses the existing fixed validation and GSO200
+selection and native/repeated/wrong/disabled controls where configured. New
+runs log to the existing W&B project; no Hugging Face uploads are requested.
+
+Before full launch, a foreground GPU smoke batch runs regression tests, two
+real updates per SAM-LoRA setting with strict save/resume, and one held-out
+reconstruction each. The full runs use separate foreground UCloud B200 batch
+jobs with a 12-hour allocation cap per run, including profiling and final
+evaluation; allocation ends with pipeline exit. A 1-hour smoke cap gives a
+maximum combined reservation of 25 GPU-hours, not expected consumption.
+Expected full-run duration is provisionally 7–10 hours each based on the
+existing fusion runs, with extra cross-attention cost from 2,740 appended tokens;
+measured profiling replaces this estimate. Persistent data/caches are reused.
+Approximate per-GPU peak is provisionally 45–100 GB at microbatch 16–32: frozen
+SAM/V-JEPA weights, SAM activations for adapter backpropagation and attention
+workspaces dominate; adapter optimizer state is below 1 GB. No KV cache is
+retained across training examples. Profiling records actual parameter counts,
+allocated memory and throughput before the final microbatch is fixed.
+
+New runs execute a clean committed main checkout, separate from immutable
+historical experiment snapshots. Existing jobs and their source snapshots are
+not modified. The source commit and resolved configurations are persisted with
+every launch.

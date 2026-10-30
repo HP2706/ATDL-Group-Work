@@ -93,6 +93,7 @@ class AdapterConfig:
     use_time_embedding: bool = True
     query_sets: list[str] = chz.field(default_factory=lambda: [])
     strategy: str = 'fusion'
+    append_queries: int = 1370
     pooler_queries: int = 64
     pooler_depth: int = 1
     foreground_threshold: float = 0.5
@@ -313,8 +314,8 @@ def load_config(condition: str | None = None, env: str | None = None,
     cfg = blueprint.apply_from_argv([f"{k}={v}" for k, v in text_values.items()]).make()
     if "run_name" not in text_values:
         cfg = chz.replace(cfg, run_name=f"{name}_seed{cfg.seed}-" + datetime.now().strftime("%Y-%m-%d-%H-%M-%S"))
-    if cfg.adapter.strategy not in {"fusion", "pooler", "native"}:
-        raise ValueError("adapter.strategy must be fusion, pooler or native")
+    if cfg.adapter.strategy not in {"fusion", "pooler", "native", "append_video_mask"}:
+        raise ValueError("adapter.strategy must be fusion, pooler, native or append_video_mask")
     if cfg.adapter.strategy == 'native' and cfg.encoder.vjepa.video_lora:
         raise ValueError('Native conditioning does not use a video encoder')
     if cfg.train.batch_size <= 0 or cfg.train.effective_batch_size <= 0 or cfg.train.effective_batch_size % cfg.train.batch_size:

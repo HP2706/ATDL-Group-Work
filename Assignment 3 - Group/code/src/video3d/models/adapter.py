@@ -10,6 +10,7 @@ import typing
 import torch
 import torch.nn as nn
 from video3d.config import AdapterConfig
+from video3d.models.conditioning import ConditioningSets, VideoFeatures, rgb_sets
 
 
 class GatedXAttnBlock(nn.Module):
@@ -83,6 +84,16 @@ class VideoFusionAdapter(nn.Module):
             diagnostics["conditioning_change_ratio"] = float(((c_sel-original).norm() / original.norm().clamp_min(1e-12)).item())
         return c_sel
 
+    def condition(self, native: ConditioningSets, video: VideoFeatures,
+                  query_sets: list[str], video_disabled: bool = False,
+                  diagnostics: dict[str, typing.Any] | None = None) -> ConditioningSets:
+        names = rgb_sets(native, query_sets)
+        sizes = [native[name].shape[1] for name in names]
+        selected = torch.cat([native[name] for name in names], dim=1).float()
+        updated = self(selected, video.tokens, video.coverage, video.dt, video.padding,
+                       video_disabled=video_disabled, diagnostics=diagnostics)
+        return {**native, **dict(zip(names, updated.split(sizes, dim=1)))}
+
     def gates(self) -> dict[str, float]:
         """tanh of every gate, for logging."""
         return {f"block{i}.{name}": torch.tanh(value).item()
@@ -92,6 +103,11 @@ class VideoFusionAdapter(nn.Module):
 class NativeConditioning(nn.Identity):
     """Parameter-free checkpoint placeholder for native SAM conditioning."""
 
+    def condition(self, native: ConditioningSets, video: VideoFeatures,
+                  query_sets: list[str], video_disabled: bool = False,
+                  diagnostics: dict[str, typing.Any] | None = None) -> ConditioningSets:
+        return native
+
     def gates(self) -> dict[str, float]:
         return {}
 
@@ -100,9 +116,14 @@ def build_adapter(cfg: AdapterConfig) -> nn.Module:
     """Construct the adapter from the `adapter` config section."""
     if cfg.strategy == "native":
         return NativeConditioning()
+    if cfg.strategy == "append_video_mask":
+        from video3d.models.appender import VideoMaskAppender
+        return VideoMaskAppender(cfg)
     if cfg.strategy == "pooler":
         from video3d.models.pooler import MaskPooler
         return MaskPooler(cfg)
+    if cfg.strategy != "fusion":
+        raise ValueError(f"Unknown conditioning strategy: {cfg.strategy}")
     return VideoFusionAdapter(d_cond=cfg.d_cond, d_vid=cfg.d_vid, n_blocks=cfg.n_blocks,
                               max_dt=cfg.max_dt, use_object_embedding=cfg.use_object_embedding,
                               use_time_embedding=cfg.use_time_embedding, heads=cfg.heads,

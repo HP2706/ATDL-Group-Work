@@ -23,10 +23,10 @@ from video3d.utils import read_jsonl
 
 def test_matrix_changes_only_model_switches() -> None:
     matrix = variants()
-    assert len(matrix) == len({row.name for row in matrix}) == 7
+    assert len(matrix) == len({row.name for row in matrix}) == 9
     learned = [row for row in matrix if not row.baseline]
     assert [row.name for row in matrix] == ['fusion-frozen', 'fusion-sam-lora', 'sam3d-baseline',
-                                              'pooler-frozen', 'pooler-sam-lora', 'dinov2-pooler', 'sam3d-random-frame-lora']
+                                              'pooler-frozen', 'pooler-sam-lora', 'dinov2-pooler', 'sam3d-random-frame-lora', 'append-frozen', 'append-sam-lora']
     assert all(not row.video_lora for row in matrix)
     assert sum(row.encoder == 'dinov2_frames' for row in learned) == 1
     base = load_config('c3')
@@ -59,7 +59,7 @@ def test_all_trainable_variants_train_resume_and_evaluate(tmp_path: Path, varian
     values = {**FAKE_OVERRIDES, 'data.source':'omniobject3d', 'data.frames':4,
               'paths.data_root':omni, 'paths.output_root':tmp_path/'out',
               'paths.scratch_root':tmp_path/'scratch', 'paths.cache_root':tmp_path/'cache',
-              'train.max_steps':2, 'train.ckpt_every':1, 'adapter.pooler_queries':4,
+              'train.max_steps':2, 'train.ckpt_every':1, 'adapter.pooler_queries':4, 'adapter.append_queries':4,
               'adapter.foreground_threshold':.01, 'logging.media_samples':0}
     base = load_config('c3', overrides=[f'{key}={value}' for key,value in values.items()])
     cfg = variant_config(base, variant, variant.name)
@@ -110,7 +110,7 @@ def test_resolve_full_matrix_and_foreground_launcher(tmp_path: Path) -> None:
     manifest = Path(configure(str(base), str(root), str(omni), str(gso), expected_objects=2))
     matrix = json.loads(manifest.read_text())
     assert matrix['train_objects'] == matrix['validation_objects'] == 1
-    assert len(matrix['entries']) == 7
+    assert len(matrix['entries']) == 9
     for entry in matrix['entries']:
         cfg = json.loads(Path(entry['config']).read_text())
         assert cfg['data']['frames'] == 16 and cfg['encoder']['kv_source'] in {'vjepa','dinov2_frames'}

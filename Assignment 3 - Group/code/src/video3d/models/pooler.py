@@ -4,6 +4,8 @@ from __future__ import annotations
 import torch
 from torch import nn
 from video3d.config import AdapterConfig
+from typing import Any
+from video3d.models.conditioning import ConditioningSets, VideoFeatures, rgb_sets
 
 
 class MaskPooler(nn.Module):
@@ -16,7 +18,7 @@ class MaskPooler(nn.Module):
         self.projector = nn.Linear(cfg.d_vid, cfg.d_cond)
         self.threshold = cfg.foreground_threshold
 
-    def condition(self, cond: dict[str, torch.Tensor], tokens: torch.Tensor,
+    def pool_condition(self, cond: dict[str, torch.Tensor], tokens: torch.Tensor,
                   coverage: torch.Tensor, query_sets: list[str],
                   padding: torch.Tensor | None = None) -> dict[str, torch.Tensor]:
         foreground = coverage > 0
@@ -40,6 +42,17 @@ class MaskPooler(nn.Module):
             elif name not in query_sets:
                 output[name] = value
         return output
+
+    def condition(self, native: ConditioningSets, video: VideoFeatures,
+                  query_sets: list[str], video_disabled: bool = False,
+                  diagnostics: dict[str, Any] | None = None) -> ConditioningSets:
+        names = rgb_sets(native, query_sets)
+        if diagnostics is not None:
+            diagnostics["attention_available"] = False
+            diagnostics["reason"] = "Pooler replaces conditioning tokens; gated cross-attention diagnostics do not apply"
+        if video_disabled:
+            return native
+        return self.pool_condition(native, video.tokens, video.coverage, names, video.padding)
 
     def gates(self) -> dict[str, float]:
         return {}

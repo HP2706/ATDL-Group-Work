@@ -6,13 +6,14 @@ Every encoder exposes `encode(frames (B, K, 3, S, S) in [0, 1]) -> (B, N, d)` pl
 """
 
 from __future__ import annotations
-import typing
 
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from video3d.config import ExperimentConfig
+from typing import Protocol
+from video3d.models.conditioning import VideoFeatures
 
 
 def token_coverage(mask_crop: torch.Tensor, patch: int = 16, tubelet: int = 2) -> torch.Tensor:
@@ -38,12 +39,31 @@ def per_token(x: torch.Tensor, tokens_per_step: int) -> torch.Tensor:
     return x.repeat_interleave(tokens_per_step, dim=1)
 
 
-def kv_tokens(encoder: typing.Any, inputs: dict, kv_source: str) -> typing.Any:
-    """One sample's keys/values -> (tokens (N, d), coverage (N,), Δt per token (N,)).
+class TokenEncoder(Protocol):
+    image_size: int
+    patch: int
+    tubelet: int
 
-    kv_source: vjepa (tubelets of the clip), dinov2_ref (reference frame only, Δt = 0),
-    dinov2_frames (all per-frame patch tokens, without temporal averaging).
-    """
+    def encode(self, frames: torch.Tensor) -> torch.Tensor: ...
+
+
+def mask_patch_descriptors(masks: torch.Tensor, patch: int, tubelet: int) -> torch.Tensor:
+    """Aligned (N,32) descriptors retain 4x4 silhouette cells in each tubelet frame."""
+    frames, height, width = masks.shape
+    rows, columns = height // patch, width // patch
+    patches = F.unfold(masks[:, None].float(), patch, stride=patch).transpose(1, 2)
+    small = F.adaptive_avg_pool2d(patches.reshape(-1, 1, patch, patch), (4, 4))
+    small = small.reshape(frames, rows * columns, 16)
+    if tubelet == 1 or frames == 1:
+        return small.repeat(1, 1, 2).reshape(-1, 32)
+    if tubelet != 2 or frames % tubelet:
+        raise ValueError("Mask descriptors support image tokens or two-frame tubelets")
+    return small.reshape(frames // 2, 2, rows * columns, 16).permute(0, 2, 1, 3).reshape(-1, 32)
+
+
+def encode_video_features(encoder: TokenEncoder, inputs: dict[str, torch.Tensor],
+                          kv_source: str) -> VideoFeatures:
+    """Encode one sample, preserving mask geometry and token order (t,h,w)."""
     frames, masks, dt = inputs["frames"], inputs["frame_masks"], inputs["dt"]
     if kv_source == "dinov2_ref":
         p = inputs["ref_pos"]
@@ -51,17 +71,43 @@ def kv_tokens(encoder: typing.Any, inputs: dict, kv_source: str) -> typing.Any:
     elif kv_source == "dinov2_frames":
         dt = torch.arange(len(frames), device=dt.device) - inputs['ref_pos']
     size = encoder.image_size
-    if frames.shape[-1] != size:
+    if frames.shape[-2:] != (size, size):
         frames = F.interpolate(frames, size=(size, size), mode="bilinear", align_corners=False,
                                antialias=True)
-        masks = F.interpolate(masks[:, None], size=(size, size), mode="area")[:, 0]
-    tokens = encoder.encode(frames[None])[0]
+        masks = F.interpolate(masks[:, None].float(), size=(size, size), mode="area")[:, 0]
+    tokens = encoder.encode(frames[None])
     hw = (size // encoder.patch) ** 2
-    tubelet = 1 if kv_source in {"dinov2_ref", "dinov2_frames"} else 2
-    coverage = token_coverage(masks[None], encoder.patch, tubelet)[0]
-    dt_tok = per_token(dt[None], hw)[0]
-    assert len(tokens) == len(coverage) == len(dt_tok), (tokens.shape, coverage.shape, dt_tok.shape)
-    return tokens, coverage, dt_tok
+    tubelet = encoder.tubelet
+    coverage = token_coverage(masks[None], encoder.patch, tubelet)
+    dt_tok = per_token(dt[None], hw)
+    assert tokens.shape[1] == coverage.shape[1] == dt_tok.shape[1], (tokens.shape, coverage.shape, dt_tok.shape)
+    side = size // encoder.patch
+    yy, xx = torch.meshgrid(torch.linspace(-1, 1, side, device=frames.device),
+                            torch.linspace(-1, 1, side, device=frames.device), indexing="ij")
+    spatial = torch.stack([yy.flatten(), xx.flatten()], dim=-1).repeat(tokens.shape[1] // hw, 1)
+    positions = torch.cat([dt_tok[0, :, None].float(), spatial], dim=-1)[None]
+    return VideoFeatures(tokens=tokens, coverage=coverage, dt=dt_tok, positions=positions,
+                         mask_patches=mask_patch_descriptors(masks, encoder.patch, tubelet)[None])
+
+
+def kv_tokens(encoder: TokenEncoder, inputs: dict[str, torch.Tensor],
+              kv_source: str) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Compatibility view of the shared encoder output for existing callers."""
+    video = encode_video_features(encoder, inputs, kv_source)
+    return video.tokens[0], video.coverage[0], video.dt[0]
+
+
+def pad_feature_batch(samples: list[VideoFeatures]) -> VideoFeatures:
+    from video3d.models.adapter import pad_video_batch
+    from torch.nn.utils.rnn import pad_sequence
+    base = pad_video_batch([s.tokens[0] for s in samples], [s.coverage[0] for s in samples],
+                           [s.dt[0] for s in samples])
+    if any(s.mask_patches is None or s.positions is None for s in samples):
+        raise ValueError("Encoded samples must supply mask geometry and positions")
+    return VideoFeatures(tokens=base["tokens"], coverage=base["coverage"], dt=base["dt"],
+                         padding=base["kv_padding_mask"],
+                         mask_patches=pad_sequence([s.mask_patches[0] for s in samples], batch_first=True),
+                         positions=pad_sequence([s.positions[0] for s in samples], batch_first=True))
 
 
 class FakeEncoder(nn.Module):

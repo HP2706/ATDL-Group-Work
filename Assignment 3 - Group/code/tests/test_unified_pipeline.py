@@ -11,12 +11,12 @@ from video3d.train import train
 from video3d.evaluate import evaluate
 
 
-@pytest.mark.parametrize("strategy", ["fusion", "pooler"])
+@pytest.mark.parametrize("strategy", ["fusion", "pooler", "append_video_mask"])
 @pytest.mark.parametrize("video_lora,sam_lora", [(False,False),(True,False),(False,True),(True,True)])
 def test_shared_trainer_and_resume(fake_root: typing.Any, tmp_path: typing.Any, strategy: str,
                                   video_lora: bool, sam_lora: bool) -> None:
     overrides = {"adapter.strategy":strategy, "train.max_steps":4,
-                 "adapter.pooler_queries":4, "adapter.foreground_threshold":0.01,
+                 "adapter.pooler_queries":4, "adapter.append_queries":4, "adapter.foreground_threshold":0.01,
                  "encoder.vjepa.video_lora":video_lora,"sam3d.lora":sam_lora,
                  "train.ckpt_every":2}
     cfg = fake_train_cfg(fake_root,tmp_path,**overrides)

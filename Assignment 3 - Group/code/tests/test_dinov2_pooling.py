@@ -54,7 +54,7 @@ def test_dinov2_pooler_trains_while_native_backbone_stays_frozen() -> None:
     model = MaskPooler(AdapterConfig(d_vid=32, d_cond=16, heads=4, pooler_queries=4))
     cond = {'rgb':torch.randn(1, 8, 16), 'mask':torch.randn(1, 8, 16),
             'pointmap':torch.randn(1, 8, 16)}
-    result = model.condition(cond, tokens, torch.ones(1, 16), ['rgb'])
+    result = model.pool_condition(cond, tokens, torch.ones(1, 16), ['rgb'])
     result['rgb'].square().mean().backward()
     assert result['rgb'].shape == (1, 4, 16)
     assert result['mask'] is cond['mask'] and result['pointmap'] is cond['pointmap']

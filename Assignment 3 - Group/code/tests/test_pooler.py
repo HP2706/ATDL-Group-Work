@@ -18,25 +18,25 @@ def test_pooler_excludes_background_and_retains_native_non_rgb() -> None:
     tokens=torch.randn(2,4,32,requires_grad=True)
     coverage=torch.tensor([[1.,0,0,0],[1.,1,1,1]])
     cond={'image':torch.randn(2,4,16),'mask':torch.randn(2,4,16),'pointmap':torch.randn(2,8,16)}
-    output=model.condition(cond,tokens,coverage,['image'])
+    output=model.pool_condition(cond,tokens,coverage,['image'])
     assert output['image'].shape==(2,4,16)
     assert torch.equal(output['mask'],cond['mask'])
     assert torch.equal(output['pointmap'],cond['pointmap'])
     changed=tokens.detach().clone()
     changed[0,1:]+=1000
-    assert torch.allclose(output['image'],model.condition(cond,changed,coverage,['image'])['image'])
+    assert torch.allclose(output['image'],model.pool_condition(cond,changed,coverage,['image'])['image'])
     output['image'].square().mean().backward()
     assert model.pooler.query_tokens.grad.abs().sum()>0
     assert tokens.grad[0,0].abs().sum()>0
     assert tokens.grad[0,1:].abs().sum()==0
     with pytest.raises(ValueError,match='No foreground'):
-        model.condition(cond,tokens,torch.zeros_like(coverage),['image'])
+        model.pool_condition(cond,tokens,torch.zeros_like(coverage),['image'])
 
 
 def test_pooler_bfloat16_backward_is_finite() -> None:
     model=MaskPooler(AdapterConfig(d_vid=32,d_cond=16,heads=4,pooler_queries=4))
     with torch.autocast('cpu',dtype=torch.bfloat16):
-        output=model.condition({'image':torch.randn(1,4,16)},torch.randn(1,8,32),torch.ones(1,8),['image'])['image']
+        output=model.pool_condition({'image':torch.randn(1,4,16)},torch.randn(1,8,32),torch.ones(1,8),['image'])['image']
         output.float().square().mean().backward()
     assert torch.isfinite(output).all()
     assert torch.isfinite(model.pooler.query_tokens.grad).all()
@@ -48,7 +48,7 @@ def test_thin_object_uses_best_foreground_token_without_background_or_padding() 
     coverage = torch.tensor([[.49, .2, 0., 1.], [1., .1, 0., 0.]])
     padding = torch.tensor([[False, False, False, True], [False, False, False, False]])
     cond = {'image':torch.randn(2, 4, 16), 'mask':torch.randn(2, 4, 16)}
-    output = model.condition(cond, tokens, coverage, ['image'], padding)
+    output = model.pool_condition(cond, tokens, coverage, ['image'], padding)
     expected = model.projector(model.pooler(tokens[0:1, :1]))
     assert torch.allclose(output['image'][0:1], expected)
     assert torch.equal(output['mask'], cond['mask'])
