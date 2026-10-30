@@ -13,21 +13,28 @@ from video3d.config import config_dict, read_config, replace_config
 from video3d.storage import atomic_json
 
 
-def profile(root: str, batches: tuple[int, ...] = (8, 16, 32), steps: int = 5) -> None:
+def profile(root: str, batches: tuple[int, ...] = (8, 16, 32), steps: int = 5,
+            resume: bool = False, attempt: str = "") -> None:
     folder = Path(root)
     matrix = json.loads((folder/'matrix.json').read_text())
-    reports: dict[str, Any] = {}
+    progress = folder/'profiles/progress.json'
+    reports: dict[str, Any] = json.loads(progress.read_text()) if resume and progress.exists() else {}
+    suffix = f'-{attempt}' if attempt else '' 
     for entry in matrix['entries']:
         if entry['baseline']:
             continue
         cfg = read_config(entry['config'])
+        if entry['name'] in reports:
+            if reports[entry['name']]['selected']['batch_size'] != cfg.train.batch_size:
+                raise ValueError('Completed profile differs from resolved batch size')
+            continue
         candidates: list[dict[str, Any]] = []
         for batch in batches:
             candidate = replace_config(cfg, **{
-                'run_name':f'{cfg.run_name}-profile-b{batch}', 'train.batch_size':batch,
+                'run_name':f'{cfg.run_name}-profile-b{batch}{suffix}', 'train.batch_size':batch,
                 'train.benchmark_steps':steps, 'train.max_seconds':300,
                 'logging.wandb':False, 'data.num_workers':2})
-            path = folder/'profiles'/f'{entry["name"]}-b{batch}.json'
+            path = folder/'profiles'/f'{entry["name"]}-b{batch}{suffix}.json'
             atomic_json(path, config_dict(candidate))
             log = path.with_suffix('.log')
             with log.open('w') as output:

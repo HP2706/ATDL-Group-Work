@@ -64,3 +64,8 @@ behavior. Epoch checkpoints are all retained for separately evaluating exact
 epochs. This recipe does not silently substitute an epoch-10 checkpoint for the
 selected checkpoint, add per-epoch full GSO exports, or claim mesh refinement:
 its existing trained-model output is Stage-1 latent/voxel geometry.
+
+Thin objects with no token above the configured foreground threshold retain their
+most-covered positive-coverage token(s). Background and padding stay excluded;
+a genuinely empty foreground still fails. Profiling can resume completed variants
+with `--resume=True --attempt=recovery1`, preserving prior attempt logs.

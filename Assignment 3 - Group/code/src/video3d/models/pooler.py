@@ -19,11 +19,17 @@ class MaskPooler(nn.Module):
     def condition(self, cond: dict[str, torch.Tensor], tokens: torch.Tensor,
                   coverage: torch.Tensor, query_sets: list[str],
                   padding: torch.Tensor | None = None) -> dict[str, torch.Tensor]:
-        selected = coverage >= self.threshold
+        foreground = coverage > 0
         if padding is not None:
-            selected = selected & ~padding
-        if not selected.any(dim=1).all():
+            foreground = foreground & ~padding
+        if not foreground.any(dim=1).all():
             raise ValueError("No foreground tubelet passes the configured threshold")
+        selected = (coverage >= self.threshold) & foreground
+        # Thin objects can cover less than half of every patch. Keep their most
+        # foreground-covered tubelet(s), never background or padded tokens.
+        best_coverage = coverage.masked_fill(~foreground, -1).amax(dim=1, keepdim=True)
+        fallback = foreground & (coverage == best_coverage)
+        selected = selected | (~selected.any(dim=1, keepdim=True) & fallback)
         pooled = torch.cat([self.pooler(tokens[i:i + 1, mask])
                             for i, mask in enumerate(selected)], dim=0)
         projected = self.projector(pooled)
