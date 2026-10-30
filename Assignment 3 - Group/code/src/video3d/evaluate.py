@@ -189,6 +189,7 @@ def evaluate(cfg: ExperimentConfig, run: str, k: int | None = None, shuffle: boo
                   **({"video_from": info["video_from"]} if "video_from" in info else {}),
                   **extra, **metrics}
         record = EvaluationRecord.model_validate(record).model_dump()
+        logger.log_evaluation(record, len(records) + n)
         from video3d.storage import atomic_torch
         atomic_torch(output_dir / "predictions" / label / (sample_id(info).replace("/", "-") + ".pt"),
                      {"sample_id": sample_id(info), "latent": z[0].float().cpu(),
@@ -202,6 +203,7 @@ def evaluate(cfg: ExperimentConfig, run: str, k: int | None = None, shuffle: boo
             log.info("%s: %d / %d", label, len(records) + n, len(ds))
     copy_to_output(local, output_dir)
     log.info("wrote %s", final)
+    logger.finish_evaluation(read_jsonl(final), output_dir, label, len(ds))
     logger.finish()
     return final
 
