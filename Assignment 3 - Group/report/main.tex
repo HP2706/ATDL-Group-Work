@@ -83,6 +83,11 @@ Here $A\in\{0,\ldots,63\}^{N\times3}$ is derived from positive occupancy logits,
 
 
 
+MV-SAM3D~\cite{mvsam3d} extends frozen SAM 3D to multiple views through diffusion in a shared 3D latent space.
+Concretely it accomplishes this in a training free way by combining view-conditioned predictions using adaptive attention-entropy or visibility-based weights, allowing complementary observations to guide reconstruction without additional training.
+
+Stream3D~\cite{stream3d} extends frozen view-conditioned generators to sequential observations. It maintains a bounded evidential memory of informative views and selects a conditioning bundle as new frames arrive. This bounds retained context over long sequences while allowing reconstruction to incorporate observations beyond the current frame. In contrast, our approach learns to aggregate video evidence into the conditioning sequence before flow sampling.
+
 
 \section{Method}
 \begin{figure*}[t]
@@ -137,25 +142,73 @@ $C_{'rgb}$ todo
 
 
 
-Both V-JEPA. They select encoder tokens whose object coverage is at least $0.5$, falling back to the most covered foreground tokens when none meet this threshold. A one-layer attentive pooler uses $64$ learned queries to summarize the selected features:
+The video-pooling architecture uses a one-layer transformer attentive pooler with $64$ learned queries. Before pooling, we select V-JEPA tokens whose corresponding $2\times16\times16$ tubelets contain at least $50\%$ target-object pixels, measured from the aligned frame masks. If none qualify, we retain the foreground tokens with the highest coverage. This selection focuses pooling on the target object.
 \begin{equation}
 \begin{aligned}
     H_V &= \operatorname{Pool}_{\theta_A}(V_{G,\mathrm{obj}})
-        \in\mathbb{R}^{64\times d_v},\\
+        \in\mathbb{R}^{64\times1024},\\
     C_{\mathrm{rgb}}' &= H_VW+b\in\mathbb{R}^{64\times1024}.
 \end{aligned}
 \end{equation}
-This mapping uses $V_G$ to replace $C_{\mathrm{rgb}}$ rather than querying with its original values. The resulting $64$ tokens replace both native RGB streams. Consequently, the complete conditioning sequence has length $N_c-N_{\mathrm{rgb}}+64$, whereas gated fusion preserves $N_c$. In both cases, additional frames increase the encoder evidence without appending their tokens to SAM 3D's conditioning sequence.
+The resulting tokens replace both native RGB conditioning streams, while the mask and optional point-map streams are retained. The pooler therefore produces a fixed-size conditioning representation regardless of the number of selected video tokens.
 
 \section{Experimental Setup}
 \subsection{Synthetic Dataset and Splits}
+
+We train on the full 10,000-clip synthetic export. The asset-disjoint split yields 20,716 training clip-object samples and 1,306 validation reference samples, with no shared target assets or clips between these partitions.
+
+\subsection{GSO Evaluation Dataset}
+
+We evaluate on Google Scanned Objects (GSO)~\cite{gso}, using scanned object meshes as ground-truth geometry and rendered views with known camera poses as inputs. We choose GSO because its reference geometry enables quantitative reconstruction evaluation, while controlled camera poses let us measure the contribution of additional views. It is also used by MV-SAM3D~\cite{mvsam3d}, which follows an established multi-view single-object evaluation protocol, and Stream3D~\cite{stream3d}, which uses posed streams to measure geometric and appearance fidelity as observations accumulate. This provides a common dataset for comparison, although our object selection and input budgets differ from the published protocols.
+
+The baseline evaluation uses a fixed, seed-42 selection of 250 objects, each with 32 rendered views and corresponding object masks. Trained-model evaluations use a fixed 200-object subset. Registered cameras allow us to distinguish surfaces visible in the reference view, surfaces revealed by additional views, and surfaces unobserved across the input sequence. Because the renders depict isolated objects, these partitions measure self-occlusion and additional-view coverage rather than occlusion by other objects.
+
 \subsection{Single-Image and Multi-View Baselines}
-\subsection{Visibility Regions and Evaluation Metrics}
+
+We compare our models against pretrained SAM 3D~\cite{sam3d}, MV-SAM3D~\cite{mvsam3d}, and Stream3D~\cite{stream3d}, introduced in Related Work. All three baselines use the same fixed GSO selection and matched per-object generation seeds. Native SAM 3D receives the reference image and mask, while MV-SAM3D and Stream3D receive four fixed views at positions $0,10,21,31$ with their corresponding masks. Both generative stages use 25 flow steps. Our video-conditioned models receive 16 frames; we report the differing input budgets explicitly and restrict direct comparisons to shared evaluation objects. The multi-view integrations use MoGe point maps; our Stream3D implementation uses the token-vote variant, reuses its first-stage view selection during refinement, and omits the separate second-stage selector and diversity re-ranking.
+
+To control for improvements from dataset-specific adaptation, we also fine-tune SAM 3D using native single-image conditioning and the same rank-8 shape cross-attention LoRA. This control receives one randomly sampled eligible frame and its object mask per training example, with no video encoder or conditioning adapter. It uses the same optimizer, learning-rate schedule, effective batch size, and training duration as the video-conditioned SAM LoRA models.
+
+\subsection{Evaluation Protocols}
+
+We separate coarse-geometry evaluation from full reconstruction evaluation. The quick protocol uses four-step shortcut sampling and evaluates the generated $64^3$ occupancy grids. The full protocol uses 25 flow steps for geometry generation and a further 25 steps for texture and refinement. Coarse predictions are evaluated using voxel IoU, surface Chamfer distance, F-score, and visibility-region completeness. Refined meshes are evaluated using bidirectional sampled point-to-surface distances, F-scores, and normal consistency. We distinguish measurements before and after similarity alignment and report reconstruction time and peak memory alongside geometric accuracy.
+
 \subsection{Training Settings}
 
+We train the fusion adapter or attentive pooler and projection, optionally together with SAM 3D LoRA parameters. The video encoder and original SAM 3D parameters remain frozen. Training supervises the coarse shape latent using rectified flow-matching MSE; layout prediction is not supervised. SAM LoRA is applied to the shape stream's cross-attention query, key/value, and output projections. Table~\ref{tab:training-settings} summarizes the shared settings. The image-only control uses one sampled frame in place of the video input.
+
+\begin{table}[t]
+\centering
+\small
+\caption{Shared training settings. LoRA settings apply only to variants with SAM 3D adaptation enabled.}
+\label{tab:training-settings}
+\begin{tabular}{@{}p{0.39\columnwidth}p{0.55\columnwidth}@{}}
+\toprule
+Setting & Value \\
+\midrule
+Training duration & 5 epochs; 3,240 updates \\
+Updates per epoch & 648 \\
+Optimizer & AdamW \\
+Peak learning rate & $10^{-4}$ \\
+Adam coefficients & $(\beta_1,\beta_2)=(0.9,0.999)$ \\
+Weight decay & $0.01$; exclusions described below \\
+Learning-rate schedule & 162 linear warmup updates, then cosine decay to $10^{-6}$ \\
+Physical/effective batch & 32 / 32 \\
+Gradient clipping & Global norm $1.0$ \\
+EMA decay & $0.99$ \\
+Model precision & BF16 \\
+Video input & 16 object-cropped frames, $256\times256$ pixels \\
+Video encoder & Frozen V-JEPA 2.1 ViT-L/16, final-layer features \\
+SAM LoRA & Rank $r=8$, scaling $\alpha=8$ \\
+Quick geometry sampling & 4 shortcut steps; no classifier-free guidance \\
+Random seed & 42 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Adapter biases, normalization parameters, group/time embeddings, and gates are excluded from weight decay. Flow times are sampled as $\tau=\operatorname{sigmoid}(u)$ with $u\sim\mathcal{N}(0,1)$. EMA weights are used for checkpoint evaluation.
+
 \section{Results}
-\subsection{Reconstruction Quality}
-\subsection{Qualitative Examples}
 \subsection{Ablation Studies}
 
 \section{Discussion and Conclusion}
@@ -168,6 +221,8 @@ A potential weakness of our training data is insufficient occlusion to encourage
 
 \subsection{Hypothesis Assessment}
 \subsection{Limitations and Future Work}
+
+Hard foreground selection may discard useful boundary and scene-context features; an alternative is to pool all video tokens while supplying object coverage as an additional embedding.
 
 \clearpage
 \IfFileExists{ISBI_template-master/IEEEbib.bst}{%
