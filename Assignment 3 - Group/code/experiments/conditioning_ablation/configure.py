@@ -22,7 +22,7 @@ from video3d.storage import atomic_json
 class Variant(BaseModel):
     model_config = ConfigDict(extra='forbid')
     name: str
-    strategy: Literal["fusion", "pooler"]
+    strategy: Literal["fusion", "pooler", "native"]
     sam_lora: bool
     video_lora: bool
     baseline: bool = False
@@ -36,10 +36,16 @@ def variants() -> list[Variant]:
 def variant_config(base: ExperimentConfig, variant: Variant, run_name: str) -> ExperimentConfig:
     """Only these three model switches differ; all image/video preprocessing stays matched."""
     width = 1024 if variant.encoder == 'dinov2_frames' and not base.fake_sam3d else base.adapter.d_vid
-    return replace_config(base, **{'run_name': run_name, 'condition': variant.name,
+    cfg = replace_config(base, **{'run_name': run_name, 'condition': variant.name,
         'adapter.strategy': variant.strategy, 'encoder.kv_source': variant.encoder,
         'adapter.d_vid':width, 'sam3d.lora': variant.sam_lora,
         'encoder.vjepa.video_lora': variant.video_lora})
+    if variant.strategy == 'native':
+        if not variant.sam_lora or variant.video_lora:
+            raise ValueError('Native fine-tuning requires SAM LoRA and no video LoRA')
+        cfg = replace_config(cfg, **{'data.clip_lengths':[1], 'data.clip_length_probs':[1.],
+                                     'data.p_occluded_bias':0.})
+    return cfg
 
 
 def audited_snapshot(source: Path, destination: Path, expected: int) -> dict[str, Any]:

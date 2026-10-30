@@ -74,3 +74,15 @@ canonical IoU, falling back to `latest.json`. All epoch checkpoints remain
 available. The trained-model evaluator produces Stage-1 latent/voxel geometry;
 it does not claim refined-mesh metrics. Its coarse voxel-surface Chamfer protocol
 is explicitly distinct from the prior 250-object refined-mesh baseline results.
+
+## Native SAM random-frame fine-tuning control
+
+`sam3d-random-frame-lora` uses native SAM image/mask conditioning and trains only
+SAM shape cross-attention LoRA, with the same rank and optimizer as the video
+LoRA comparisons. No video encoder or conditioning adapter is instantiated.
+The existing synthetic sampler selects a uniformly random eligible reference
+frame from its randomly offset temporal subset, independently for each epoch.
+Occlusion-biased sampling is disabled; only that one frame is decoded. The
+existing visibility filter excludes frames where the target is not visible.
+Validation and final evaluation retain the fixed reference-frame protocol.
+The maintained trainer, checkpoint/EMA handling, and evaluator are reused.

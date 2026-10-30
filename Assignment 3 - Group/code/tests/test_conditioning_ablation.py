@@ -23,17 +23,18 @@ from video3d.utils import read_jsonl
 
 def test_matrix_changes_only_model_switches() -> None:
     matrix = variants()
-    assert len(matrix) == len({row.name for row in matrix}) == 6
+    assert len(matrix) == len({row.name for row in matrix}) == 7
     learned = [row for row in matrix if not row.baseline]
     assert [row.name for row in matrix] == ['fusion-frozen', 'fusion-sam-lora', 'sam3d-baseline',
-                                              'pooler-frozen', 'pooler-sam-lora', 'dinov2-pooler']
+                                              'pooler-frozen', 'pooler-sam-lora', 'dinov2-pooler', 'sam3d-random-frame-lora']
     assert all(not row.video_lora for row in matrix)
     assert sum(row.encoder == 'dinov2_frames' for row in learned) == 1
     base = load_config('c3')
     for row in matrix:
         cfg = variant_config(base, row, row.name)
         assert cfg.encoder.kv_source == row.encoder
-        assert cfg.data == base.data
+        if row.strategy != "native":
+            assert cfg.data == base.data
         assert cfg.sampler == base.sampler
         assert cfg.sam3d.lora == row.sam_lora
         assert cfg.encoder.vjepa.video_lora == row.video_lora
@@ -109,7 +110,7 @@ def test_resolve_full_matrix_and_foreground_launcher(tmp_path: Path) -> None:
     manifest = Path(configure(str(base), str(root), str(omni), str(gso), expected_objects=2))
     matrix = json.loads(manifest.read_text())
     assert matrix['train_objects'] == matrix['validation_objects'] == 1
-    assert len(matrix['entries']) == 6
+    assert len(matrix['entries']) == 7
     for entry in matrix['entries']:
         cfg = json.loads(Path(entry['config']).read_text())
         assert cfg['data']['frames'] == 16 and cfg['encoder']['kv_source'] in {'vjepa','dinov2_frames'}

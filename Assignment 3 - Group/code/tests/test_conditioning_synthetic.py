@@ -47,7 +47,8 @@ def test_full_synthetic_matrix_uses_asset_split_and_actual_samples(tmp_path: Pat
         resolved = read_config(entry['config'])
         assert resolved.data.source == 'synthetic' and resolved.seed == 42
         assert resolved.train.epochs == 5
-        assert resolved.data.clip_lengths == [16] and resolved.data.clip_length_probs == [1.]
+        assert resolved.data.clip_lengths == ([1] if entry["strategy"] == "native" else [16])
+        assert resolved.data.clip_length_probs == [1.]
         assert len(ClipDataset(resolved, 'train', True)) == matrix['train_samples']
         assert len(ClipDataset(resolved, 'val', False)) == matrix['validation_samples']
         evaluation = read_config(entry['evaluation'])

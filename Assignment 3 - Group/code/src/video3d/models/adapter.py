@@ -68,8 +68,17 @@ class VideoFusionAdapter(nn.Module):
                 for i, blk in enumerate(self.blocks) for name, value in (("g_attn", blk.g_attn), ("g_ff", blk.g_ff))}
 
 
-def build_adapter(cfg: AdapterConfig) -> VideoFusionAdapter:
+class NativeConditioning(nn.Identity):
+    """Parameter-free checkpoint placeholder for native SAM conditioning."""
+
+    def gates(self) -> dict[str, float]:
+        return {}
+
+
+def build_adapter(cfg: AdapterConfig) -> nn.Module:
     """Construct the adapter from the `adapter` config section."""
+    if cfg.strategy == "native":
+        return NativeConditioning()
     if cfg.strategy == "pooler":
         from video3d.models.pooler import MaskPooler
         return MaskPooler(cfg)

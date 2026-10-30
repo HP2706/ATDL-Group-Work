@@ -36,5 +36,11 @@
     "sam_lora": false,
     "video_lora": false,
     "encoder": "dinov2_frames"
+  },
+  {
+    "name": "sam3d-random-frame-lora",
+    "strategy": "native",
+    "sam_lora": true,
+    "video_lora": false
   }
 ]

@@ -157,6 +157,8 @@ class DinoEncoder(nn.Module):
 
 def build_kv_encoder(cfg: ExperimentConfig, sam3d: nn.Module, device: torch.device) -> nn.Module:
     """The frozen key/value encoder for cfg.encoder.kv_source (fake with cfg.fake_sam3d)."""
+    if cfg.adapter.strategy == 'native':
+        return nn.Identity().to(device)
     source = cfg.encoder.kv_source
     if cfg.fake_sam3d:
         encoder = FakeEncoder(cfg.adapter.d_vid, cfg.data.crop.size,

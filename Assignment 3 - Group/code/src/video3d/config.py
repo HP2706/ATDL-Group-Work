@@ -303,8 +303,10 @@ def load_config(condition: str | None = None, env: str | None = None,
     cfg = blueprint.apply_from_argv([f"{k}={v}" for k, v in text_values.items()]).make()
     if "run_name" not in text_values:
         cfg = chz.replace(cfg, run_name=f"{name}_seed{cfg.seed}-" + datetime.now().strftime("%Y-%m-%d-%H-%M-%S"))
-    if cfg.adapter.strategy not in {"fusion", "pooler"}:
-        raise ValueError("adapter.strategy must be fusion or pooler")
+    if cfg.adapter.strategy not in {"fusion", "pooler", "native"}:
+        raise ValueError("adapter.strategy must be fusion, pooler or native")
+    if cfg.adapter.strategy == 'native' and cfg.encoder.vjepa.video_lora:
+        raise ValueError('Native conditioning does not use a video encoder')
     if cfg.train.batch_size <= 0 or cfg.train.effective_batch_size <= 0 or cfg.train.effective_batch_size % cfg.train.batch_size:
         raise ValueError("effective_batch_size must be a positive multiple of batch_size")
     if cfg.train.max_steps <= 0 or cfg.train.max_seconds <= 0 or cfg.optim.lr <= 0:
