@@ -221,11 +221,44 @@ checkpoints and recovery checkpoints every 50 updates preserve full optimizer,
 scheduler, EMA, RNG, progress and provenance. Evaluation must not be reported as
 completed training if a wall-time stop leaves fewer than 3,240 updates.
 
-Vision-encoder fine-tuning is removed from the requested next matrix. Fusion
-variants have first priority, followed by native SAM 3D; attention-pooling
-alternatives are backup runs and must be submitted last. DINOv2 and DINOv3 token
-pooling are requested in addition to direct video-encoder pooling. The exact
-seven-model lineup is awaiting confirmation because the newly enumerated list
-sums to six without a separate DINOv3 variant. No revised model job has been
-submitted at this entry. A bounded real-B200 check of training, checkpoint resume,
-Chamfer validation and W&B evaluation logging must pass before model fan-out.
+Vision-encoder fine-tuning is removed from the next matrix. The confirmed launch
+order contains **six jobs**, with the pooling alternatives submitted last:
+
+| Submission order | Run | Encoder | SAM 3D training |
+|---|---|---|---|
+| 1 | Fusion adapter | Frozen V-JEPA | Frozen |
+| 2 | Fusion adapter + SAM LoRA | Frozen V-JEPA | LoRA |
+| 3 | Native SAM 3D baseline | Native single-image conditioning | Frozen |
+| 4 | Attention token pooling | Frozen V-JEPA | Frozen |
+| 5 | Attention token pooling + SAM LoRA | Frozen V-JEPA | LoRA |
+| 6 | Attention token pooling | Frozen DINOv2, all 16 frames | Frozen |
+
+DINOv3 is explicitly excluded. DINOv2 pooling reuses SAM 3D's installed frozen
+DINOv2 ViT-L/14 backbone and the existing attentive pooler; no second inference
+pipeline is introduced. DINOv2 uses 224-pixel inputs, 14-pixel patches and
+1,024-wide per-frame patch tokens, with CLS/register tokens excluded. The
+V-JEPA configs retain their native video token dimensions and tubelet handling.
+All variants use the same 16 selected video frames and retain native SAM mask
+and pointmap conditioning. Pooling replaces selected native RGB tokens.
+
+A bounded real-B200 check of training, checkpoint resume, Chamfer validation,
+and W&B evaluation logging must pass before model fan-out. At this entry the
+revised six jobs have not yet been submitted. Final job IDs and GPU verification
+will be reconciled here after provider acceptance.
+
+The launch is further prioritized: submit jobs 1–5 immediately after the shared
+GPU check; DINOv2 pooling is delegated as a separate sixth job and must not delay
+them. The native full-q98 GPU check completed five optimizer updates, restored
+step 1 to step 5, and scored two held-out objects with finite Chamfer/F-scores
+and no empty predictions. Its saved-output assertion initially used an unpadded
+filename; the persisted file was correctly named `step-00000005.json`. The check
+was corrected and a one-hour native GPU retry reuses the existing targets and
+checkpoint to verify evaluation and W&B logging. These five-update metrics are
+execution diagnostics, not final trained-model comparisons.
+
+DINOv2 pooling contract tests verify all-frame patch ordering and foreground
+coverage, exclusion of CLS/register tokens, frozen backbone gradients and a
+trainable pooler/projector while retaining native conditioning. Its independent
+frame encoding followed by pooling has no additional temporal position signal;
+V-JEPA pooling receives temporally contextualized video embeddings. This
+architectural distinction is not evidence of a performance difference.

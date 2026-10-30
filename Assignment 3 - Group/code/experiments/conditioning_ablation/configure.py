@@ -26,6 +26,7 @@ class Variant(BaseModel):
     sam_lora: bool
     video_lora: bool
     baseline: bool = False
+    encoder: Literal["vjepa", "dinov2_frames"] = "vjepa"
 
 
 def variants() -> list[Variant]:
@@ -34,9 +35,11 @@ def variants() -> list[Variant]:
 
 def variant_config(base: ExperimentConfig, variant: Variant, run_name: str) -> ExperimentConfig:
     """Only these three model switches differ; all image/video preprocessing stays matched."""
+    width = 1024 if variant.encoder == 'dinov2_frames' and not base.fake_sam3d else base.adapter.d_vid
     return replace_config(base, **{'run_name': run_name, 'condition': variant.name,
-        'adapter.strategy': variant.strategy, 'encoder.kv_source': 'vjepa',
-        'sam3d.lora': variant.sam_lora, 'encoder.vjepa.video_lora': variant.video_lora})
+        'adapter.strategy': variant.strategy, 'encoder.kv_source': variant.encoder,
+        'adapter.d_vid':width, 'sam3d.lora': variant.sam_lora,
+        'encoder.vjepa.video_lora': variant.video_lora})
 
 
 def audited_snapshot(source: Path, destination: Path, expected: int) -> dict[str, Any]:
@@ -173,7 +176,7 @@ def configure(base_config: str, output: str, omni_root: str = '', gso_root: str 
         'evaluation_objects':evaluation_objects,
         'epochs':epochs, 'steps_per_epoch':steps,
         'effective_batch':32, 'entries':entries,
-        'protocol':'16 matched frames; existing native mask/pointmap conditioning; no DINO video encoder'})
+        'protocol':'16 matched frames; frozen V-JEPA or DINOv2 frame encoder; native mask/pointmap conditioning'})
     return str(root/'matrix.json')
 
 

@@ -65,7 +65,7 @@ def profile(root: str, batches: tuple[int, ...] = (8, 16, 32), steps: int = 5,
         reports[entry['name']] = {'candidates':candidates, 'selected':selected,
             'accumulation_steps':cfg.train.effective_batch_size//selected['batch_size'],
             'stopped_at':'OOM or effective-batch ceiling 32'}
-        atomic_json(folder/'profiles/progress.json', reports)
+        atomic_json(progress, reports)
     ready = folder/'profiles'/f'{only}-ready.json' if only else folder/'profiles-ready.json'
     atomic_json(ready, reports)
 

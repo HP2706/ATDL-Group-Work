@@ -23,15 +23,16 @@ from video3d.utils import read_jsonl
 
 def test_matrix_changes_only_model_switches() -> None:
     matrix = variants()
-    assert len(matrix) == len({row.name for row in matrix}) == 7
+    assert len(matrix) == len({row.name for row in matrix}) == 6
     learned = [row for row in matrix if not row.baseline]
-    assert {(row.strategy, row.sam_lora, row.video_lora) for row in learned} == {
-        (strategy, sam, video) for strategy in ['fusion', 'pooler']
-        for sam, video in [(False, False), (True, False), (True, True)]}
+    assert [row.name for row in matrix] == ['fusion-frozen', 'fusion-sam-lora', 'sam3d-baseline',
+                                              'pooler-frozen', 'pooler-sam-lora', 'dinov2-pooler']
+    assert all(not row.video_lora for row in matrix)
+    assert sum(row.encoder == 'dinov2_frames' for row in learned) == 1
     base = load_config('c3')
     for row in matrix:
         cfg = variant_config(base, row, row.name)
-        assert cfg.encoder.kv_source == 'vjepa'
+        assert cfg.encoder.kv_source == row.encoder
         assert cfg.data == base.data
         assert cfg.sampler == base.sampler
         assert cfg.sam3d.lora == row.sam_lora
@@ -50,7 +51,7 @@ def test_snapshot_requires_full_audited_dataset(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize('variant', [row for row in variants() if not row.baseline], ids=lambda row: row.name)
-def test_all_six_train_resume_and_evaluate(tmp_path: Path, variant: Variant) -> None:
+def test_all_trainable_variants_train_resume_and_evaluate(tmp_path: Path, variant: Variant) -> None:
     omni, gso = tmp_path/'omni', tmp_path/'gso'
     fixture_dataset(omni, 'omniobject3d')
     fixture_dataset(gso, 'gso')
@@ -82,7 +83,7 @@ def test_all_six_train_resume_and_evaluate(tmp_path: Path, variant: Variant) -> 
     if variant.name == 'fusion-frozen':
         baseline = read_jsonl(evaluate(eval_cfg, 'zero-shot'))
         assert len(baseline) == 1 and baseline[0]['condition'] == 'c0'
-    assert json.loads((run/'config.json').read_text())['encoder']['kv_source'] == 'vjepa'
+    assert json.loads((run/'config.json').read_text())['encoder']['kv_source'] == variant.encoder
     assert config_dict(cfg)['adapter']['strategy'] == variant.strategy
 
 
@@ -108,10 +109,10 @@ def test_resolve_full_matrix_and_foreground_launcher(tmp_path: Path) -> None:
     manifest = Path(configure(str(base), str(root), str(omni), str(gso), expected_objects=2))
     matrix = json.loads(manifest.read_text())
     assert matrix['train_objects'] == matrix['validation_objects'] == 1
-    assert len(matrix['entries']) == 7
+    assert len(matrix['entries']) == 6
     for entry in matrix['entries']:
         cfg = json.loads(Path(entry['config']).read_text())
-        assert cfg['data']['frames'] == 16 and cfg['encoder']['kv_source'] == 'vjepa'
+        assert cfg['data']['frames'] == 16 and cfg['encoder']['kv_source'] in {'vjepa','dinov2_frames'}
         assert cfg['train']['epochs'] == 10 and cfg['logging']['wandb']
     with pytest.raises(ValueError, match='immutable'):
         configure(str(base), str(root), str(omni), str(gso), expected_objects=2)
@@ -147,6 +148,9 @@ def test_batch_profiling_preserves_effective_batch_and_model(tmp_path: Path, onl
     profile(str(tmp_path), batches=(1,2), steps=2, only=only)
     ready = tmp_path/'profiles/profile-test-ready.json' if only else tmp_path/'profiles-ready.json'
     report = json.loads(ready.read_text())['profile-test']
+    if only:
+        assert (tmp_path/'profiles/profile-test-progress.json').exists()
+        assert not (tmp_path/'profiles/progress.json').exists()
     assert len(report['candidates']) == 2
     assert report['selected']['batch_size'] in [1,2]
     resolved = read_config(train_path)

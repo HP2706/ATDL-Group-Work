@@ -1,104 +1,76 @@
-# Does replacing reference RGB conditioning improve video-to-3D learning?
+# Does video conditioning improve SAM 3D geometry?
 
-Six trainable configurations share the existing `video3d.train` and
-`video3d.evaluate` paths. A seventh configuration runs frozen native SAM 3D.
-No DINO video encoder and no model-specific training loop are introduced.
+The current experiment uses the maintained trainer and evaluator with five
+trainable configurations and a frozen native SAM 3D baseline. Submit these six
+separate jobs in this order:
 
-`variants.json` is the complete matrix: fusion or V-JEPA token replacement pooling,
-each with connector-only, SAM LoRA, or SAM + V-JEPA LoRA. The native baseline has
-no LoRA. Both strategies inherit identical preprocessing, dimensions, clip length
-and sampler settings from the base configuration, overriding only the three model
-switches. Pooling replaces the selected native RGB token sets; SAM mask/pointmap
-conditioning remains native.
+| Order | Model | Vision encoder | SAM 3D |
+|---|---|---|---|
+| 1 | Fusion adapter | Frozen V-JEPA | Frozen |
+| 2 | Fusion adapter + SAM LoRA | Frozen V-JEPA | LoRA |
+| 3 | Native SAM 3D baseline | Native reference image | Frozen |
+| 4 | Attention token pooling | Frozen V-JEPA | Frozen |
+| 5 | Attention token pooling + SAM LoRA | Frozen V-JEPA | LoRA |
+| 6 | Attention token pooling | Frozen DINOv2 frames | Frozen |
 
-Run `configure.py` with the existing prepared smoke config as the base, the FULL
-audited Omni root, and the already frozen 250-object GSO root. The default requires
-at least 6,000 audited Omni records and a nonempty object-disjoint train/val split.
-The script rejects the current nine-object pilot or 100-object smoke dataset.
-No models or datasets are downloaded by configuration generation.
+The last three are backup approaches. There is no DINOv3 or vision-encoder
+fine-tuning in this matrix. `variants.json` defines the exact order.
 
-```bash
-python experiments/conditioning_ablation/configure.py \
-  --base_config=/persistent/smoke/train-config/config.json \
-  --output=/persistent/conditioning-<timestamp> \
-  --omni_root=/persistent/omniobject3d --gso_root=/persistent/gso-250
-```
+All adapted models receive the same 16 frames. DINOv2 reuses SAM 3D's installed
+ViT-L/14 backbone at its native 224-pixel size and 1,024-wide per-frame patch
+tokens, excluding CLS/register tokens. The attentive pooler and projection are
+shared with V-JEPA pooling. Both replace the selected native RGB token sets;
+native mask/pointmap conditioning remains. Thin objects with no token above the
+foreground threshold retain the most-covered positive-coverage token(s), while
+background and padding remain excluded. Empty foreground still raises an error.
 
-The output holds immutable copied manifests and references to shared
-assets, seven chz-resolved training configurations, seven GSO evaluation
-configurations, and a matrix manifest. Training is ten epochs, seed 42, effective
-batch 32, initial physical batch 8. The preparation GPU runs `profile.py` for each configuration at batches 8/16/32
-before finalizing physical batch; accumulation preserves effective batch. Optimizer is
-AdamW, LR 1e-4 with 5% warmup, EMA decay .99, BF16. Video inputs and image sizes
-are inherited unchanged from the base config so the comparison isolates models.
-LoRA rank/alpha and connector dimensions are likewise inherited.
-
-The existing trainer evaluates fixed validation loss and canonical IoU panels
-(up to 50 Omni validation objects) each epoch. It already saves `epoch_NN.pt`
-before those evaluations, with a resumable recovery checkpoint every 50 updates
-and at completion. Epoch reconstruction previews stay disabled because that
-helper currently targets synthetic clips. No changes to train.py/evaluate.py
-are needed to train or evaluate these six model combinations.
-
-Resolved configurations are finalized before training after profiling; candidate
-configs and measurements remain under `profiles/`. The effective batch stays 32.
-
-Use one foreground UCloud batch invocation of `run.sh ROOT prepare-targets PYTHON`
-to cache native GT latents once for train/val/GSO, followed by
-`profile.py ROOT` in that same allocation before fan-out. Then launch seven separate
-foreground batch invocations of `run.sh ROOT VARIANT PYTHON`; the six training
-jobs require the completed targets marker and run training followed by final
-GSO geometry evaluation. Provider allocation exit must release each GPU. Use a
-provider wall limit exceeding the configured ten-hour training fallback by the
-bounded evaluation allowance. Logs and exit JSON persist outside the checkout.
-
-W&B is enabled in the resolved configs using the base config's existing project
-and entity. Credentials are inherited at launch, never embedded in configs.
-No Hugging Face publication is configured. Record the source commit and exact
-resolved configs with the job payloads. For a full research run, finalize batching
-and record measured trainable parameter counts in the same allocation first.
-
-The existing evaluator prefers `best.pt` (validation canonical IoU), falling back
-to `latest.json`; this final evaluator invocation follows that established
-behavior. Epoch checkpoints are all retained for separately evaluating exact
-epochs. This recipe does not silently substitute an epoch-10 checkpoint for the
-selected checkpoint, add per-epoch full GSO exports, or claim mesh refinement:
-its existing trained-model output is Stage-1 latent/voxel geometry.
-
-Thin objects with no token above the configured foreground threshold retain their
-most-covered positive-coverage token(s). Background and padding stay excluded;
-a genuinely empty foreground still fails. Profiling can resume completed variants
-with `--resume=True --attempt=recovery1`, preserving prior attempt logs.
-
-## Full synthetic training export
-
-The same resolver accepts `--synthetic_root=/persistent/snapshot/full-q98`
-instead of `--omni_root`. It requires 10,000 clips by default and reuses
-`ClipDataset` and its existing asset-disjoint split. By default, 3% of assets
-are selected by the existing stable hash for validation; every clip containing
-one of those assets is excluded from training. Only held-out assets are targets
-in validation clips. Set `--synthetic_val_asset_frac` to change this fraction.
-The original export and shards remain intact and are linked into the run.
-
-`data/synthetic/split.json` records the exact asset lists, clip/target assignments,
-and actual sample counts. Epoch steps use training clip-object pairs, matching
-the trainer, rather than counting clips or unique assets. Validation sample
-counts include the existing deterministic reference-frame choices. The synthetic
-recipe fixes clip length at 16 frames to match this experiment's model comparison;
-all other image/video preprocessing is inherited from the base configuration.
-The frozen 250-object GSO evaluation source and seven-model matrix are retained.
-`--evaluation_objects=200` freezes its first 200 manifest entries in the run,
-so every model and resumed evaluation uses exactly the same bounded selection.
-The source manifest remains unchanged.
+The current training export is the full 10,000-clip full-q98 synthetic dataset.
+The existing asset split produces 20,716 training clip-object samples and 1,306
+validation reference samples with no shared target assets or clips. Five epochs
+at effective batch 32 require 648 updates per epoch, 3,240 in total. Use the
+resolver with explicit parameters:
 
 ```bash
 python experiments/conditioning_ablation/configure.py \
-  --base_config=/persistent/prior/configs/fusion-frozen.json \
+  --base_config=/persistent/base/config.json \
   --output=/persistent/conditioning-full-q98-<timestamp> \
   --synthetic_root=/persistent/snapshot/full-q98 \
-  --gso_root=/persistent/gso-250 --seed=42 --epochs=5 --evaluation_objects=200
+  --gso_root=/persistent/frozen-gso-250 \
+  --seed=42 --epochs=5 --evaluation_objects=200
 ```
 
-Run fresh target preparation and GPU profiling for the new dataset before
-submitting training. Transfer checksum validation and sample decoding are not a
-full audit of the author's export; retain that distinction in run provenance.
+The resolver supports audited Omni as an alternative source, but that is not the
+current training source. Shards/assets are referenced rather than duplicated;
+source indices, target split maps, and selected evaluation IDs are persisted.
+The 200 GSO objects are an immutable prefix of the earlier frozen 250-object
+selection. Both selections and earlier predictions are preserved.
+
+AdamW uses LR 1e-4, 162 warmup updates and EMA decay .99. Effective batch stays
+32 while physical batch is profiled remotely. `profile.py ROOT --only=VARIANT`
+profiles one model in its own allocation and writes variant-specific progress
+and ready markers, allowing the independent model jobs to run in parallel.
+`--resume=True --attempt=recovery1` preserves successful previous profiles and
+keeps attempt-specific diagnostics.
+
+A shared native GPU batch caches the synthetic export's targets once (including
+its validation assets), caches GSO targets, and verifies real training, strict
+checkpoint resume, GPU Chamfer validation and evaluation/W&B logging. After it
+passes, submit each model as a separate foreground native batch. The training
+jobs profile their own batch size and invoke `run.sh ROOT VARIANT PYTHON`.
+Every dedicated allocation must release on foreground pipeline exit, with a
+provider wall-time limit as fallback. No GPU is reserved waiting for a timer.
+
+The trainer saves resumable recovery checkpoints every 50 updates and all epoch
+checkpoints, evaluates a fixed 50-sample held-out panel each epoch, and logs flow
+loss, canonical/aligned voxel IoU, Chamfer, F-scores, empty counts and timing.
+`run.sh` verifies the final checkpoint reached the expected update count before
+running final evaluation, so a wall-time stop cannot silently count as a complete
+training run. W&B receives every computed evaluation scalar, per-object tables,
+aggregate means/valid counts/completeness, and result files. Predictions and GT
+voxel tensors remain persisted for every evaluation object.
+
+Final evaluation follows existing checkpoint selection: `best.pt` by validation
+canonical IoU, falling back to `latest.json`. All epoch checkpoints remain
+available. The trained-model evaluator produces Stage-1 latent/voxel geometry;
+it does not claim refined-mesh metrics. Its coarse voxel-surface Chamfer protocol
+is explicitly distinct from the prior 250-object refined-mesh baseline results.
