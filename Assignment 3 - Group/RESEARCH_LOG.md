@@ -560,3 +560,30 @@ files. Heavy jobs additionally save pre-refinement latent/layout/RNG state,
 exact meshes, Stage-2 features, raw pose, sampled error maps, nearest triangles
 and alignment transforms. Completion audits require the exact expected sample
 IDs and saved outputs, accounting explicitly for empty predictions.
+
+The first real heavy check `12439871` caught a Float/Half `index_add_` error in
+native FlexiCubes mesh extraction. The wrapper had incorrectly kept autocast
+active across the entire refinement path. Source `706c2da` removed that broad
+context, letting native SLAT sampling own its autocast and mesh extraction use
+the upstream native precision. Its Stage-1 latent/layout/RNG/target snapshot and
+failure diagnostics were retained. The initial CPU watcher `12439940` stopped
+without submitting any full evaluation jobs, as intended by its gate.
+
+A further protocol audit found that the older baseline receives the original
+384-pixel GSO reference whereas the shared dataset loader pads/resizes its SAM
+reference to 512 pixels. Source `ea2b70d` makes the heavy path use the original
+image/mask and native pointmap-preprocessing precision. The video encoder keeps
+its configured crop/resize. This is a documented quick/heavy preprocessing
+difference; it removes an unintended mismatch against the old heavy baselines.
+Earlier quick evaluations and their immutable sources remain unchanged.
+
+Current retry GPU check is
+[12439951](https://cloud.sdu.dk/app/jobs/properties/12439951), using isolated
+`check2` outputs and a distinct W&B ID suffix. Current sole CPU submission owner
+is [12439952](https://cloud.sdu.dk/app/jobs/properties/12439952). The watcher
+references that retry, retains prior receipts and waits for both PASS markers;
+all 15 full-job payloads are prepared but none had been submitted at this
+status check because the GPU retry was queued. Current immutable evaluation
+source is `ea2b70d` in `repo-native-reference`. A follow-up is active to repair
+routine failures and verify submissions without duplicates. It must read actual
+script exits because UCloud can mark a failed entrypoint SUCCESS.

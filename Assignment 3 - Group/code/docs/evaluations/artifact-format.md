@@ -12,6 +12,7 @@ results/evaluations/<evaluation_id>/
   <label>.jsonl                   # one row per clip/object/reference
   <label>.summary.json            # metrics, valid/expected counts, completeness
   predictions/<label>/<sample>.pt # latent/layout, coarse prediction, GT, metrics
+  stages/<sample>/stage1.pt       # pre-refinement latent/layout/RNG checkpoint
   media/<label>/<sample>/         # input MP4, reference/mask PNG, coarse GLBs
   samples/<sample>/
     mesh-exact.npz                # exact decoder vertices/faces/attributes
@@ -28,6 +29,9 @@ results/evaluations/<evaluation_id>/
 ```
 
 Heavy evaluation uses 25 flow steps for Stage 1 and 25 for native Stage 2.
+The heavy reference image/mask stays at the original dataset resolution, as in
+the older baseline runner. Native pointmap preprocessing runs in its own
+precision context; only sampling uses autocast, not mesh extraction.
 Coarse metrics score native pruned/downsampled 64-cubed coordinates with 20,000
 points and 100 ICP iterations. Mesh metrics reuse the baseline surface analyzer:
 8,192 samples per direction, exact closest-triangle distances, 100-iteration
