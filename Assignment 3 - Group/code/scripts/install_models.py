@@ -41,11 +41,12 @@ def install_archive(repository: str, revision: str, name: str,
                         "--no-deps", "--reinstall", str(checkout)], check=True)
 
 
-def install(metrics: bool = False, runtime: bool = False) -> None:
+def install(metrics: bool = False, runtime: bool = False, sam: bool = True) -> None:
     project = Path(__file__).resolve().parents[1]
     pins = tomllib.loads((project / "pyproject.toml").read_text())["tool"]["video3d"]["upstream"]
-    subprocess.run(["uv", "pip", "install", "--python", sys.executable, "--no-deps",
-                    f"sam3d-objects @ git+https://github.com/facebookresearch/sam-3d-objects.git@{pins['sam3d']}"], check=True)
+    if sam:
+        subprocess.run(["uv", "pip", "install", "--python", sys.executable, "--no-deps",
+                        f"sam3d-objects @ git+https://github.com/facebookresearch/sam-3d-objects.git@{pins['sam3d']}"], check=True)
     import hydra
     if hydra.__version__ != "1.3.2":
         raise RuntimeError("The pinned SAM runtime requires hydra-core==1.3.2")

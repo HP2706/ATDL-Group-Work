@@ -33,11 +33,12 @@ def train_json(path: str) -> None:
 def evaluate(run: str, *overrides: str, condition: str = "c3", env: str | None = None,
              k: int | None = None, shuffle_frames: bool = False, wrong_video: bool = False,
              repeated_reference: bool = False, split: str | None = None,
-             limit: int | None = None, **keywords: Any) -> None:
+             limit: int | None = None, loss_only: bool = False,
+             **keywords: Any) -> None:
     from video3d.evaluate import evaluate as execute
     execute(config_for(overrides, condition, env, keywords), run, k=k,
             shuffle=shuffle_frames, wrong_video=wrong_video, repeated_reference=repeated_reference,
-            split=split, limit=limit)
+            split=split, limit=limit, loss_only=loss_only)
 
 
 def cache_latents(split: str, *overrides: str, condition: str = "c3",
@@ -109,6 +110,12 @@ def scanned(command: str, **options: Any) -> None:
     print(json.dumps(commands[command](**options), indent=2))
 
 
+def video_metrics(split_dir: str, out: str, reference: int | None = None,
+                  cache_dir: str | None = None) -> None:
+    from video3d.data.video_metrics import video_metrics as execute
+    print(json.dumps(execute(split_dir, out, reference, cache_dir), indent=2))
+
+
 def prepare(*overrides: str, condition: str = "c3", env: str | None = None,
             **keywords: Any) -> None:
     from video3d.prepare import prepare as execute
@@ -134,7 +141,7 @@ def main(argv: list[str] | None = None) -> None:
                "cache-latents": cache_latents, "inspect": inspect, "check-env": check_env,
                "validate-data": validate_data, "analyze": analyze,
                "inspect-sam3d": inspect_sam3d, "frame-test": frame_test,
-               "generation": generation, "scanned": scanned}, command=argv)
+               "generation": generation, "scanned": scanned, "video-metrics": video_metrics}, command=argv)
 
 
 if __name__ == "__main__":

@@ -30,7 +30,7 @@ from video3d.metrics import shape_metrics
 from video3d.models.adapter import build_adapter
 from video3d.models.encoders import build_kv_encoder
 from video3d.models.sam3d import build_sam3d
-from video3d.train import adapted_condition, reference_images
+from video3d.train import adapted_condition, reference_images, sample_flow_loss
 from video3d.utils import (append_jsonl, copy_to_output, pick_device, read_jsonl, sample_seed,
                             setup_logging)
 
@@ -50,7 +50,7 @@ def load_run(cfg: ExperimentConfig, run: str, device: typing.Any,
     if run in BASELINES:
         if cfg.eval.evaluation_id:
             cfg = chz.replace(cfg, run_name=cfg.eval.evaluation_id)
-        return cfg, None, BASELINES[run]
+        return chz.replace(cfg, sam3d=chz.replace(cfg.sam3d, lora=False)), None, BASELINES[run]
     run_dir = Path(run) if Path(run).is_dir() else Path(cfg.paths.output_root) / run   # path or name
     assert (run_dir / "config.json").is_file(), f"no run at {run} or {run_dir}"
     run_cfg = read_config(run_dir / "config.json")
@@ -67,8 +67,10 @@ def load_run(cfg: ExperimentConfig, run: str, device: typing.Any,
         ckpt_path = run_dir / json.loads((run_dir / "latest.json").read_text())["checkpoint"]
     adapter = build_adapter(cfg.adapter).to(device).eval()
     state = torch.load(ckpt_path, map_location=device, weights_only=False)
-    adapter.load_state_dict(state["ema"])
-    adapter.extra_ema_state = state.get("extra_ema", {})
+    key = "ema" if cfg.eval.checkpoint_weights == "ema" else "adapter"
+    extra_key = "extra_ema" if cfg.eval.checkpoint_weights == "ema" else "extra"
+    adapter.load_state_dict(state[key])
+    adapter.extra_ema_state = state.get(extra_key, {})
     if cfg.eval.evaluation_id:
         cfg = chz.replace(cfg, run_name=cfg.eval.evaluation_id)
     log.info("loaded EMA adapter from %s", ckpt_path)
@@ -124,7 +126,7 @@ def best_frame(ds: ClipDataset, info: dict) -> tuple[reader.Clip, int]:
 def evaluate(cfg: ExperimentConfig, run: str, k: int | None = None, shuffle: bool = False,
              wrong_video: bool = False, repeated_reference: bool = False, split: str | None = None,
              limit: int | None = None, checkpoint: str | None = None,
-             epoch: int | None = None, trigger: str = "ad_hoc") -> Path:
+             epoch: int | None = None, trigger: str = "ad_hoc", loss_only: bool = False) -> Path:
     """Evaluate one run or baseline; returns the path of its results JSONL."""
     setup_logging()
     device = pick_device(cfg.device)
@@ -132,6 +134,7 @@ def evaluate(cfg: ExperimentConfig, run: str, k: int | None = None, shuffle: boo
     clip_len = int(k or cfg.eval.k)
     label = result_label(name, clip_len, int(cfg.eval.k), shuffle, wrong_video, adapter is not None)
     label += "_repeated" if repeated_reference else ""
+    label += "_loss" if loss_only else ""
     sam3d = build_sam3d(cfg, device)
     encoder = build_kv_encoder(cfg, sam3d, device) if adapter is not None else None
     if adapter is not None:
@@ -153,12 +156,12 @@ def evaluate(cfg: ExperimentConfig, run: str, k: int | None = None, shuffle: boo
     from video3d.provenance import source_identity, data_identity
     signature.update(source_identity=source_identity(), data_identity=data_identity(cfg))
     signature.update(evaluation_run=run, clip_len=clip_len, shuffle=shuffle,
-                     wrong_video=wrong_video, repeated_reference=repeated_reference, split=split)
+                     wrong_video=wrong_video, repeated_reference=repeated_reference, split=split, loss_only=loss_only)
     if checkpoint:
         with Path(checkpoint).open('rb') as handle:
             checkpoint_hash = hashlib.file_digest(handle, 'sha256').hexdigest()
         signature.update(checkpoint=str(Path(checkpoint).resolve()), checkpoint_sha256=checkpoint_hash)
-    signature.update(epoch=epoch, trigger=trigger, weights='EMA',
+    signature.update(epoch=epoch, trigger=trigger, weights=cfg.eval.checkpoint_weights,
                      output_scope='refined_mesh_and_coarse' if cfg.eval.refined_mesh else 'coarse_stage1')
     metadata = output_dir / f"{label}.meta.json"
     if metadata.exists() and json.loads(metadata.read_text()) != signature:
@@ -197,65 +200,85 @@ def evaluate(cfg: ExperimentConfig, run: str, k: int | None = None, shuffle: boo
             if cfg.fake_sam3d or cfg.data.source != 'gso':
                 raise ValueError('Heavy refined evaluation requires real SAM3D and audited GSO data')
             info['visibility'] = str(ds.root / 'visibility' / f"{info['asset_id']}.npz")
-        extra = {}
-        if adapter is not None:
-            cond = adapted_condition(sam3d, encoder, adapter, [sample], cfg, device)
-        else:
-            ref = sample
-            if run == "best-frame":
-                clip, r_best = best_frame(ds, info)
-                ref = build_sample(clip, info["k"], r_best, 0, 1, cfg.data)
-                extra["oracle_frame"] = r_best
-            cond = sam3d.condition(*reference_images([ref], device))
-        seed = sample_seed(info["clip_id"], info["k"], info["r"])
-        z, layout = sam3d.sample(cond, [seed], cfg.sampler)
-        pred = sam3d.decode_latent(z)[0].cpu()
+        extra: dict[str, typing.Any] = {}
+        loss_sample = sample
+        if adapter is None and run == "best-frame":
+            clip, r_best = best_frame(ds, info)
+            loss_sample = build_sample(clip, info["k"], r_best, 0, 1, cfg.data)
+            extra["oracle_frame"] = r_best
+        matched_loss = sample_flow_loss(sam3d, encoder, adapter, loss_sample, cfg, device)
+        extra.update(flow_loss=matched_loss, flow_loss_protocol="shape-flow-fixed-grid-v1",
+                     flow_loss_tau_grid=list(cfg.val.tau_grid))
         gt = torch.from_numpy(ground_truth(ds, info["asset_id"], cfg))
-        mesh_metrics: dict[str, typing.Any] = {}
-        if cfg.eval.refined_mesh:
-            from video3d.storage import atomic_torch
-            atomic_torch(output_dir/'stages'/sample_id(info).replace('/','-')/'stage1.pt', {
-                'sample_id':sample_id(info), 'latent':z.float().cpu(),
-                'layout':{key:value.cpu() for key,value in layout.items()},
-                'decoded_prediction':pred, 'ground_truth':gt, 'seed':seed,
-                'rng_state_after_stage1':sam3d.sampling_rng_state.cpu(),
-                'sampler':chz.asdict(cfg.sampler), 'frame_ids':info['frame_ids']})
-        if cfg.eval.refined_mesh and bool(pred.any()):
-            import shutil
-            from video3d.media import save_refined_prediction
-            from video3d.mesh_analysis import analyze
-            refined_dir = output_dir / "samples" / sample_id(info).replace("/", "-")
-            refined = sam3d.refine(z, layout, *reference_images([sample], device), seed, cfg.eval.refinement_steps)
-            save_refined_prediction(refined, refined_dir)
-            # Match cached baselines: score the final pruned/downsampled native coordinates.
-            coords = refined['coords'].detach().cpu().long()[:, 1:]
-            pred = torch.zeros_like(pred)
-            pred[coords[:, 0], coords[:, 1], coords[:, 2]] = True
-            row = ds.rows[i]
-            shutil.copy2(ds.root / row.mesh, refined_dir / "ground-truth.glb")
-            if row.cameras is not None:
-                shutil.copy2(ds.root / row.cameras, refined_dir / "cameras.json")
-            atomic_json(refined_dir / "protocol.json", {
-                "dataset": cfg.data.source, "frame_ids": info["frame_ids"],
-                "camera_registration": "known_render_poses" if row.cameras else "unverified",
-                "visibility_cache": info["visibility"], "seed": seed})
-            if device.type == 'cuda':
-                torch.cuda.synchronize(device)
-            inference_seconds = time.perf_counter() - inference_started
-            mesh_metrics = analyze(str(refined_dir), samples=cfg.eval.surface_samples)
-        else:
-            inference_seconds = time.perf_counter() - inference_started
-            if cfg.eval.native_coarse and bool(pred.any()):
-                sparse = sam3d.sparse_structure(z, layout)
-                coords = sparse['coords'].detach().cpu().long()[:, 1:]
+        seed = sample_seed(info["clip_id"], info["k"], info["r"])
+        metrics: dict[str, typing.Any] = {}
+        inference_seconds = 0.0
+        if not loss_only:
+            if adapter is not None:
+                cond = adapted_condition(sam3d, encoder, adapter, [sample], cfg, device)
+            else:
+                ref = sample
+                if run == "best-frame":
+                    clip, r_best = best_frame(ds, info)
+                    ref = build_sample(clip, info["k"], r_best, 0, 1, cfg.data)
+                    extra["oracle_frame"] = r_best
+                cond = sam3d.condition(*reference_images([ref], device))
+            seed = sample_seed(info["clip_id"], info["k"], info["r"])
+            if cfg.eval.video_diagnostics and adapter is not None:
+                from video3d.diagnostics import evaluate_video, exposure_for_sample
+                other = ds[wrong_video_partner(ds, i)] if "wrong" in cfg.eval.video_controls else None
+                video_result = evaluate_video(sample, other, gt, sam3d, encoder, adapter, cfg, device,
+                                              exposure_for_sample(cfg, ds, info))
+                z, layout, pred = video_result.latent, video_result.layout, video_result.prediction
+                extra.update(video_diagnostics=video_result.diagnostics, video_controls=video_result.controls)
+            else:
+                z, layout = sam3d.sample(cond, [seed], cfg.sampler)
+                pred = sam3d.decode_latent(z)[0].cpu()
+            mesh_metrics: dict[str, typing.Any] = {}
+            if cfg.eval.refined_mesh:
+                from video3d.storage import atomic_torch
+                atomic_torch(output_dir/'stages'/sample_id(info).replace('/','-')/'stage1.pt', {
+                    'sample_id':sample_id(info), 'latent':z.float().cpu(),
+                    'layout':{key:value.cpu() for key,value in layout.items()},
+                    'decoded_prediction':pred, 'ground_truth':gt, 'seed':seed,
+                    'rng_state_after_stage1':sam3d.sampling_rng_state.cpu(),
+                    'sampler':chz.asdict(cfg.sampler), 'frame_ids':info['frame_ids']})
+            if cfg.eval.refined_mesh and bool(pred.any()):
+                import shutil
+                from video3d.media import save_refined_prediction
+                from video3d.mesh_analysis import analyze
+                refined_dir = output_dir / "samples" / sample_id(info).replace("/", "-")
+                refined = sam3d.refine(z, layout, *reference_images([sample], device), seed, cfg.eval.refinement_steps)
+                save_refined_prediction(refined, refined_dir)
+                # Match cached baselines: score the final pruned/downsampled native coordinates.
+                coords = refined['coords'].detach().cpu().long()[:, 1:]
                 pred = torch.zeros_like(pred)
                 pred[coords[:, 0], coords[:, 1], coords[:, 2]] = True
-        metrics = shape_metrics(pred, gt, cfg.eval.metrics, seed=sample_seed(sample_id(info)))
-        if info.get('visibility'):
-            from video3d.metrics import visibility_metrics
-            metrics.update(visibility_metrics(pred, info['visibility']))
-        if cfg.eval.refined_mesh:
-            metrics['mesh_surface'] = mesh_metrics or None
+                row = ds.rows[i]
+                shutil.copy2(ds.root / row.mesh, refined_dir / "ground-truth.glb")
+                if row.cameras is not None:
+                    shutil.copy2(ds.root / row.cameras, refined_dir / "cameras.json")
+                atomic_json(refined_dir / "protocol.json", {
+                    "dataset": cfg.data.source, "frame_ids": info["frame_ids"],
+                    "camera_registration": "known_render_poses" if row.cameras else "unverified",
+                    "visibility_cache": info["visibility"], "seed": seed})
+                if device.type == 'cuda':
+                    torch.cuda.synchronize(device)
+                inference_seconds = time.perf_counter() - inference_started
+                mesh_metrics = analyze(str(refined_dir), samples=cfg.eval.surface_samples)
+            else:
+                inference_seconds = time.perf_counter() - inference_started
+                if cfg.eval.native_coarse and bool(pred.any()):
+                    sparse = sam3d.sparse_structure(z, layout)
+                    coords = sparse['coords'].detach().cpu().long()[:, 1:]
+                    pred = torch.zeros_like(pred)
+                    pred[coords[:, 0], coords[:, 1], coords[:, 2]] = True
+            metrics = shape_metrics(pred, gt, cfg.eval.metrics, seed=sample_seed(sample_id(info)))
+            if info.get('visibility'):
+                from video3d.metrics import visibility_metrics
+                metrics.update(visibility_metrics(pred, info['visibility']))
+            if cfg.eval.refined_mesh:
+                metrics['mesh_surface'] = mesh_metrics or None
         resources = {'inference_seconds':inference_seconds,
                      'sample_seconds':time.perf_counter()-inference_started}
         if device.type == 'cuda':
@@ -278,21 +301,43 @@ def evaluate(cfg: ExperimentConfig, run: str, k: int | None = None, shuffle: boo
             record['refinement_status'] = 'complete' if mesh_metrics else 'empty_stage1'
         record = EvaluationRecord.model_validate(record).model_dump()
         logger.log_evaluation(record, len(records) + n)
-        from video3d.storage import atomic_torch
-        atomic_torch(output_dir / "predictions" / label / (sample_id(info).replace("/", "-") + ".pt"),
-                     {"sample_id": sample_id(info), "latent": z[0].float().cpu(),
-                      'layout':{key:value.cpu() for key,value in layout.items()},
-                      "prediction": pred, "ground_truth": gt, "metrics": record})
-        if len(records) + n <= cfg.logging.media_samples:
-            media_dir = output_dir / "media" / label / sample_id(info).replace("/", "-")
-            save_pair(sample, pred, gt, record, media_dir, logger.run)
+        if not loss_only:
+            from video3d.storage import atomic_torch
+            atomic_torch(output_dir / "predictions" / label / (sample_id(info).replace("/", "-") + ".pt"),
+                         {"sample_id": sample_id(info), "latent": z[0].float().cpu(),
+                          'layout':{key:value.cpu() for key,value in layout.items()},
+                          "prediction": pred, "ground_truth": gt, "metrics": record})
+            if len(records) + n <= cfg.logging.media_samples:
+                media_dir = output_dir / "media" / label / sample_id(info).replace("/", "-")
+                visibility_file, visible_frames = None, None
+                if cfg.data.source == "synthetic":
+                    from video3d.data.visibility import exposure_path, object_exposure
+                    visibility_file = exposure_path(cfg, info["clip_id"], info["k"])
+                    object_exposure(ds.clip(info["clip_id"]), info["k"],
+                                    reader.load_voxels(ds.voxels_file, info["asset_id"]), visibility_file)
+                    visible_frames = info["frame_ids"]
+                    if adapter is None or wrong_video:
+                        visible_frames = [extra.get("oracle_frame", info["r"])]
+                    elif repeated_reference:
+                        visible_frames = [info["r"]] * clip_len
+                save_pair(sample, pred, gt, record, media_dir, logger.run,
+                          visibility_file=visibility_file, frame_ids=visible_frames)
         append_jsonl(local, record)
         if n % cfg.eval.flush_every == 0:
             copy_to_output(local, output_dir)
             log.info("%s: %d / %d", label, len(records) + n, len(ds))
     copy_to_output(local, output_dir)
     log.info("wrote %s", final)
-    logger.finish_evaluation(read_jsonl(final), output_dir, label, len(ds))
+    complete = read_jsonl(final)
+    logger.finish_evaluation(complete, output_dir, label, len(ds))
+    summary_path = output_dir / f"{label}.summary.json"
+    summary = json.loads(summary_path.read_text()) if summary_path.is_file() else {}
+    summary.update(samples=len(complete), mean_flow_loss=sum(row["flow_loss"] for row in complete) / len(complete) if complete else None,
+                   protocol="shape-flow-fixed-grid-v1", weights=cfg.eval.checkpoint_weights if adapter is not None else "pretrained")
+    if cfg.eval.video_diagnostics:
+        from video3d.diagnostics import summarize_video_records
+        summary.update(summarize_video_records(complete))
+    atomic_json(summary_path, summary)
     logger.finish()
     return final
 

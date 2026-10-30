@@ -28,7 +28,8 @@ STAGE2_MODELS = ("slat_generator", "slat_decoder_gs", "slat_decoder_gs_4", "slat
 
 
 def apply_adapter(cond: dict, adapter: nn.Module, tokens: typing.Any, coverage: typing.Any, dt: typing.Any, query_sets: typing.Any,
-                  kv_padding_mask: typing.Any=None) -> dict:
+                  kv_padding_mask: typing.Any=None, video_disabled: bool = False,
+                  diagnostics: dict[str, typing.Any] | None = None) -> dict:
     """Return a new cond dict where only `query_sets` are replaced by the adapter output."""
     from video3d.models.pooler import MaskPooler
     query_sets = query_sets or [name for name in cond if ("rgb" in name or "image" in name) and "mask" not in name and "pointmap" not in name]
@@ -37,10 +38,19 @@ def apply_adapter(cond: dict, adapter: nn.Module, tokens: typing.Any, coverage: 
     missing = [name for name in query_sets if name not in cond]
     assert not missing, f"query sets {missing} not in conditioning sets {list(cond)}"
     if isinstance(adapter, MaskPooler):
+        if diagnostics is not None:
+            diagnostics["attention_available"] = False
+            diagnostics["reason"] = "Pooler replaces conditioning tokens; gated cross-attention diagnostics do not apply"
+        if video_disabled:
+            return cond
         return adapter.condition(cond, tokens, coverage, query_sets, kv_padding_mask)
     sizes = [cond[name].shape[1] for name in query_sets]
     c_sel = torch.cat([cond[name] for name in query_sets], dim=1).float()
-    out = adapter(c_sel, tokens, coverage, dt, kv_padding_mask)
+    if diagnostics is None and not video_disabled:
+        out = adapter(c_sel, tokens, coverage, dt, kv_padding_mask)
+    else:
+        out = adapter(c_sel, tokens, coverage, dt, kv_padding_mask,
+                      video_disabled=video_disabled, diagnostics=diagnostics)
     return {**cond, **dict(zip(query_sets, out.split(sizes, dim=1)))}
 
 

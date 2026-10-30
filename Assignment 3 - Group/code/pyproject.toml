@@ -66,6 +66,10 @@ packages = ["src/video3d"]
 [project.scripts]
 video3d = "video3d.cli:main"
 
+[project.optional-dependencies]
+stream3d = ["streaming3d"]
+mvsam3d = ["sam3d-objects"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = ["gpu: requires a remote CUDA GPU and real checkpoints", "slow: renders clips with Blender", "sampled: checks dataset samples"]
@@ -93,8 +97,17 @@ explicit = true
 [tool.uv.sources]
 torch = [{ index = "pytorch-cu128", marker = "sys_platform == 'linux'" }]
 torchvision = [{ index = "pytorch-cu128", marker = "sys_platform == 'linux'" }]
+streaming3d = { git = "https://github.com/kaichen-z/STREAM3D.git", rev = "be551cc756f5710875ec1c6a4c0fa545b56d2c4f" }
+sam3d-objects = { git = "https://github.com/devinli123/MV-SAM3D.git", rev = "abb04b5e8af5bc33b0265bdf19937e76bbb6bcdd" }
 
 [tool.uv]
+conflicts = [[{ extra = "mvsam3d" }, { extra = "stream3d" }]]
 # pyrender pins 3.1.0, whose EGL loader fails with current Mesa. The maintained
 # PyOpenGL release preserves the API and supports headless software rendering.
 override-dependencies = ["PyOpenGL==3.1.10"]
+
+[[tool.uv.dependency-metadata]]
+name = "sam3d-objects"
+version = "0.0.1"
+# Use the shared GPU runtime instead of the upstream workstation freeze.
+requires-dist = []

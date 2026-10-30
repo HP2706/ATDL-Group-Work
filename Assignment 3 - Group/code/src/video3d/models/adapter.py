@@ -24,10 +24,12 @@ class GatedXAttnBlock(nn.Module):
         self.g_attn = nn.Parameter(torch.zeros(1))  # tanh(0) = 0 -> identity at init
         self.g_ff = nn.Parameter(torch.zeros(1))
 
-    def forward(self, c: typing.Any, v: typing.Any, kv_padding_mask: typing.Any=None) -> typing.Any:
+    def forward(self, c: typing.Any, v: typing.Any, kv_padding_mask: typing.Any=None,
+                video_disabled: bool = False) -> typing.Any:
         kv = self.ln_kv(v)
         a, _ = self.attn(self.ln_q(c), kv, kv, key_padding_mask=kv_padding_mask, need_weights=False)
-        c = c + torch.tanh(self.g_attn) * a
+        if not video_disabled:
+            c = c + torch.tanh(self.g_attn) * a
         return c + torch.tanh(self.g_ff) * self.ff(self.ln_ff(c))
 
 
@@ -55,11 +57,30 @@ class VideoFusionAdapter(nn.Module):
             v = v + self.e_time(dt + self.max_dt)
         return v
 
-    def forward(self, c_sel: typing.Any, f_vid: typing.Any, coverage: typing.Any, dt: typing.Any, kv_padding_mask: typing.Any=None) -> typing.Any:
+    def forward(self, c_sel: typing.Any, f_vid: typing.Any, coverage: typing.Any, dt: typing.Any, kv_padding_mask: typing.Any=None,
+                video_disabled: bool = False, diagnostics: dict[str, typing.Any] | None = None) -> typing.Any:
         """c_sel (B, Nc, d_cond); f_vid (B, N, d_vid); coverage (B, N); dt (B, N) long."""
         v = self.embed_video(f_vid, coverage, dt)
-        for blk in self.blocks:
-            c_sel = blk(c_sel, v, kv_padding_mask)
+        original = c_sel
+        for index, blk in enumerate(self.blocks):
+            if diagnostics is not None:
+                kv = blk.ln_kv(v)
+                update, weights = blk.attn(blk.ln_q(c_sel), kv, kv, key_padding_mask=kv_padding_mask,
+                                           need_weights=True, average_attn_weights=False)
+                gated = torch.tanh(blk.g_attn) * update
+                if video_disabled:
+                    gated = torch.zeros_like(gated)
+                from video3d.diagnostics import attention_statistics
+                diagnostics[f"block{index}"] = {
+                    "gate": float(torch.tanh(blk.g_attn).item()),
+                    "video_update_ratio": float((gated.norm() / original.norm().clamp_min(1e-12)).item()),
+                    **attention_statistics(weights, coverage, dt, kv_padding_mask)}
+                c_sel = c_sel + gated
+                c_sel = c_sel + torch.tanh(blk.g_ff) * blk.ff(blk.ln_ff(c_sel))
+            else:
+                c_sel = blk(c_sel, v, kv_padding_mask, video_disabled=video_disabled)
+        if diagnostics is not None:
+            diagnostics["conditioning_change_ratio"] = float(((c_sel-original).norm() / original.norm().clamp_min(1e-12)).item())
         return c_sel
 
     def gates(self) -> dict[str, float]:

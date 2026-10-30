@@ -51,7 +51,7 @@ def test_epoch_previews_preserve_fixed_inputs(fake_root: Path, tmp_path: Path) -
     from video3d.epochs import epoch_previews
 
     cfg = fake_train_cfg(fake_root, tmp_path, **{
-        "data.val_asset_frac":0, "val.epoch_media_samples":2})
+        "data.val_asset_frac":0, "val.epoch_media_samples":2, "eval.video_diagnostics":True})
     device = torch.device("cpu")
     sam = build_sam3d(cfg, device)
     encoder = build_kv_encoder(cfg, sam, device)
@@ -63,6 +63,11 @@ def test_epoch_previews_preserve_fixed_inputs(fake_root: Path, tmp_path: Path) -
     second = json.loads((tmp_path / "media/epoch-02/reconstructions.json").read_text())
     assert [(row["clip_id"], row["object"], row["reference_frame"]) for row in first] == [
         (row["clip_id"], row["object"], row["reference_frame"]) for row in second]
+    baseline = epoch_previews(cfg, sam, None, None, device, tmp_path / "baseline", 0)
+    native = json.loads((tmp_path / "baseline/epoch-00/reconstructions.json").read_text())
+    assert baseline["epoch/reconstruction_count"] == 2
+    assert [row["voxel_iou"] for row in native] == [row["voxel_iou"] for row in first]
+    assert all(row["weights"] == "pretrained SAM 3D" for row in native)
 
 
 def test_epoch_table_serializes_video_masks_and_meshes(fake_root: Path, tmp_path: Path) -> None:
@@ -73,7 +78,7 @@ def test_epoch_table_serializes_video_masks_and_meshes(fake_root: Path, tmp_path
     from video3d.models.adapter import build_adapter
 
     cfg = fake_train_cfg(fake_root, tmp_path, **{
-        "data.val_asset_frac":0, "val.epoch_media_samples":2})
+        "data.val_asset_frac":0, "val.epoch_media_samples":2, "eval.video_diagnostics":True})
     device = torch.device("cpu")
     sam = build_sam3d(cfg, device)
     run = wandb.init(project="epoch-media-tests", mode="offline", dir=str(tmp_path))
@@ -83,3 +88,6 @@ def test_epoch_table_serializes_video_masks_and_meshes(fake_root: Path, tmp_path
     run.log(media, step=1)
     run.finish()
     assert len(media["epoch/reconstructions"].data) == 2
+    assert len(media["video/attention"].data) > 0
+    assert "video/block0/video_update_ratio" in media
+    assert "video_benefit/disabled/viou" in media

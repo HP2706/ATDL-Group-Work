@@ -5,7 +5,7 @@ from datetime import datetime
 import json
 import os
 from pathlib import Path
-from typing import Any, get_origin, get_type_hints
+from typing import Any, Literal, get_origin, get_type_hints
 import chz
 from video3d.data.generation.config import Config as GenerationConfig
 
@@ -181,6 +181,9 @@ class MetricsConfig:
 
 @chz.chz
 class EvalConfig:
+    checkpoint_weights: Literal["ema", "current"] = "ema"
+    video_diagnostics: bool = False
+    video_controls: list[str] = chz.field(default_factory=lambda: ["correct", "repeated", "wrong", "disabled"])
     native_reference: bool = False
     native_coarse: bool = False
     refined_mesh: bool = False
@@ -339,7 +342,11 @@ def save_config(cfg: ExperimentConfig, run_dir: str | Path) -> Path:
 
 
 def read_config(path: str | Path) -> ExperimentConfig:
-    return chz.Blueprint(ExperimentConfig).apply(flatten(json.loads(Path(path).read_text()))).make()
+    values = json.loads(Path(path).read_text())
+    dino = values.get("encoder", {}).get("dinov2", {})
+    if dino.pop("pair_average", False):
+        raise ValueError("DINO frame averaging was removed; this historical run requires its recorded source revision")
+    return chz.Blueprint(ExperimentConfig).apply(flatten(values)).make()
 
 
 def apply_process_env(cfg: ExperimentConfig) -> None:

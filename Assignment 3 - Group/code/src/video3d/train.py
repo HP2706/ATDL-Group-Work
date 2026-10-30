@@ -124,20 +124,21 @@ def reference_images(batch: list[dict], device: typing.Any) -> tuple[torch.Tenso
             torch.stack([s["inputs"]["ref_mask"] for s in batch]).to(device))
 
 
-def adapted_condition(sam3d: typing.Any, encoder: typing.Any, adapter: typing.Any, batch: list[dict], cfg: ExperimentConfig, device: typing.Any) -> dict:
+def adapted_condition(sam3d: typing.Any, encoder: typing.Any, adapter: typing.Any, batch: list[dict], cfg: ExperimentConfig, device: typing.Any,
+                      video_disabled: bool = False, diagnostics: dict[str, typing.Any] | None = None) -> dict:
     """SAM 3D conditioning tokens of the reference frames with the adapter applied."""
     rgb, mask = reference_images(batch, device)
     with torch.no_grad():
         cond = sam3d.condition(rgb, mask)
-    if cfg.adapter.strategy == 'native':
-        return cond
     feature_context = nullcontext() if cfg.encoder.vjepa.video_lora else torch.no_grad()
     with feature_context:
         kv = [kv_tokens(encoder, to_device(s["inputs"], device), cfg.encoder.kv_source)
               for s in batch]
     v = pad_video_batch(*map(list, zip(*kv)))
     return apply_adapter(cond, adapter, v["tokens"], v["coverage"], v["dt"],
-                         list(cfg.adapter.query_sets), v["kv_padding_mask"])
+                         list(cfg.adapter.query_sets), v["kv_padding_mask"],
+                         video_disabled=video_disabled, diagnostics=diagnostics)
+
 
 
 def layout_input(sam3d: typing.Any, mode: str, rgb: typing.Any, mask: typing.Any, tau: typing.Any, gen: typing.Any) -> dict:
@@ -158,8 +159,9 @@ def layout_input(sam3d: typing.Any, mode: str, rgb: typing.Any, mask: typing.Any
 
 
 def batch_loss(sam3d: typing.Any, encoder: typing.Any, adapter: typing.Any, batch: typing.Any, cfg: typing.Any, device: typing.Any, gen: typing.Any) -> torch.Tensor:
-    """Training loss of one micro-batch; τ, noise and layout noise come from `gen`."""
-    cond = adapted_condition(sam3d, encoder, adapter, batch, cfg, device)
+    """Micro-batch loss; None adapter replays the pretrained baseline with the same RNG."""
+    cond = (sam3d.condition(*reference_images(batch, device)) if adapter is None else
+            adapted_condition(sam3d, encoder, adapter, batch, cfg, device))
     x1 = torch.stack([s["target"] if "target" in s else load_latent(cfg, s["info"]["asset_id"]) for s in batch])
     x1 = x1.to(device)
     tau = sample_tau(len(batch), cfg.loss, gen, device)
@@ -169,27 +171,16 @@ def batch_loss(sam3d: typing.Any, encoder: typing.Any, adapter: typing.Any, batc
     return flow_loss(sam3d, cond, x1, tau, x0, layout)
 
 
+
 # ---- validation ----
 
 @torch.no_grad()
 def val_flow_loss(sam3d: typing.Any, encoder: typing.Any, adapter: typing.Any, val_ds: typing.Any, cfg: typing.Any, device: typing.Any) -> float:
-    """Mean flow loss on the first val samples at a fixed τ grid with fixed noise."""
-    taus = torch.tensor(list(cfg.val.tau_grid), device=device)
-    losses = []
-    for i in tqdm(range(min(len(val_ds), cfg.val.loss_num_samples)), desc="Validation loss", unit="video"):
-        s = val_ds[i]
-        cond = (adapted_condition(sam3d, encoder, adapter, [s], cfg, device) if adapter is not None
-                else sam3d.condition(*reference_images([s], device)))
-        cond = {k: v.expand(len(taus), *v.shape[1:]) for k, v in cond.items()}
-        x1 = (s["target"] if "target" in s else load_latent(cfg, s["info"]["asset_id"])).to(device)
-        x1 = x1.expand(len(taus), *x1.shape)
-        info = s["info"]
-        gen = torch.Generator(device).manual_seed(sample_seed("val", info["clip_id"], info["k"], info["r"]))
-        x0 = torch.randn(x1.shape, generator=gen, device=device)
-        rgb, mask = (x.expand(len(taus), *x.shape[1:]) for x in reference_images([s], device))
-        layout = layout_input(sam3d, cfg.sam3d.phase_a_layout, rgb, mask, taus, gen)
-        losses.append(flow_loss(sam3d, cond, x1, taus, x0, layout).item())
+    """Mean paired sample flow loss using the same path as baseline evaluation."""
+    losses = [sample_flow_loss(sam3d, encoder, adapter, val_ds[i], cfg, device)
+              for i in range(min(len(val_ds), cfg.val.loss_num_samples))]
     return sum(losses) / len(losses)
+
 
 
 @torch.no_grad()
@@ -524,3 +515,28 @@ def report_benchmark(cfg: ExperimentConfig, step_times: list[float], device: typ
     (output_dir / "benchmark.json").write_text(json.dumps(report, indent=1))
     log.info("benchmark %s", report)
     return report
+
+
+@torch.no_grad()
+def sample_flow_loss(sam3d: typing.Any, encoder: typing.Any, adapter: typing.Any,
+                     sample: dict[str, typing.Any], cfg: ExperimentConfig,
+                     device: torch.device) -> float:
+    """Paired shape flow MSE; None adapter means native pretrained conditioning.
+
+    All models use the validation tau grid and the same sample-keyed noise.
+    No classifier-free guidance or reconstruction sampler enters this loss.
+    """
+    taus = torch.tensor(list(cfg.val.tau_grid), device=device)
+    if adapter is None:
+        cond = sam3d.condition(*reference_images([sample], device))
+    else:
+        cond = adapted_condition(sam3d, encoder, adapter, [sample], cfg, device)
+    cond = {k: v.expand(len(taus), *v.shape[1:]) for k, v in cond.items()}
+    x1 = (sample["target"] if "target" in sample else load_latent(cfg, sample["info"]["asset_id"])).to(device)
+    x1 = x1.expand(len(taus), *x1.shape)
+    info = sample["info"]
+    gen = torch.Generator(device).manual_seed(sample_seed("val", info["clip_id"], info["k"], info["r"]))
+    x0 = torch.randn(x1.shape, generator=gen, device=device)
+    rgb, mask = (x.expand(len(taus), *x.shape[1:]) for x in reference_images([sample], device))
+    layout = layout_input(sam3d, cfg.sam3d.phase_a_layout, rgb, mask, taus, gen)
+    return flow_loss(sam3d, cond, x1, taus, x0, layout).item()
