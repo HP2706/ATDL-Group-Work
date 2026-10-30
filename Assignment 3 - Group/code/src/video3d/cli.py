@@ -99,10 +99,14 @@ def generation(command: str, **options: Any) -> None:
     module.run(**options)
 
 
-def video_metrics(split_dir: str, out: str, reference: int | None = None,
-                  cache_dir: str | None = None) -> None:
-    from video3d.data.video_metrics import video_metrics as execute
-    print(json.dumps(execute(split_dir, out, reference, cache_dir), indent=2))
+def scanned(command: str, **options: Any) -> None:
+    from video3d.data.scan_prepare import prepare_gso, prepare_omniobject, prepare_available_scans
+    from video3d.data.scanned import audit
+    commands = {'prepare-omni': prepare_omniobject, 'prepare-gso': prepare_gso, 'audit': audit,
+                'prepare-available': prepare_available_scans}
+    if command not in commands:
+        raise ValueError(f'Choose from {list(commands)}')
+    print(json.dumps(commands[command](**options), indent=2))
 
 
 def prepare(*overrides: str, condition: str = "c3", env: str | None = None,
@@ -111,11 +115,12 @@ def prepare(*overrides: str, condition: str = "c3", env: str | None = None,
     execute(config_for(overrides,condition,env,keywords))
 
 
-def evaluate_json(path: str, run: str) -> None:
+def evaluate_json(path: str, run: str, checkpoint: str | None = None,
+                  epoch: int | None = None, trigger: str = 'ad_hoc', limit: int | None = None) -> None:
     from video3d.evaluate import evaluate as execute
     cfg = read_config(path)
     apply_process_env(cfg)
-    execute(cfg, run)
+    execute(cfg, run, checkpoint=checkpoint, epoch=epoch, trigger=trigger, limit=limit)
 
 
 def sweep(*overrides: str, condition: str = "c3", env: str | None = None,
@@ -129,7 +134,7 @@ def main(argv: list[str] | None = None) -> None:
                "cache-latents": cache_latents, "inspect": inspect, "check-env": check_env,
                "validate-data": validate_data, "analyze": analyze,
                "inspect-sam3d": inspect_sam3d, "frame-test": frame_test,
-               "generation": generation, "video-metrics": video_metrics}, command=argv)
+               "generation": generation, "scanned": scanned}, command=argv)
 
 
 if __name__ == "__main__":

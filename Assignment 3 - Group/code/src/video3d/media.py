@@ -7,6 +7,26 @@ import numpy as np
 import torch
 
 
+def save_refined_prediction(prediction: dict[str, Any], directory: Path) -> None:
+    """Keep exact native decoder geometry before the pipeline simplifies its preview."""
+    import trimesh
+    directory.mkdir(parents=True, exist_ok=True)
+    mesh = prediction["mesh"][0]
+    vertices = mesh.vertices.detach().cpu().numpy()
+    faces = mesh.faces.detach().cpu().numpy()
+    if not len(vertices) or not len(faces):
+        raise ValueError("Refinement produced an empty mesh")
+    arrays = {"vertices": vertices, "faces": faces}
+    if mesh.vertex_attrs is not None:
+        arrays["vertex_attrs"] = mesh.vertex_attrs.detach().cpu().numpy()
+    np.savez_compressed(directory / "mesh-exact.npz", **arrays)
+    trimesh.Trimesh(vertices=vertices, faces=faces, process=False).export(directory / "mesh-exact.ply")
+    prediction["glb"].export(str(directory / "preview.glb"))
+    from video3d.storage import atomic_torch
+    atomic_torch(directory / "coarse-pose-pointmaps.pt",
+                 {key:value.detach().cpu() for key,value in prediction.items() if isinstance(value, torch.Tensor)})
+
+
 def export_mesh(voxels: torch.Tensor, path: Path) -> Path | None:
     import trimesh
     from skimage.measure import marching_cubes

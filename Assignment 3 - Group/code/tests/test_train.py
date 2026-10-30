@@ -56,7 +56,7 @@ def test_loss_decreases_over_50_steps(two_sample_root: typing.Any, tmp_path: typ
     assert (out / "config.json").is_file()
 
 
-@pytest.mark.parametrize("condition", ["c1", "c2", "c3_nomask"])
+@pytest.mark.parametrize("condition", ["c1", "c3_nomask"])
 def test_other_conditions_train(fake_root: typing.Any, tmp_path: typing.Any, condition: typing.Any) -> typing.Any:
     cfg = fake_train_cfg(fake_root, tmp_path, condition, **{"train.max_steps": 3})
     assert train(cfg)["step"] == 3
@@ -64,7 +64,7 @@ def test_other_conditions_train(fake_root: typing.Any, tmp_path: typing.Any, con
 
 def test_resume_matches_uninterrupted_training(fake_root: typing.Any, tmp_path: typing.Any) -> typing.Any:
     over = {"train.max_steps": 8, "train.effective_batch_size": 4, "val.loss_every": 4,
-            "optim.ema_decay": 0.9}
+            "optim.ema_decay": 0.9, "val.sample_every": 4}
     full = fake_train_cfg(fake_root, tmp_path / "a", **over)
     train(full)
     parts = fake_train_cfg(fake_root, tmp_path / "b", **over)
@@ -80,6 +80,8 @@ def test_resume_matches_uninterrupted_training(fake_root: typing.Any, tmp_path: 
     assert [r["step"] for r in rec_b] == list(range(1, 9))
     for ra, rb in zip(rec_a, rec_b):
         assert ra["loss"] == rb["loss"] and ra.get("val_loss") == rb.get("val_loss")
+        for key in ["val_chamfer", "val_chamfer_count", "val_empty_predictions"]:
+            assert ra.get(key) == rb.get(key)
 
 
 def test_validation_sampling_and_best_checkpoint(fake_root: typing.Any, tmp_path: typing.Any) -> typing.Any:
@@ -87,6 +89,20 @@ def test_validation_sampling_and_best_checkpoint(fake_root: typing.Any, tmp_path
                                                  "val.loss_every": 2})
     record = train(cfg)
     assert 0 <= record["val_viou"] <= 1 and "val_loss" in record
+    assert "val_chamfer" in record and "val_fscore@0.02" in record
+    assert record["val_chamfer_count"] + record["val_empty_predictions"] == record["val_shape_objects"]
+    shapes = json.loads((tmp_path / "out/c3_seed0/validation/step-00000004.json").read_text())
+    assert len(shapes["objects"]) == record["val_shape_objects"]
+    assert shapes["summary"]["val_chamfer"] == record["val_chamfer"]
+    for item in shapes["objects"]:
+        path = tmp_path / "out/c3_seed0/validation" / item["prediction_file"]
+        saved = torch.load(path, weights_only=False)
+        assert saved["sample_id"] == f"{item['clip_id']}/{item['k']}/{item['r']}"
+        assert saved["prediction"].shape == saved["ground_truth"].shape
+        assert saved["latent"].device.type == "cpu"
+        from video3d.metrics import voxel_iou
+        assert voxel_iou(saved["prediction"], saved["ground_truth"]) == item["viou"]
+        assert saved["frame_ids"]
     best = json.loads((tmp_path / "out/c3_seed0/best.json").read_text())
     assert (tmp_path / "out/c3_seed0/best.pt").is_file() and best["step"] in (2, 4)
 

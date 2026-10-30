@@ -52,6 +52,8 @@ class DataConfig:
     prepared: str = 'data/navi-prepared'
     video_input: str = 'object_crop'
     frames: int = 16
+    mask_threshold: float = 0.5
+    scanned_strides: list[int] = chz.field(default_factory=lambda: [1, 2, 4, 8, 12])
     image_size: int = 384
 
 
@@ -70,7 +72,6 @@ class VjepaConfig:
 @chz.chz
 class Dinov2Config:
     image_size: int = 224
-    pair_average: bool = False
 
 
 @chz.chz
@@ -143,6 +144,7 @@ class OptimConfig:
 
 @chz.chz
 class TrainConfig:
+    epochs: int = 0
     batch_size: int = 2
     effective_batch_size: int = 32
     max_steps: int = 1000
@@ -157,6 +159,10 @@ class TrainConfig:
 
 @chz.chz
 class ValConfig:
+    final_full_validation: bool = False
+    heavy_epochs: list[int] = chz.field(default_factory=list)
+    heavy_data_root: str = ''
+    epoch_media_samples: int = 0
     loss_every: int = 1000
     loss_num_samples: int = 200
     tau_grid: list[float] = chz.field(default_factory=lambda: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9])
@@ -175,6 +181,12 @@ class MetricsConfig:
 
 @chz.chz
 class EvalConfig:
+    native_reference: bool = False
+    native_coarse: bool = False
+    refined_mesh: bool = False
+    refinement_steps: int = 25
+    surface_samples: int = 8192
+    evaluation_id: str = ''
     k: int = 16
     middle_frame: int = 16
     flush_every: int = 20
@@ -254,9 +266,15 @@ def load_config(condition: str | None = None, env: str | None = None,
     name = condition or "base"
     presets: dict[str, dict[str, Any]] = {
         "base": {}, "c1": {"encoder.kv_source": "dinov2_ref"},
-        "c2": {"encoder.kv_source": "dinov2_clip", "encoder.dinov2.pair_average": True},
         "c3": {}, "c3_nomask": {"adapter.use_object_embedding": False},
         "pooler": {"adapter.strategy": "pooler", "data.video_input": "full_scene", "data.crop.size": 384, "encoder.vjepa.image_size": 384},
+        "video_lora": {"encoder.vjepa.video_lora": True},
+        "sam_lora": {"sam3d.lora": True},
+        "sam_video_lora": {"sam3d.lora": True, "encoder.vjepa.video_lora": True},
+        "dino_pooler": {"encoder.kv_source": "dinov2_frames", "adapter.strategy": "pooler",
+                        "adapter.max_dt": 15},
+        "dino_pooler_single": {"encoder.kv_source": "dinov2_frames", "adapter.strategy": "pooler",
+                               "adapter.pooler_queries": 1, "adapter.max_dt": 15, "data.crop.size": 224},
     }
     if name not in presets:
         raise ValueError(f"Unknown condition {name}; choose from {list(presets)}")
@@ -292,14 +310,24 @@ def load_config(condition: str | None = None, env: str | None = None,
     cfg = blueprint.apply_from_argv([f"{k}={v}" for k, v in text_values.items()]).make()
     if "run_name" not in text_values:
         cfg = chz.replace(cfg, run_name=f"{name}_seed{cfg.seed}-" + datetime.now().strftime("%Y-%m-%d-%H-%M-%S"))
-    if cfg.adapter.strategy not in {"fusion", "pooler"}:
-        raise ValueError("adapter.strategy must be fusion or pooler")
+    if cfg.adapter.strategy not in {"fusion", "pooler", "native"}:
+        raise ValueError("adapter.strategy must be fusion, pooler or native")
+    if cfg.adapter.strategy == 'native' and cfg.encoder.vjepa.video_lora:
+        raise ValueError('Native conditioning does not use a video encoder')
     if cfg.train.batch_size <= 0 or cfg.train.effective_batch_size <= 0 or cfg.train.effective_batch_size % cfg.train.batch_size:
         raise ValueError("effective_batch_size must be a positive multiple of batch_size")
     if cfg.train.max_steps <= 0 or cfg.train.max_seconds <= 0 or cfg.optim.lr <= 0:
         raise ValueError("steps, wall time and learning rate must be positive")
-    if cfg.data.source not in {"synthetic", "navi"}:
-        raise ValueError("data.source must be synthetic or navi")
+    if cfg.train.epochs < 0 or cfg.val.epoch_media_samples < 0:
+        raise ValueError("epochs and per-epoch media counts must be nonnegative")
+    if cfg.data.source not in {"synthetic", "navi", "omniobject3d", "gso"}:
+        raise ValueError("data.source must be synthetic, navi, omniobject3d or gso")
+    if not 0 < cfg.data.mask_threshold < 1 or not cfg.data.scanned_strides or min(cfg.data.scanned_strides) < 1:
+        raise ValueError("Mask threshold must be in (0,1) and temporal strides must be positive")
+    if cfg.encoder.kv_source not in {"vjepa", "dinov2_ref", "dinov2_frames"}:
+        raise ValueError("Unknown encoder.kv_source")
+    if cfg.encoder.vjepa.video_lora and cfg.encoder.kv_source != "vjepa":
+        raise ValueError("Video LoRA requires the V-JEPA encoder")
     return cfg
 
 

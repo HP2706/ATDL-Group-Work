@@ -81,10 +81,9 @@ Voxels from `voxels_<split>.npz` → canonical permutation P (`target.canonical_
 | Condition | Keys/values | Grid |
 |---|---|---|
 | C1 | SAM 3D's DINOv2, reference frame only (Δt = 0) | 224 px, patch 14 → 16 × 16 |
-| C2 | SAM 3D's DINOv2 on K frames, averaged in pairs | 16 × 16 × K/2 (token parity with C3) |
 | C3 | V-JEPA 2.1 ViT-L/16 (`vjepa2_1_vit_large_384`), last layer, bf16 | 256 px → 16 × 16 × K/2 |
 
-All encoders are frozen and run online. Inputs use ImageNet normalisation. The coverage function averages the fractional mask per patch, and over the tubelet for V-JEPA and C2. Stretch options: `encoder.vjepa.layers: hierarchical` (4 levels, `adapter.d_vid: 4096`), 384 px.
+All encoders are frozen and run online. Inputs use ImageNet normalisation. The coverage function averages the fractional mask per patch, and over the tubelet for V-JEPA. DINOv2 video features retain every frame's patch tokens for transformer attention. Stretch options: `encoder.vjepa.layers: hierarchical` (4 levels, `adapter.d_vid: 4096`), 384 px.
 
 ## 5. Adapter (`vidsam3d/models/adapter.py`)
 
@@ -148,7 +147,7 @@ T4 outcomes: identity wins → keep it. The generator's T6 already found identit
 
 | Priority | Experiment | How |
 |---|---|---|
-| Must | C1, C2, C3, C3-nomask | `train --condition c1` … `c3_nomask` |
+| Must | C1, C3, C3-nomask | `train --condition c1`, `c3`, `c3_nomask` |
 | Must | Test-time K ∈ {1, 4, 8, 16}; frame shuffle (H3); wrong video (T7) | `eval --k`, `--shuffle-frames`, `--wrong-video` |
 | Should | 3 blocks; query sets (crop only / full only) | `adapter.n_blocks=3`, `adapter.query_sets=[...]` |
 | Should | Full-frame clip instead of the crop | not implemented |

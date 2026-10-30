@@ -17,8 +17,10 @@ from contextlib import nullcontext
 import json
 import logging
 import time
+from pathlib import Path
 
 import torch
+from tqdm.auto import tqdm
 from video3d.loss import flow_loss
 from video3d.config import ExperimentConfig, config_dict, OptimConfig, LossConfig
 from torch.utils.data import DataLoader, Sampler
@@ -26,7 +28,7 @@ from torch.utils.data import DataLoader, Sampler
 from video3d.config import save_config
 from video3d.data.samples import VAL
 from video3d.data.targets import load_latent
-from video3d.metrics import voxel_iou
+from video3d.metrics import shape_metrics
 from video3d.models.adapter import build_adapter, count_parameters, pad_video_batch
 from video3d.models.encoders import build_kv_encoder, kv_tokens
 from video3d.models.sam3d import apply_adapter, build_sam3d
@@ -127,6 +129,8 @@ def adapted_condition(sam3d: typing.Any, encoder: typing.Any, adapter: typing.An
     rgb, mask = reference_images(batch, device)
     with torch.no_grad():
         cond = sam3d.condition(rgb, mask)
+    if cfg.adapter.strategy == 'native':
+        return cond
     feature_context = nullcontext() if cfg.encoder.vjepa.video_lora else torch.no_grad()
     with feature_context:
         kv = [kv_tokens(encoder, to_device(s["inputs"], device), cfg.encoder.kv_source)
@@ -172,9 +176,10 @@ def val_flow_loss(sam3d: typing.Any, encoder: typing.Any, adapter: typing.Any, v
     """Mean flow loss on the first val samples at a fixed τ grid with fixed noise."""
     taus = torch.tensor(list(cfg.val.tau_grid), device=device)
     losses = []
-    for i in range(min(len(val_ds), cfg.val.loss_num_samples)):
+    for i in tqdm(range(min(len(val_ds), cfg.val.loss_num_samples)), desc="Validation loss", unit="video"):
         s = val_ds[i]
-        cond = adapted_condition(sam3d, encoder, adapter, [s], cfg, device)
+        cond = (adapted_condition(sam3d, encoder, adapter, [s], cfg, device) if adapter is not None
+                else sam3d.condition(*reference_images([s], device)))
         cond = {k: v.expand(len(taus), *v.shape[1:]) for k, v in cond.items()}
         x1 = (s["target"] if "target" in s else load_latent(cfg, s["info"]["asset_id"])).to(device)
         x1 = x1.expand(len(taus), *x1.shape)
@@ -188,19 +193,64 @@ def val_flow_loss(sam3d: typing.Any, encoder: typing.Any, adapter: typing.Any, v
 
 
 @torch.no_grad()
-def val_viou(sam3d: typing.Any, encoder: typing.Any, adapter: typing.Any, val_ds: typing.Any, cfg: typing.Any, device: typing.Any) -> float:
-    """Mean canonical vIoU of sampled shapes for the first val objects (middle reference)."""
+def val_shape_metrics(sam3d: typing.Any, encoder: typing.Any, adapter: typing.Any,
+                      val_ds: typing.Any, cfg: ExperimentConfig, device: torch.device,
+                      records_path: Path | None = None) -> dict[str, typing.Any]:
+    """Score the existing fixed shape samples; reuse standalone surface-voxel metrics.
+
+    Chamfer is a sum of mean unsquared distances after bbox normalization to
+    longest side two and similarity ICP. It is not refined mesh-surface Chamfer.
+    Empty predictions stay in IoU and failure counts, but have no finite Chamfer.
+    """
+    started = time.monotonic()
     items = [i for i, x in enumerate(val_ds.index) if "middle" in x["rules"] or "reference" in x["rules"]]
-    ious = []
-    for i in items[:cfg.val.sample_num_objects]:
+    records: list[dict[str, typing.Any]] = []
+    for i in tqdm(items[:cfg.val.sample_num_objects], desc="Validation shapes", unit="video"):
         s = val_ds[i]
         info = s["info"]
         cond = adapted_condition(sam3d, encoder, adapter, [s], cfg, device)
         z, _ = sam3d.sample(cond, [sample_seed(info["clip_id"], info["k"], info["r"])], cfg.sampler)
         from video3d.data import ground_truth
         gt = ground_truth(val_ds, info["asset_id"], cfg)
-        ious.append(voxel_iou(sam3d.decode_latent(z)[0].cpu(), torch.from_numpy(gt)))
-    return sum(ious) / len(ious)
+        prediction = sam3d.decode_latent(z)[0].cpu()
+        # Training calls validation inside BF16 autocast; ICP/KNN require FP32.
+        with torch.autocast(device_type=device.type, enabled=False):
+            metrics = shape_metrics(prediction, torch.from_numpy(gt), cfg.eval.metrics,
+                                    seed=sample_seed(info["clip_id"], info["k"], info["r"]))
+        records.append({"clip_id": info["clip_id"], "asset_id": info["asset_id"],
+                        "k": info["k"], "r": info["r"], **metrics})
+        if records_path is not None:
+            from video3d.storage import atomic_torch
+            sample_id = f"{info['clip_id']}/{info['k']}/{info['r']}"
+            prediction_path = (records_path.parent / records_path.stem / "predictions"
+                               / f"{sample_id.replace('/', '-')}.pt")
+            atomic_torch(prediction_path, {
+                "sample_id": sample_id, "latent": z[0].float().cpu(),
+                "prediction": prediction, "ground_truth": torch.from_numpy(gt),
+                "metrics": records[-1], "sampler": chz.asdict(cfg.sampler),
+                "frame_ids": info["frame_ids"],
+            })
+            records[-1]["prediction_file"] = str(prediction_path.relative_to(records_path.parent))
+    if not records:
+        raise ValueError("Shape validation requires at least one selected object")
+    summary: dict[str, typing.Any] = {
+        "val_viou": sum(row["viou"] for row in records) / len(records),
+        "val_shape_objects": len(records),
+        "val_empty_predictions": sum(row["empty_pred"] for row in records),
+        "val_shape_metric_protocol": "surface-voxel-bbox-longest-side-2-icp-l1-sum-v1",
+    }
+    for key in ["chamfer", "viou_aligned", *[f"fscore@{t}" for t in cfg.eval.metrics.fscore_thresholds]]:
+        values = [row[key] for row in records if row[key] is not None]
+        if not all(math.isfinite(value) for value in values):
+            raise FloatingPointError(f"Non-finite validation {key}")
+        summary[f"val_{key}"] = sum(values) / len(values) if values else None
+        summary[f"val_{key}_count"] = len(values)
+    summary["val_shape_seconds"] = time.monotonic() - started
+    if records_path is not None:
+        from video3d.storage import atomic_json
+        atomic_json(records_path, {"summary": summary, "metric_config": chz.asdict(cfg.eval.metrics),
+                                   "objects": records})
+    return summary
 
 
 # ---- loop ----
@@ -247,18 +297,34 @@ def train(cfg: ExperimentConfig, benchmark: bool = False, stop_at: int | None = 
     logger = RunLogger(cfg)
     log.info("adapter: %.2fM trainable parameters", count_parameters(adapter) / 1e6)
 
-    max_steps = int(tcfg.benchmark_steps if benchmark else tcfg.max_steps)
+    from video3d.data import build_dataset
+    from video3d.epochs import EpochBatchSampler, update_sizes, epoch_previews
+    train_ds = build_dataset(cfg, cfg.data.train_split, train=True)
+    epoch_sizes = update_sizes(len(train_ds), tcfg.effective_batch_size, tcfg.batch_size)
+    epoch_steps = len(epoch_sizes)
+    use_epochs = tcfg.epochs > 0 and not benchmark
+    max_steps = int(tcfg.benchmark_steps if benchmark else tcfg.epochs * epoch_steps if use_epochs else tcfg.max_steps)
     accum = tcfg.effective_batch_size // tcfg.batch_size
     assert accum * tcfg.batch_size == tcfg.effective_batch_size, "effective batch % batch size != 0"
     groups = param_groups(adapter, ocfg)
     if extra:
         groups.append({"params": list(extra.values()), "weight_decay": ocfg.weight_decay})
     parameters = [p for group in groups for p in group["params"]]
+    parameter_counts = {"adapter":count_parameters(adapter),
+                        "sam_lora":sum(p.numel() for p in sam3d.parameters() if p.requires_grad),
+                        "video_lora":sum(p.numel() for p in encoder.parameters() if p.requires_grad),
+                        "trainable_total":sum(p.numel() for p in parameters),
+                        "sam_total":sum(p.numel() for p in sam3d.parameters()),
+                        "video_total":sum(p.numel() for p in encoder.parameters())}
+    from video3d.storage import atomic_json
+    atomic_json(output_dir / "parameter_counts.json", parameter_counts)
     opt = torch.optim.AdamW(groups, lr=ocfg.lr, betas=tuple(ocfg.betas))
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda s: lr_factor(
         s, ocfg.warmup_steps, max_steps, ocfg.min_lr / ocfg.lr))
 
     step, best = 0, -1.0
+    epoch_loss_sum, epoch_examples = 0.0, 0
+    epoch_history: list[dict[str, typing.Any]] = []
     ckpt_path = None if benchmark else find_resume_checkpoint(cfg)
     if ckpt_path is not None:
         ckpt = torch.load(ckpt_path, map_location=device, weights_only=False)
@@ -276,16 +342,35 @@ def train(cfg: ExperimentConfig, benchmark: bool = False, stop_at: int | None = 
                 p.copy_(ckpt["extra"][name])
                 extra_ema[name].copy_(ckpt["extra_ema"][name])
         step, best = ckpt["step"], ckpt["best_val_viou"]
+        epoch_loss_sum = ckpt.get("epoch_loss_sum", 0.0)
+        epoch_examples = ckpt.get("epoch_examples", 0)
+        epoch_history = ckpt.get("epoch_history", [])
         log.info("resumed from %s at step %d", ckpt_path, step)
     metrics_path = restore_metrics(scratch_dir, output_dir, step)
 
-    from video3d.data import build_dataset
-    train_ds = build_dataset(cfg, cfg.data.train_split, train=True)
+    sampler = EpochBatchSampler(len(train_ds), tcfg.effective_batch_size, tcfg.batch_size,
+                                tcfg.epochs, cfg.seed, start_step=step) if use_epochs else StreamBatchSampler(
+                                    len(train_ds), tcfg.batch_size, cfg.seed, start=step * accum)
     loader = DataLoader(train_ds, collate_fn=collate_list, num_workers=cfg.data.num_workers,
-                        batch_sampler=StreamBatchSampler(len(train_ds), tcfg.batch_size, cfg.seed,
-                                                         start=step * accum))
+                        batch_sampler=sampler)
     val_ds = None if benchmark or not cfg.data.val_asset_frac else build_dataset(cfg, VAL, train=False)
     autocast = torch.autocast(device.type, dtype=torch.bfloat16, enabled=bool(tcfg.bf16))
+    if use_epochs and step and step % epoch_steps == 0 and cfg.val.epoch_media_samples:
+        completed_epoch = step // epoch_steps
+        completed_media = output_dir / "epochs" / f"epoch-{completed_epoch:02d}" / "reconstructions.json"
+        if not completed_media.exists():
+            with autocast:
+                recovered_media = epoch_previews(cfg, sam3d, encoder, adapter, device,
+                                                 output_dir / "epochs", completed_epoch, logger.run)
+            logger.log(recovered_media, step)
+
+    if use_epochs and step and step % epoch_steps == 0 and cfg.val.heavy_epochs:
+        from video3d.evaluate import evaluate_training_epoch, heavy_epoch_selected
+        if heavy_epoch_selected(cfg.val.heavy_epochs, step // epoch_steps, tcfg.epochs):
+            evaluate_training_epoch(cfg, output_dir, step // epoch_steps)
+    if use_epochs and step == max_steps and cfg.val.final_full_validation:
+        from video3d.evaluate import evaluate_full_validation
+        evaluate_full_validation(cfg, output_dir, tcfg.epochs)
 
     def checkpoint_state() -> dict:
         return {"adapter": adapter.state_dict(), "ema": ema.state_dict(),
@@ -294,7 +379,11 @@ def train(cfg: ExperimentConfig, benchmark: bool = False, stop_at: int | None = 
                 "schema_version": 3, "config": chz.asdict(cfg),
                 "source_identity":source_hash,"data_identity":data_hash,
                 "extra": {name: p.detach().cpu().clone() for name, p in extra.items()},
-                "extra_ema": extra_ema}
+                "extra_ema": extra_ema, "epoch_loss_sum":epoch_loss_sum,
+                "epoch_examples":epoch_examples, "epoch_history":epoch_history,
+                "epoch":step // epoch_steps if use_epochs else None,
+                "run_id":cfg.run_name, "wandb_run_id":logger.run.id if logger.run is not None else None,
+                "train_log_tail":metrics_path.read_text().splitlines()[-500:] if metrics_path.exists() else []}
 
     records = read_jsonl(metrics_path)
     batches, step_times, record = iter(loader), [], records[-1] if records else {"step":step}
@@ -307,21 +396,32 @@ def train(cfg: ExperimentConfig, benchmark: bool = False, stop_at: int | None = 
     previous_handlers = {sig: signal.signal(sig, request_stop) for sig in (signal.SIGTERM, signal.SIGINT)}
     started = time.monotonic()
     update_in_progress = False
+    total_videos = len(train_ds) * tcfg.epochs if use_epochs else max_steps * tcfg.effective_batch_size
+    completed_videos = step // epoch_steps * len(train_ds) + epoch_examples if use_epochs else step * tcfg.effective_batch_size
+    progress = tqdm(total=total_videos, initial=completed_videos, desc="Training", unit="video")
     try:
         while step < max_steps and not stopping_signal and time.monotonic() - started < tcfg.max_seconds:
             update_in_progress = True
             t0 = time.perf_counter()
             opt.zero_grad(set_to_none=True)
             loss_sum = 0.0
-            for micro in range(accum):
+            sizes = epoch_sizes[step % epoch_steps] if use_epochs else [tcfg.batch_size] * accum
+            update_examples = sum(sizes)
+            for micro, size in enumerate(sizes):
                 gen = torch.Generator(device).manual_seed(sample_seed(cfg.seed, "train", step, micro))
+                batch = next(batches)
+                assert len(batch) == size
                 with autocast:
-                    loss = batch_loss(sam3d, encoder, adapter, next(batches), cfg, device, gen) / accum
+                    loss = batch_loss(sam3d, encoder, adapter, batch, cfg, device, gen) * size / update_examples
                 if not torch.isfinite(loss):
                     raise FloatingPointError("Non-finite training loss")
                 loss.backward()
                 loss_sum += loss.item()
             grad_norm = torch.nn.utils.clip_grad_norm_(parameters, ocfg.grad_clip).item()
+            component_gradients = {
+                f"gradient/{prefix}":math.sqrt(sum(float(p.grad.detach().float().square().sum())
+                    for name, p in extra.items() if name.startswith(prefix + ".") and p.grad is not None))
+                for prefix in ("sam", "encoder")}
             if not math.isfinite(grad_norm):
                 raise FloatingPointError("Non-finite gradient norm")
             opt.step()
@@ -333,9 +433,31 @@ def train(cfg: ExperimentConfig, benchmark: bool = False, stop_at: int | None = 
             step += 1
             update_in_progress = False
             step_times.append(time.perf_counter() - t0)
+            progress.update(update_examples)
+            progress.set_postfix(loss=f"{loss_sum:.4f}", step=step)
 
             record = {"step": step, "loss": loss_sum, "lr": sched.get_last_lr()[0],
-                      "grad_norm": grad_norm, "s_per_step": step_times[-1], **adapter.gates()}
+                      "grad_norm": grad_norm, "s_per_step": step_times[-1],
+                      **component_gradients, **adapter.gates()}
+            media: dict[str, typing.Any] = {}
+            epoch_finished = use_epochs and step % epoch_steps == 0
+            if use_epochs:
+                epoch_loss_sum += loss_sum * update_examples
+                epoch_examples += update_examples
+            if epoch_finished:
+                assert epoch_examples == len(train_ds)
+                epoch_record = {"epoch":step // epoch_steps, "epoch/loss":epoch_loss_sum / epoch_examples,
+                                "epoch/examples":epoch_examples, "epoch/steps":epoch_steps}
+                record.update(epoch_record)
+                epoch_history.append(epoch_record)
+                from video3d.storage import atomic_json
+                atomic_json(output_dir / "epochs.json", epoch_history)
+                epoch_loss_sum, epoch_examples = 0.0, 0
+                save_checkpoint(checkpoint_state(), cfg, f"epoch_{step // epoch_steps:02d}.pt")
+                if cfg.val.epoch_media_samples:
+                    with autocast:
+                        media = epoch_previews(cfg, sam3d, encoder, adapter, device,
+                                               output_dir / "epochs", step // epoch_steps, logger.run)
             if device.type == "cuda":
                 record["gpu_mem_gb"] = torch.cuda.max_memory_allocated(device) / 1024**3
             if val_ds is not None and step % cfg.val.loss_every == 0:
@@ -343,7 +465,8 @@ def train(cfg: ExperimentConfig, benchmark: bool = False, stop_at: int | None = 
                     record["val_loss"] = val_flow_loss(sam3d, encoder, ema, val_ds, cfg, device)
             if val_ds is not None and step % cfg.val.sample_every == 0:
                 with use_ema(extra, extra_ema), autocast:
-                    record["val_viou"] = val_viou(sam3d, encoder, ema, val_ds, cfg, device)
+                    record.update(val_shape_metrics(sam3d, encoder, ema, val_ds, cfg, device,
+                                                    output_dir / "validation" / f"step-{step:08d}.json"))
                 if record["val_viou"] > best:
                     best = record["val_viou"]
                     save_checkpoint({**checkpoint_state(), "ema": ema.state_dict(), "step": step, "val_viou": best},
@@ -353,7 +476,15 @@ def train(cfg: ExperimentConfig, benchmark: bool = False, stop_at: int | None = 
             if step % tcfg.log_every == 0 or step == max_steps or "val_loss" in record:
                 log.info(" ".join(f"{k}={v:.4g}" if isinstance(v, float) else f"{k}={v}"
                                   for k, v in record.items()))
-            logger.log(record, step)
+            logger.log({**record, **media}, step)
+            if epoch_finished and cfg.val.heavy_epochs:
+                from video3d.evaluate import evaluate_training_epoch, heavy_epoch_selected
+                epoch = step // epoch_steps
+                if heavy_epoch_selected(cfg.val.heavy_epochs, epoch, tcfg.epochs):
+                    evaluate_training_epoch(cfg, output_dir, epoch)
+            if epoch_finished and step // epoch_steps == tcfg.epochs and cfg.val.final_full_validation:
+                from video3d.evaluate import evaluate_full_validation
+                evaluate_full_validation(cfg, output_dir, tcfg.epochs)
             stopping = (stop_at is not None and step >= stop_at) or stopping_signal or time.monotonic() - started >= tcfg.max_seconds
             if not benchmark and (step % tcfg.ckpt_every == 0 or step == max_steps or stopping):
                 save_checkpoint(checkpoint_state(), cfg, f"ckpt_{step}.pt", keep=tcfg.keep_ckpts)
@@ -362,6 +493,7 @@ def train(cfg: ExperimentConfig, benchmark: bool = False, stop_at: int | None = 
                 break
 
     finally:
+        progress.close()
         if not benchmark and not update_in_progress:
             save_checkpoint(checkpoint_state(), cfg, f"ckpt_{step}.pt", keep=tcfg.keep_ckpts)
         if update_in_progress:

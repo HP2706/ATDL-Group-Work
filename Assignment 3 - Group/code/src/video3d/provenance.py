@@ -15,7 +15,7 @@ def source_identity() -> str:
 
 
 def data_identity(cfg: ExperimentConfig) -> str:
-    if cfg.data.source == "synthetic":
+    if cfg.data.source in {"synthetic", "omniobject3d", "gso"}:
         from video3d.data.targets import cache_identity
         return cache_identity(cfg)
     return hashlib.sha256((Path(cfg.data.prepared)/"manifest.jsonl").read_bytes()).hexdigest()

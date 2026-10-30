@@ -4,6 +4,7 @@ from __future__ import annotations
 import typing
 
 import itertools
+from functools import lru_cache
 import chz
 import hashlib
 import json
@@ -12,6 +13,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
+from tqdm.auto import tqdm
 from video3d.config import ExperimentConfig
 from scipy import ndimage
 
@@ -25,6 +27,17 @@ __all__ = ["PYTORCH3D_FROM_OPENCV", "convert_pose_to_sam3d", "apply_canonical_pe
            "cache_latents", "cache_identity"]
 
 log = logging.getLogger("video3d")
+
+
+@lru_cache(maxsize=8)
+def scanned_source_signature(root_name: str, manifest_mtime: int, manifest_size: int) -> tuple:
+    """Hash prepared immutable geometry once, rather than reading it per batch."""
+    from video3d.data.scanned import records
+    root = Path(root_name)
+    result = [('manifest', hashlib.sha256((root / 'manifest.jsonl').read_bytes()).hexdigest())]
+    result.extend((row.object_id, hashlib.sha256((root / row.voxels).read_bytes()).hexdigest())
+                  for row in records(root))
+    return tuple(result)
 
 
 def apply_canonical_permutation(vox: np.ndarray, P: typing.Any) -> np.ndarray:
@@ -60,12 +73,15 @@ def fill_voxels(vox: np.ndarray) -> np.ndarray:
 def cache_identity(cfg: ExperimentConfig) -> str:
     sources = []
     root = Path(cfg.paths.data_root)
+    if cfg.data.source in {"omniobject3d", "gso"}:
+        stat = (root / 'manifest.jsonl').stat()
+        sources.extend(scanned_source_signature(str(root.resolve()), stat.st_mtime_ns, stat.st_size))
     for split in sorted(root.glob("*/index.json")):
         sources.append((str(split.resolve()), hashlib.sha256(split.read_bytes()).hexdigest()))
         index = json.loads(split.read_text())
         voxels = split.parent / index["voxels_file"]
         sources.append((str(voxels.resolve()), voxels.stat().st_size, voxels.stat().st_mtime_ns))
-    signature = {"schema_version":1, "target":chz.asdict(cfg.target),
+    signature = {"schema_version":1, "source":cfg.data.source, "target":chz.asdict(cfg.target),
                  "sam_revision":cfg.sam3d.checkpoint_revision, "sam_commit":cfg.provenance.sam_commit,
                  "fake_sam3d":cfg.fake_sam3d, "sources":sources}
     return hashlib.sha256(json.dumps(signature,sort_keys=True).encode()).hexdigest()[:20]
@@ -99,14 +115,22 @@ def cache_latents(cfg: ExperimentConfig, split: str, sam3d: typing.Any, device: 
                   batch_size: int = 8) -> dict:
     """Encode every asset of a split's export folder (train covers val) with the VAE encoder;
     save the latents and the round-trip IoU (T5)."""
-    voxels_file = reader.open_split(Path(cfg.paths.data_root) / split_folder(cfg.data, split),
-                                    str(cfg.paths.cache_root)).voxels_file
-    assets = sorted(reader.voxel_table(str(voxels_file)))
-    assert assets, f"no assets in {voxels_file}"
+    if cfg.data.source in {"omniobject3d", "gso"}:
+        from video3d.data.scanned import ScannedDataset
+        dataset = ScannedDataset(cfg, split, train=False)
+        assets = sorted(row.object_id for row in dataset.rows)
+        load_voxels = dataset.target_voxels
+    else:
+        voxels_file = reader.open_split(Path(cfg.paths.data_root) / split_folder(cfg.data, split),
+                                        str(cfg.paths.cache_root)).voxels_file
+        assets = sorted(reader.voxel_table(str(voxels_file)))
+        def load_voxels(asset_id: str) -> np.ndarray:
+            return target_voxels(voxels_file, asset_id, cfg)
+    assert assets, 'no target assets'
     ious = {}
-    for i in range(0, len(assets), batch_size):
+    for i in tqdm(range(0, len(assets), batch_size), desc=f"Cache targets ({split})", unit="batch"):
         chunk = assets[i:i + batch_size]
-        vox = torch.from_numpy(np.stack([target_voxels(voxels_file, a, cfg) for a in chunk])).to(device)
+        vox = torch.from_numpy(np.stack([load_voxels(a) for a in chunk])).to(device)
         z = sam3d.encode_voxels(vox)
         recon = sam3d.decode_latent(z)
         for j, asset_id in enumerate(chunk):

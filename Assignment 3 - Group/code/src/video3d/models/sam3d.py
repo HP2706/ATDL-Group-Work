@@ -61,10 +61,11 @@ class Sam3DGeometry(nn.Module):
             pcfg.ss_encoder_config_path, pcfg.ss_encoder_ckpt_path = "ss_encoder.yaml", "ss_encoder.ckpt"
         self.pipeline_cfg = pcfg
         self.pipeline = instantiate(pcfg)
-        for name in STAGE2_MODELS:                       # never run Texture & Refinement
-            if name in self.pipeline.models:
-                del self.pipeline.models[name]
-        self.pipeline.condition_embedders["slat_condition_embedder"] = None
+        if not cfg.eval.refined_mesh:
+            for name in STAGE2_MODELS:
+                if name in self.pipeline.models:
+                    del self.pipeline.models[name]
+            self.pipeline.condition_embedders["slat_condition_embedder"] = None
         torch.cuda.empty_cache()
 
         self.embedder = self.pipeline.condition_embedders["ss_condition_embedder"]
@@ -75,6 +76,7 @@ class Sam3DGeometry(nn.Module):
         self.dtype = self.pipeline.shape_model_dtype
         self.device_ = torch.device(device)
         self.sampler_cfg = cfg.sampler
+        self.sampling_rng_state: torch.Tensor | None = None
         self.requires_grad_(False)
         self.eval()
         if cfg.sam3d.lora:
@@ -109,9 +111,10 @@ class Sam3DGeometry(nn.Module):
         tokens = []
         for b in range(len(rgb)):
             rgba = p.merge_image_and_mask(rgb[b].cpu().numpy(), mask[b].cpu().numpy().astype(np.uint8) * 255)
-            with p.device, self._autocast():
+            with p.device:
                 pointmap = p.compute_pointmap(rgba)["pointmap"]
                 inputs = p.preprocess_image(rgba, p.ss_preprocessor, pointmap=pointmap)
+            with p.device, self._autocast():
                 self._lengths.clear()
                 args, _ = p.get_condition_input(self.embedder, inputs, p.ss_condition_input_mapping)
             tokens.append(args[0])
@@ -155,6 +158,7 @@ class Sam3DGeometry(nn.Module):
                 with torch.random.fork_rng(devices=[self.device_]), self._autocast():
                     torch.manual_seed(seed)
                     outs.append(gen(shapes, self.device_, tokens[i:i + 1]))
+                    self.sampling_rng_state = torch.cuda.get_rng_state(self.device_)
         finally:
             gen.no_shortcut, cfg_fn.strength, cfg_fn.strength_pm, gen.inference_steps = saved
         z = torch.cat([o["shape"] for o in outs]).float()
@@ -187,12 +191,50 @@ class Sam3DGeometry(nn.Module):
         return logits[:, 0] > 0
 
     def dino_backbone(self) -> nn.Module:
-        """SAM 3D's own DINOv2 (for the C1/C2 controls)."""
+        """SAM 3D's own DINOv2 for reference and per-frame controls."""
         from sam3d_objects.model.backbone.dit.embedder.dino import Dino
         for module in self.embedder.module_list:
             if isinstance(module, Dino):
                 return module.backbone
         raise AssertionError("no Dino embedder in the condition embedder")
+
+    @torch.no_grad()
+    def sparse_structure(self, z: torch.Tensor, layout: dict[str, torch.Tensor]) -> dict[str, typing.Any]:
+        """Use the same native pruning/downsampling as the baseline Stage-1 pipeline."""
+        from sam3d_objects.pipeline.inference_pipeline import prune_sparse_structure, downsample_sparse_structure
+        coords = torch.argwhere(self.decode_latent(z))[:, [0, 1, 2, 3]].int()
+        original = coords.clone()
+        if self.pipeline.downsample_ss_dist > 0:
+            coords = prune_sparse_structure(coords, max_neighbor_axes_dist=self.pipeline.downsample_ss_dist)
+        coords, factor = downsample_sparse_structure(coords)
+        return {"shape":z, **layout, "coords":coords, "coords_original":original,
+                "downsample_factor":factor}
+
+    @torch.no_grad()
+    def refine(self, z: torch.Tensor, layout: dict[str, torch.Tensor], rgb: torch.Tensor,
+               mask: torch.Tensor, seed: int, steps: int) -> dict[str, typing.Any]:
+        """Native Stage 2 from our sampled Stage 1; never replace it with zero-shot geometry."""
+        pipeline = self.pipeline
+        # Native sample_slat owns its autocast. FlexiCubes mesh extraction must
+        # run outside it, as in pipeline.run, to avoid Float/Half index_add errors.
+        with self.device_, torch.random.fork_rng(devices=[self.device_]):
+            image = pipeline.merge_image_and_mask(rgb[0].cpu().numpy(), mask[0].cpu().numpy().astype(np.uint8) * 255)
+            pointmap = pipeline.compute_pointmap(image)["pointmap"]
+            inputs = pipeline.preprocess_image(image, pipeline.ss_preprocessor, pointmap=pointmap)
+            coarse = self.sparse_structure(z, layout)
+            coords, factor = coarse['coords'], coarse['downsample_factor']
+            coarse.update(pipeline.pose_decoder(coarse, scene_scale=inputs.get("pointmap_scale"),
+                                                scene_shift=inputs.get("pointmap_shift")))
+            coarse["scale"] = coarse["scale"] * factor
+            assert self.sampling_rng_state is not None, 'Call Stage-1 sample before refinement'
+            torch.cuda.set_rng_state(self.sampling_rng_state, self.device_)
+            slat = pipeline.sample_slat(pipeline.preprocess_image(image, pipeline.slat_preprocessor),
+                                        coords, inference_steps=steps, use_distillation=False)
+            outputs = pipeline.decode_slat(slat, ["mesh", "gaussian"])
+            outputs['slat_features'] = slat.feats.detach().cpu()
+            outputs['slat_coordinates'] = slat.coords.detach().cpu()
+            outputs = pipeline.postprocess_slat_output(outputs, False, False, True)
+            return {**coarse, **outputs, 'pointmap':pointmap}
 
 
 def build_sam3d(cfg: ExperimentConfig, device: torch.device) -> nn.Module:

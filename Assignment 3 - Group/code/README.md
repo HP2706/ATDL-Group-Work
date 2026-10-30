@@ -97,66 +97,6 @@ staging directories are preserved beside the replacement. Original generation do
 are under `docs/generation/`; older command paths in those historical documents refer to
 the former standalone generator. The active commands above use the shared environment.
 
-For deliberate occlusion, set `occlusion_mode="recoverable"` and generate two-object
-clips. Object 1 is the target; object 2 is an occluder with scale controlled by
-`occluder_scale_ratio`. Their bounding spheres remain disjoint. The sampler places
-them along the reference viewing direction and searches their lateral offset using
-the existing voxel precheck. Camera motion produces changing occlusion through parallax.
-Defaults require 30–70% target occlusion at the middle reference, at least eight frames
-with 20% occlusion, a frame with at least 75% target visibility, and recovery of at least
-30% of the reference-hidden surface samples. These are pilot thresholds, not calibrated
-training-distribution recommendations. The original `random` mode remains the default.
-
-Accepted controlled clips store `meta.occlusion`, also retained in the training export:
-area-uniform source-mesh samples, scene-depth visibility, reference target-alone visibility,
-union coverage, additional coverage, best-frame gain and hidden-surface recovery. These
-are finite-sample area estimates; depth agreement uses 1% of the target scale. Camera,
-amodal and depth annotations are used only to construct and measure data.
-
-`scripts/modal_generation.py` is a bounded A100 pilot launcher: shared CPU asset
-preparation, ten `generate.map` inputs with up to ten GPU workers, persistent raw
-artifacts and logs, and downloaded MP4/annotated previews. Each GPU input runs the
-same portable `scripts/occlusion_pilot.py generate` command. Completed clips are reused
-on retries, and providers release batch workers after the run. This small smoke test
-uses cached object meshes and one photographic background rather than a diverse dataset.
-
-## Dataset occlusion and complementary views
-
-After exporting or downloading a synthetic split, measure every video with:
-
-```bash
-python -m video3d video-metrics --split_dir=/data/export/train --out=/results/video_metrics.json
-```
-
-This CPU diagnostic uses existing camera poses, packed surface voxels and dense rendered
-instance masks. It does not load pretrained models, decode RGB videos or run inference.
-It writes JSON with every frame/object measurement plus `.clips.csv` and `.objects.csv`.
-The default reference is frame `T // 2`; `--reference=0` selects the first frame instead.
-Per-object JSON also includes gains/recovery for every possible reference and a separate
-summary using that object's most occluded frame. These are dataset diagnostics, not inputs
-to the adapter.
-
-Pixel occlusion is exact for the rendered in-image silhouette:
-`occlusion = 1 - visible_px / amodal_px`. Every frame's visible pixel counts are checked
-against its instance mask. The report includes mean/max/reference occlusion and the number
-of frames with at least 10% occlusion; 10% is a descriptive threshold, not a rejection rule.
-
-For complementary evidence, each occupied surface voxel has a persistent identity across
-frames. Rays from its centre towards the camera traverse the object's 64³ grid to reject
-self-occluded samples. Native-resolution instance masks identify external occluders.
-Let `S_t` be the resulting visible voxel set and `U` its union across the clip. The proxy
-metrics are `|U|/N`, additional coverage `|U minus S_ref|/N`, and best-frame gain
-`(|U| - max_t |S_t|)/N`. External-occlusion recovery is the fraction of reference samples
-hidden by other objects that become visible elsewhere. Recovery is null if no reference
-samples are externally occluded. Exact zero pixel occlusion overrides coarse silhouette
-discrepancies, so unoccluded objects cannot acquire false external occlusion.
-
-These geometry metrics are explicitly **voxel-count proxies**, not true mesh-surface area.
-The training export omits meshes, depth and amodal mask images, although it retains exact
-amodal pixel counts. Quantization and projected silhouette boundaries affect the proxies.
-Image truncation is not counted as external occlusion. Clip summaries weight objects
-equally; external recovery averages only objects with defined recovery.
-
 ## Verification
 
 ```bash
@@ -178,5 +118,3 @@ when each bounded function ends.
 
 Historical pilot results and notebooks are preserved. `docs/historical-pilot.md` describes
 the retired pilot interface and is not the active setup guide.
-
-Verified results: [2026-10-29 verification record](docs/verification/2026-10-29.md).

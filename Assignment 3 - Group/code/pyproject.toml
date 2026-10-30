@@ -14,7 +14,13 @@ dependencies = [
 
 [dependency-groups]
 dev = ["pytest>=8", "ruff>=0.9", "setuptools<81", "wheel"]
-generation = ["blenderproc==2.8.0", "open3d==0.18.0", "embreex>=2.17"]
+generation = [
+    "blenderproc==2.8.0",
+    "open3d==0.18.0",
+    "embreex>=2.17",
+    "pyrender>=0.1.45",
+    "pyglet<2",
+]
 analysis = ["ipykernel>=6", "nbclient>=0.10", "nbformat>=5", "plotly>=6"]
 remote = ["modal>=1.4"]
 gpu_runtime = [
@@ -87,3 +93,8 @@ explicit = true
 [tool.uv.sources]
 torch = [{ index = "pytorch-cu128", marker = "sys_platform == 'linux'" }]
 torchvision = [{ index = "pytorch-cu128", marker = "sys_platform == 'linux'" }]
+
+[tool.uv]
+# pyrender pins 3.1.0, whose EGL loader fails with current Mesa. The maintained
+# PyOpenGL release preserves the API and supports headless software rendering.
+override-dependencies = ["PyOpenGL==3.1.10"]

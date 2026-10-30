@@ -42,7 +42,7 @@ The HF token needs access to [`facebook/sam-3d-objects`](https://huggingface.co/
 1. Put the train export from the M2 run (`synthetic-data/docs/m2_runbook.md` §6) in `dataset/train/`. Export the GSO test set once: `uv run python -m sam3dvid.export --dataset <eval dataset> --split eval --out /work/vidsam3d/dataset/eval` (from `synthetic-data/`, CPU only). Then `validate-data --split train` (also reports the val split) and `--split eval`.
 2. `inspect-sam3d`, then `VIDSAM3D_ENV=ucloud pytest -m gpu tests/gpu -s -rs`, then `frame-test`. Set `adapter.query_sets`, `target.voxel_fill` (T5) and `target.canonical_permutation` (T4) in `configs/base.yaml` from their output.
 3. `cache-latents --split train` (covers val) and `--split eval`.
-4. `train --condition c3 --benchmark`, set `train.max_steps`, then train c1, c2, c3, c3_nomask.
+4. `train --condition c3 --benchmark`, set `train.max_steps`, then train c1, c3, c3_nomask.
 5. `eval` for every run and `zero-shot`, `best-frame`; test-time controls `--k 1/4/8`, `--shuffle-frames`, `--wrong-video`; then `analyze`.
 
 ## Troubleshooting

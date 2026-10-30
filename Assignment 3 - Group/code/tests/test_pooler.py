@@ -40,3 +40,19 @@ def test_pooler_bfloat16_backward_is_finite() -> None:
         output.float().square().mean().backward()
     assert torch.isfinite(output).all()
     assert torch.isfinite(model.pooler.query_tokens.grad).all()
+
+
+def test_thin_object_uses_best_foreground_token_without_background_or_padding() -> None:
+    model = MaskPooler(AdapterConfig(d_vid=32, d_cond=16, heads=4, pooler_queries=4))
+    tokens = torch.randn(2, 4, 32, requires_grad=True)
+    coverage = torch.tensor([[.49, .2, 0., 1.], [1., .1, 0., 0.]])
+    padding = torch.tensor([[False, False, False, True], [False, False, False, False]])
+    cond = {'image':torch.randn(2, 4, 16), 'mask':torch.randn(2, 4, 16)}
+    output = model.condition(cond, tokens, coverage, ['image'], padding)
+    expected = model.projector(model.pooler(tokens[0:1, :1]))
+    assert torch.allclose(output['image'][0:1], expected)
+    assert torch.equal(output['mask'], cond['mask'])
+    output['image'].square().sum().backward()
+    assert tokens.grad[0, 0].abs().sum() > 0
+    assert tokens.grad[0, 1:].abs().sum() == 0
+    assert tokens.grad[1, 1:].abs().sum() == 0
