@@ -214,7 +214,9 @@ class Sam3DGeometry(nn.Module):
                mask: torch.Tensor, seed: int, steps: int) -> dict[str, typing.Any]:
         """Native Stage 2 from our sampled Stage 1; never replace it with zero-shot geometry."""
         pipeline = self.pipeline
-        with self.device_, self._autocast(), torch.random.fork_rng(devices=[self.device_]):
+        # Native sample_slat owns its autocast. FlexiCubes mesh extraction must
+        # run outside it, as in pipeline.run, to avoid Float/Half index_add errors.
+        with self.device_, torch.random.fork_rng(devices=[self.device_]):
             image = pipeline.merge_image_and_mask(rgb[0].cpu().numpy(), mask[0].cpu().numpy().astype(np.uint8) * 255)
             pointmap = pipeline.compute_pointmap(image)["pointmap"]
             inputs = pipeline.preprocess_image(image, pipeline.ss_preprocessor, pointmap=pointmap)
