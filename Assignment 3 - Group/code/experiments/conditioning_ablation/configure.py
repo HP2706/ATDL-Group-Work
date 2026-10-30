@@ -162,6 +162,8 @@ def configure(base_config: str, output: str, omni_root: str = '', gso_root: str 
         'train.effective_batch_size':32, 'train.max_seconds':36000,
         'train.ckpt_every':50, 'train.log_every':1,
         'train.resume':'auto', 'val.epoch_media_samples':0,
+        'val.heavy_epochs':[1,-1], 'val.heavy_data_root':str(root/'data/gso'),
+        'val.final_full_validation':source == 'synthetic',
         'val.loss_every':steps, 'val.loss_num_samples':min(50,val_count),
         'val.sample_every':steps, 'val.sample_num_objects':min(50,val_count),
         'val.tau_grid':[.1,.5,.9], 'optim.lr':1e-4, 'optim.warmup_steps':max(1,steps*epochs//20),

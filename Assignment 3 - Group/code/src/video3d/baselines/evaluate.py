@@ -39,8 +39,12 @@ def export_sample(dataset: Any, index: int, source: str, directory: Path) -> tup
         images = [reader.load_rgb(clip, t) for t in frame_ids]
         masks = [reader.load_visible_mask(clip, info["k"], t) for t in frame_ids]
     directory.mkdir(parents=True, exist_ok=True)
+    available = [i for i, mask in enumerate(masks) if mask.any()]
+    available_ids = [frame_ids[i] for i in available]
+    info['baseline_available_frame_ids'] = available_ids
     frames, mask_paths = [], []
-    for position, (image, mask) in enumerate(zip(images, masks, strict=True)):
+    for position, i in enumerate(available):
+        image, mask = images[i], masks[i]
         frame, mask_path = directory / f"rgb-{position:04d}.png", directory / f"mask-{position:04d}.png"
         Image.fromarray(image).save(frame)
         Image.fromarray(mask.astype(np.uint8)*255).save(mask_path)
@@ -48,13 +52,15 @@ def export_sample(dataset: Any, index: int, source: str, directory: Path) -> tup
         mask_paths.append(mask_path.resolve())
     identity = sample_id(info)
     manifest = BaselineInput(sample_id=identity, frames=frames, masks=mask_paths,
-                             reference_index=frame_ids.index(info['r']))
+                             reference_index=available_ids.index(info['r']))
     (directory / "manifest.json").write_text(manifest.model_dump_json(indent=2)+"\n")
     return manifest, info
 
 
 def evaluate(config: str, method: str, output: str, split: str | None = None,
-             limit: int | None = None, k: int | None = None, chunk_size: int = 8, topk: int = 8, full_mesh: bool = False, resume: bool = True) -> str:
+             limit: int | None = None, k: int | None = None, chunk_size: int = 8, topk: int = 8,
+             full_mesh: bool = False, resume: bool = True, epoch: int | None = None,
+             trigger: str = 'ad_hoc') -> str:
     cfg = read_config(Path(config))
     cfg = chz.replace(cfg, run_name=f'{cfg.run_name}-{method}')
     baseline = chz.Blueprint(BaselineConfig).apply(dict(method=method,
@@ -64,7 +70,8 @@ def evaluate(config: str, method: str, output: str, split: str | None = None,
     root = Path(output)
     root.mkdir(parents=True, exist_ok=True)
     signature = {"config": json.loads(Path(config).read_text()), "baseline": chz.asdict(baseline),
-                 "split": split or cfg.data.eval_split, "frames": k or cfg.eval.k}
+                 "split": split or cfg.data.eval_split, "frames": k or cfg.eval.k,
+                 'epoch':epoch, 'trigger':trigger}
     metadata = root / "protocol.json"
     if metadata.exists() and json.loads(metadata.read_text()) != signature:
         raise ValueError("Output directory belongs to a different evaluation protocol")
@@ -115,9 +122,16 @@ def evaluate(config: str, method: str, output: str, split: str | None = None,
         record = EvaluationRecord.model_validate({
             **info, **metrics, "sample_id": sample.sample_id, "label": method+("_refined" if full_mesh else "_coarse"),
             "run": cfg.run_name, 'evaluation_id':cfg.run_name,
+            'epoch':epoch, 'trigger':trigger,
             'sampler':chz.asdict(cfg.sampler), 'output_scope':result.scope,
             "backend": "sam3d", "baseline": result.model_dump(mode="json")})
         logger.log_evaluation(record.model_dump(), len(records)+1)
+        if index < cfg.logging.media_samples:
+            import torch
+            from video3d.media import save_pair
+            save_pair(dataset[index], torch.from_numpy(prediction),
+                      torch.from_numpy(ground_truth(dataset, info['asset_id'], cfg)),
+                      record.model_dump(), directory/'media', logger.run)
         atomic_json(completed, record.model_dump(mode="json"))
         records.append(record.model_dump())
         atomic_json(root / "progress.json", {"completed": len(records), "sample_id": sample.sample_id,

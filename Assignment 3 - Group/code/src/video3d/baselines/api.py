@@ -305,6 +305,11 @@ def reconstruct(sample: BaselineInput, cfg: BaselineConfig, output: Path,
     path = output / "occupancy.npy"
     np.save(path, occupancy)
     artifacts = save_prediction(prediction, output) if cfg.full_mesh else {}
+    if not cfg.full_mesh:
+        from video3d.storage import atomic_torch
+        atomic_torch(output / 'coarse-pose-pointmaps.pt',
+                     {key:value.detach().cpu() for key,value in prediction.items() if isinstance(value, torch.Tensor)})
+        artifacts['coarse_pose_pointmaps'] = str((output/'coarse-pose-pointmaps.pt').resolve())
     metrics: dict[str, Any] = {}
     if sample.ground_truth is not None:
         from video3d.metrics import shape_metrics
