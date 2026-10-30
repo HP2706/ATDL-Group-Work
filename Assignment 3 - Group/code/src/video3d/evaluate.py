@@ -206,6 +206,14 @@ def evaluate(cfg: ExperimentConfig, run: str, k: int | None = None, shuffle: boo
         pred = sam3d.decode_latent(z)[0].cpu()
         gt = torch.from_numpy(ground_truth(ds, info["asset_id"], cfg))
         mesh_metrics: dict[str, typing.Any] = {}
+        if cfg.eval.refined_mesh:
+            from video3d.storage import atomic_torch
+            atomic_torch(output_dir/'stages'/sample_id(info).replace('/','-')/'stage1.pt', {
+                'sample_id':sample_id(info), 'latent':z.float().cpu(),
+                'layout':{key:value.cpu() for key,value in layout.items()},
+                'decoded_prediction':pred, 'ground_truth':gt, 'seed':seed,
+                'rng_state_after_stage1':sam3d.sampling_rng_state.cpu(),
+                'sampler':chz.asdict(cfg.sampler), 'frame_ids':info['frame_ids']})
         if cfg.eval.refined_mesh and bool(pred.any()):
             import shutil
             from video3d.media import save_refined_prediction

@@ -126,8 +126,13 @@ def evaluate(config: str, method: str, output: str, split: str | None = None,
             'sampler':chz.asdict(cfg.sampler), 'output_scope':result.scope,
             "backend": "sam3d", "baseline": result.model_dump(mode="json")})
         logger.log_evaluation(record.model_dump(), len(records)+1)
+        import torch
+        from video3d.storage import atomic_torch
+        atomic_torch(directory/'prediction.pt', {
+            'sample_id':sample.sample_id, 'prediction':torch.from_numpy(prediction),
+            'ground_truth':torch.from_numpy(ground_truth(dataset,info['asset_id'],cfg)),
+            'metrics':record.model_dump()})
         if index < cfg.logging.media_samples:
-            import torch
             from video3d.media import save_pair
             save_pair(dataset[index], torch.from_numpy(prediction),
                       torch.from_numpy(ground_truth(dataset, info['asset_id'], cfg)),

@@ -79,3 +79,13 @@ def test_native_baseline_uses_selected_reference(tmp_path: Path) -> None:
     sample = BaselineInput(sample_id='clip/1/16', frames=frames, masks=masks, reference_index=1)
     result = reconstruct(sample, BaselineConfig(method='sam3d'), tmp_path/'out', pipeline=Pipeline())
     assert result.selected_frames == [1]
+
+
+def test_baseline_export_preserves_held_out_reference(fake_root: Any, tmp_path: Path) -> None:
+    from video3d.baselines.evaluate import export_sample
+    from video3d.data import build_dataset
+    cfg = fake_train_cfg(fake_root, tmp_path)
+    dataset = build_dataset(cfg, 'val', False, 16)
+    sample, info = export_sample(dataset, 0, 'synthetic', tmp_path/'inputs')
+    assert info['baseline_available_frame_ids'][sample.reference_index] == info['r']
+    assert set(info['baseline_available_frame_ids']) <= set(info['frame_ids'])
