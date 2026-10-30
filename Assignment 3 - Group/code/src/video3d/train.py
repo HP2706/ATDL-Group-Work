@@ -17,6 +17,7 @@ from contextlib import nullcontext
 import json
 import logging
 import time
+from pathlib import Path
 
 import torch
 from tqdm.auto import tqdm
@@ -27,7 +28,7 @@ from torch.utils.data import DataLoader, Sampler
 from video3d.config import save_config
 from video3d.data.samples import VAL
 from video3d.data.targets import load_latent
-from video3d.metrics import voxel_iou
+from video3d.metrics import shape_metrics
 from video3d.models.adapter import build_adapter, count_parameters, pad_video_batch
 from video3d.models.encoders import build_kv_encoder, kv_tokens
 from video3d.models.sam3d import apply_adapter, build_sam3d
@@ -190,10 +191,18 @@ def val_flow_loss(sam3d: typing.Any, encoder: typing.Any, adapter: typing.Any, v
 
 
 @torch.no_grad()
-def val_viou(sam3d: typing.Any, encoder: typing.Any, adapter: typing.Any, val_ds: typing.Any, cfg: typing.Any, device: typing.Any) -> float:
-    """Mean canonical vIoU of sampled shapes for the first val objects (middle reference)."""
+def val_shape_metrics(sam3d: typing.Any, encoder: typing.Any, adapter: typing.Any,
+                      val_ds: typing.Any, cfg: ExperimentConfig, device: torch.device,
+                      records_path: Path | None = None) -> dict[str, typing.Any]:
+    """Score the existing fixed shape samples; reuse standalone surface-voxel metrics.
+
+    Chamfer is a sum of mean unsquared distances after bbox normalization to
+    longest side two and similarity ICP. It is not refined mesh-surface Chamfer.
+    Empty predictions stay in IoU and failure counts, but have no finite Chamfer.
+    """
+    started = time.monotonic()
     items = [i for i, x in enumerate(val_ds.index) if "middle" in x["rules"] or "reference" in x["rules"]]
-    ious = []
+    records: list[dict[str, typing.Any]] = []
     for i in tqdm(items[:cfg.val.sample_num_objects], desc="Validation shapes", unit="video"):
         s = val_ds[i]
         info = s["info"]
@@ -201,8 +210,33 @@ def val_viou(sam3d: typing.Any, encoder: typing.Any, adapter: typing.Any, val_ds
         z, _ = sam3d.sample(cond, [sample_seed(info["clip_id"], info["k"], info["r"])], cfg.sampler)
         from video3d.data import ground_truth
         gt = ground_truth(val_ds, info["asset_id"], cfg)
-        ious.append(voxel_iou(sam3d.decode_latent(z)[0].cpu(), torch.from_numpy(gt)))
-    return sum(ious) / len(ious)
+        prediction = sam3d.decode_latent(z)[0].cpu()
+        # Training calls validation inside BF16 autocast; ICP/KNN require FP32.
+        with torch.autocast(device_type=device.type, enabled=False):
+            metrics = shape_metrics(prediction, torch.from_numpy(gt), cfg.eval.metrics,
+                                    seed=sample_seed(info["clip_id"], info["k"], info["r"]))
+        records.append({"clip_id": info["clip_id"], "asset_id": info["asset_id"],
+                        "k": info["k"], "r": info["r"], **metrics})
+    if not records:
+        raise ValueError("Shape validation requires at least one selected object")
+    summary: dict[str, typing.Any] = {
+        "val_viou": sum(row["viou"] for row in records) / len(records),
+        "val_shape_objects": len(records),
+        "val_empty_predictions": sum(row["empty_pred"] for row in records),
+        "val_shape_metric_protocol": "surface-voxel-bbox-longest-side-2-icp-l1-sum-v1",
+    }
+    for key in ["chamfer", "viou_aligned", *[f"fscore@{t}" for t in cfg.eval.metrics.fscore_thresholds]]:
+        values = [row[key] for row in records if row[key] is not None]
+        if not all(math.isfinite(value) for value in values):
+            raise FloatingPointError(f"Non-finite validation {key}")
+        summary[f"val_{key}"] = sum(values) / len(values) if values else None
+        summary[f"val_{key}_count"] = len(values)
+    summary["val_shape_seconds"] = time.monotonic() - started
+    if records_path is not None:
+        from video3d.storage import atomic_json
+        atomic_json(records_path, {"summary": summary, "metric_config": chz.asdict(cfg.eval.metrics),
+                                   "objects": records})
+    return summary
 
 
 # ---- loop ----
@@ -409,7 +443,8 @@ def train(cfg: ExperimentConfig, benchmark: bool = False, stop_at: int | None = 
                     record["val_loss"] = val_flow_loss(sam3d, encoder, ema, val_ds, cfg, device)
             if val_ds is not None and step % cfg.val.sample_every == 0:
                 with use_ema(extra, extra_ema), autocast:
-                    record["val_viou"] = val_viou(sam3d, encoder, ema, val_ds, cfg, device)
+                    record.update(val_shape_metrics(sam3d, encoder, ema, val_ds, cfg, device,
+                                                    output_dir / "validation" / f"step-{step:08d}.json"))
                 if record["val_viou"] > best:
                     best = record["val_viou"]
                     save_checkpoint({**checkpoint_state(), "ema": ema.state_dict(), "step": step, "val_viou": best},
