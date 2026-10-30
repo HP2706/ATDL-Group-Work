@@ -1,4 +1,4 @@
-"""T3a: V-JEPA 2.1 token order and image tokenizer; SAM 3D's DINOv2 for C1/C2."""
+"""T3a: V-JEPA 2.1 token order and image tokenizer; SAM 3D's DINOv2 controls."""
 import typing
 
 import pytest

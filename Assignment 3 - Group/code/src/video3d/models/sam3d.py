@@ -191,7 +191,7 @@ class Sam3DGeometry(nn.Module):
         return logits[:, 0] > 0
 
     def dino_backbone(self) -> nn.Module:
-        """SAM 3D's own DINOv2 (for the C1/C2 controls)."""
+        """SAM 3D's own DINOv2 for reference and per-frame controls."""
         from sam3d_objects.model.backbone.dit.embedder.dino import Dino
         for module in self.embedder.module_list:
             if isinstance(module, Dino):

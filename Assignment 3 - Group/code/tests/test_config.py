@@ -5,7 +5,7 @@ import pytest
 from video3d.cli import main
 from video3d.config import load_config, read_config, replace_config, save_config
 
-@pytest.mark.parametrize("name,source", [("c1","dinov2_ref"),("c2","dinov2_clip"),("c3","vjepa")])
+@pytest.mark.parametrize("name,source", [("c1","dinov2_ref"),("dino_pooler","dinov2_frames"),("c3","vjepa")])
 def test_presets(name: str, source: str) -> None:
     cfg = load_config(name)
     assert cfg.encoder.kv_source == source
@@ -16,7 +16,7 @@ def test_config_unknown_key_rejected() -> None:
         load_config("c3", overrides=["adapter.nblocks=3"])
 
 def test_json_roundtrip(tmp_path: typing.Any) -> None:
-    cfg = load_config("c2", overrides=["seed=3", "optim.lr=0.02"])
+    cfg = load_config("c3", overrides=["seed=3", "optim.lr=0.02"])
     restored = read_config(save_config(cfg, tmp_path))
     assert chz.asdict(restored) == chz.asdict(cfg)
     other = replace_config(cfg, **{"adapter.strategy":"pooler"})
@@ -29,7 +29,7 @@ def test_environment(monkeypatch: typing.Any) -> None:
     assert cfg.env == "ucloud" and cfg.paths.data_root == "/work/test"
 
 def test_inspect_cli(capsys: typing.Any) -> None:
-    main(["inspect", "--condition=c2", "--optim.lr=0.25"])
+    main(["inspect", "--condition=dino_pooler", "--optim.lr=0.25"])
     assert '"lr": 0.25' in capsys.readouterr().out
 
 def test_check_env_cli(capsys: typing.Any) -> None:

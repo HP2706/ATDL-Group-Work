@@ -56,7 +56,7 @@ def test_loss_decreases_over_50_steps(two_sample_root: typing.Any, tmp_path: typ
     assert (out / "config.json").is_file()
 
 
-@pytest.mark.parametrize("condition", ["c1", "c2", "c3_nomask"])
+@pytest.mark.parametrize("condition", ["c1", "c3_nomask"])
 def test_other_conditions_train(fake_root: typing.Any, tmp_path: typing.Any, condition: typing.Any) -> typing.Any:
     cfg = fake_train_cfg(fake_root, tmp_path, condition, **{"train.max_steps": 3})
     assert train(cfg)["step"] == 3

@@ -72,7 +72,6 @@ class VjepaConfig:
 @chz.chz
 class Dinov2Config:
     image_size: int = 224
-    pair_average: bool = False
 
 
 @chz.chz
@@ -267,14 +266,13 @@ def load_config(condition: str | None = None, env: str | None = None,
     name = condition or "base"
     presets: dict[str, dict[str, Any]] = {
         "base": {}, "c1": {"encoder.kv_source": "dinov2_ref"},
-        "c2": {"encoder.kv_source": "dinov2_clip", "encoder.dinov2.pair_average": True},
         "c3": {}, "c3_nomask": {"adapter.use_object_embedding": False},
         "pooler": {"adapter.strategy": "pooler", "data.video_input": "full_scene", "data.crop.size": 384, "encoder.vjepa.image_size": 384},
         "video_lora": {"encoder.vjepa.video_lora": True},
         "sam_lora": {"sam3d.lora": True},
         "sam_video_lora": {"sam3d.lora": True, "encoder.vjepa.video_lora": True},
         "dino_pooler": {"encoder.kv_source": "dinov2_frames", "adapter.strategy": "pooler",
-                        "encoder.dinov2.pair_average": False, "adapter.max_dt": 15},
+                        "adapter.max_dt": 15},
         "dino_pooler_single": {"encoder.kv_source": "dinov2_frames", "adapter.strategy": "pooler",
                                "adapter.pooler_queries": 1, "adapter.max_dt": 15, "data.crop.size": 224},
     }
@@ -326,7 +324,7 @@ def load_config(condition: str | None = None, env: str | None = None,
         raise ValueError("data.source must be synthetic, navi, omniobject3d or gso")
     if not 0 < cfg.data.mask_threshold < 1 or not cfg.data.scanned_strides or min(cfg.data.scanned_strides) < 1:
         raise ValueError("Mask threshold must be in (0,1) and temporal strides must be positive")
-    if cfg.encoder.kv_source not in {"vjepa", "dinov2_ref", "dinov2_clip", "dinov2_frames"}:
+    if cfg.encoder.kv_source not in {"vjepa", "dinov2_ref", "dinov2_frames"}:
         raise ValueError("Unknown encoder.kv_source")
     if cfg.encoder.vjepa.video_lora and cfg.encoder.kv_source != "vjepa":
         raise ValueError("Video LoRA requires the V-JEPA encoder")
