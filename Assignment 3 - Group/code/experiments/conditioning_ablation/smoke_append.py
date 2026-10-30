@@ -17,12 +17,12 @@ from video3d.storage import atomic_json
 from video3d.train import train
 
 
-def smoke(base_config: str, evaluation_config: str, output: str) -> None:
+def smoke(base_config: str, evaluation_config: str, output: str, source_commit: str = "") -> None:
     if not torch.cuda.is_available():
         raise RuntimeError("The appender smoke test requires a remote CUDA GPU")
     root = Path(output)
     root.mkdir(parents=True, exist_ok=True)
-    source = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+    source = source_commit or subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
     base, evaluation = read_config(base_config), read_config(evaluation_config)
     stamp = datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
     summary: dict[str, object] = {'source_commit': source, 'variants': {}}
