@@ -1,9 +1,35 @@
 # Unified video-to-3D pipeline
 
-Status: implemented and verified. Updated: 2026-10-29.
+Status: consolidated and verified. Updated: 2026-10-30.
 
 Branch: `unify-video-pipeline`, based on `main` at `7228646`.
 Worktree: `ATDL-Group-Work/.worktrees/unify-video-pipeline/`.
+
+## Consolidation on October 30
+
+`unify-video-pipeline` is the sole linked development worktree. The histories and
+unfinished source changes from `sam3dvid-pilot`, `omni-gso-data`, and
+`seven-variants`, plus the current main-checkout report and notes, have been
+merged here. The three redundant worktrees and local branches were removed.
+The primary checkout remains on `main` with its existing report/notes edits.
+
+Pre-consolidation source snapshots are retained under Git tags
+`recovery/consolidation-20261030/*`. Ignored results and caches from removed
+worktrees are preserved under `.worktree-recovery/consolidation-20261030/`,
+with per-worktree file manifests. `RESEARCH_LOG.md` links to `notes.md` so both
+names resolve to one maintained research record.
+
+Verification: 202 non-GPU pipeline tests and 22 generation unit tests passed
+in an isolated temporary directory using the existing UCloud Python runtime.
+GPU/rendering and unavailable-dataset tests were excluded or skipped. Ten
+configuration tests passed locally; Ruff, `uv lock --check`, and report
+compilation passed. Verification logs are in the ignored recovery directory.
+
+The full conditioning training jobs used detached source revision
+`de7f8d81362b79d1f4e77a323eb97f71a5fe8c80`, previously in the `seven-variants`
+history. Their shared UCloud Python environment has a `sam3dvid-pilot` directory
+name, which does not identify the source branch. Local consolidation did not
+alter existing remote training/evaluation source copies or results.
 
 ## Agreed decisions
 

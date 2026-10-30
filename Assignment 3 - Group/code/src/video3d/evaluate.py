@@ -206,10 +206,15 @@ def evaluate(cfg: ExperimentConfig, run: str, k: int | None = None, shuffle: boo
             clip, r_best = best_frame(ds, info)
             loss_sample = build_sample(clip, info["k"], r_best, 0, 1, cfg.data)
             extra["oracle_frame"] = r_best
-        matched_loss = sample_flow_loss(sam3d, encoder, adapter, loss_sample, cfg, device)
+        gt = torch.from_numpy(ground_truth(ds, info["asset_id"], cfg))
+        matched_loss = None
+        if loss_only or not cfg.eval.refined_mesh:
+            from video3d.data.targets import latent_path
+            if "target" not in loss_sample and not latent_path(cfg, info["asset_id"]).is_file():
+                loss_sample = {**loss_sample, "target": sam3d.encode_voxels(gt[None].to(device))[0]}
+            matched_loss = sample_flow_loss(sam3d, encoder, adapter, loss_sample, cfg, device)
         extra.update(flow_loss=matched_loss, flow_loss_protocol="shape-flow-fixed-grid-v1",
                      flow_loss_tau_grid=list(cfg.val.tau_grid))
-        gt = torch.from_numpy(ground_truth(ds, info["asset_id"], cfg))
         seed = sample_seed(info["clip_id"], info["k"], info["r"])
         metrics: dict[str, typing.Any] = {}
         inference_seconds = 0.0
@@ -332,7 +337,8 @@ def evaluate(cfg: ExperimentConfig, run: str, k: int | None = None, shuffle: boo
     logger.finish_evaluation(complete, output_dir, label, len(ds))
     summary_path = output_dir / f"{label}.summary.json"
     summary = json.loads(summary_path.read_text()) if summary_path.is_file() else {}
-    summary.update(samples=len(complete), mean_flow_loss=sum(row["flow_loss"] for row in complete) / len(complete) if complete else None,
+    flow_losses = [row["flow_loss"] for row in complete if row.get("flow_loss") is not None]
+    summary.update(samples=len(complete), mean_flow_loss=sum(flow_losses) / len(flow_losses) if flow_losses else None,
                    protocol="shape-flow-fixed-grid-v1", weights=cfg.eval.checkpoint_weights if adapter is not None else "pretrained")
     if cfg.eval.video_diagnostics:
         from video3d.diagnostics import summarize_video_records

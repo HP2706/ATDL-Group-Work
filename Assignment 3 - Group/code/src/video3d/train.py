@@ -130,6 +130,8 @@ def adapted_condition(sam3d: typing.Any, encoder: typing.Any, adapter: typing.An
     rgb, mask = reference_images(batch, device)
     with torch.no_grad():
         cond = sam3d.condition(rgb, mask)
+    if cfg.adapter.strategy == "native":
+        return cond
     feature_context = nullcontext() if cfg.encoder.vjepa.video_lora else torch.no_grad()
     with feature_context:
         kv = [kv_tokens(encoder, to_device(s["inputs"], device), cfg.encoder.kv_source)

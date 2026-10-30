@@ -1,5 +1,7 @@
 """Typed presets, unknown-key rejection, immutable updates and JSON persistence."""
 import typing
+import json
+from pathlib import Path
 import chz
 import pytest
 from video3d.cli import main
@@ -21,6 +23,19 @@ def test_json_roundtrip(tmp_path: typing.Any) -> None:
     assert chz.asdict(restored) == chz.asdict(cfg)
     other = replace_config(cfg, **{"adapter.strategy":"pooler"})
     assert other.adapter.strategy == "pooler" and cfg.adapter.strategy == "fusion"
+
+
+def test_historical_nonaveraging_run_config_remains_readable(tmp_path: Path) -> None:
+    cfg = load_config("dino_pooler")
+    path = save_config(cfg, tmp_path)
+    values = json.loads(path.read_text())
+    values["encoder"]["dinov2"]["pair_average"] = False
+    path.write_text(json.dumps(values))
+    assert chz.asdict(read_config(path)) == chz.asdict(cfg)
+    values["encoder"]["dinov2"]["pair_average"] = True
+    path.write_text(json.dumps(values))
+    with pytest.raises(ValueError, match="historical run"):
+        read_config(path)
 
 def test_environment(monkeypatch: typing.Any) -> None:
     monkeypatch.setenv("VIDEO3D_ENV","ucloud")

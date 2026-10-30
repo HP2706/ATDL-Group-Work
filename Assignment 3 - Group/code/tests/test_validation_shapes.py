@@ -17,7 +17,7 @@ from video3d.train import val_shape_metrics
 class FixedDataset:
     def __init__(self, count: int) -> None:
         self.index = [{"clip_id": str(i), "asset_id": str(i), "k": 1, "r": 0,
-                       "rules": ["reference"]} for i in range(count)]
+                       "rules": ["reference"], "frame_ids": [0]} for i in range(count)]
 
     def __getitem__(self, index: int) -> dict[str, Any]:
         return {"info": self.index[index]}
