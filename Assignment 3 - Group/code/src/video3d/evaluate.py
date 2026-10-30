@@ -48,6 +48,8 @@ def load_run(cfg: ExperimentConfig, run: str, device: typing.Any,
              checkpoint: str | None = None) -> tuple[ExperimentConfig, torch.nn.Module | None, str]:
     """(config, EMA adapter or None, name) for a run directory or a baseline name."""
     if run in BASELINES:
+        if cfg.eval.evaluation_id:
+            cfg = chz.replace(cfg, run_name=cfg.eval.evaluation_id)
         return cfg, None, BASELINES[run]
     run_dir = Path(run) if Path(run).is_dir() else Path(cfg.paths.output_root) / run   # path or name
     assert (run_dir / "config.json").is_file(), f"no run at {run} or {run_dir}"

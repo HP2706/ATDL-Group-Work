@@ -52,3 +52,30 @@ def test_explicit_epoch_checkpoint_wins_over_best(fake_root: Any, tmp_path: Path
     _, loaded, _ = load_run(cfg, str(run), torch.device('cpu'), str(run / 'epoch_01.pt'))
     assert loaded is not None
     assert loaded.state_dict().keys() == adapter.state_dict().keys()
+
+
+def test_baseline_evaluation_uses_separate_logging_identity(fake_root: Any, tmp_path: Path) -> None:
+    cfg = fake_train_cfg(fake_root, tmp_path)
+    cfg = chz.replace(cfg, eval=chz.replace(cfg.eval, evaluation_id='independent-evaluation'))
+    resolved, adapter, _ = load_run(cfg, 'zero-shot', torch.device('cpu'))
+    assert adapter is None and resolved.run_name == 'independent-evaluation'
+
+
+def test_native_baseline_uses_selected_reference(tmp_path: Path) -> None:
+    import numpy as np
+    from PIL import Image
+    from video3d.baselines.api import BaselineConfig, BaselineInput, reconstruct
+    frames, masks = [], []
+    for index in range(2):
+        frame, mask = tmp_path/f'rgb{index}.png', tmp_path/f'mask{index}.png'
+        Image.fromarray(np.full((4,4,3), index*100, dtype=np.uint8)).save(frame)
+        Image.fromarray(np.full((4,4), 255, dtype=np.uint8)).save(mask)
+        frames.append(frame)
+        masks.append(mask)
+    class Pipeline:
+        def run(self, **kwargs: Any) -> dict[str, Any]:
+            assert np.all(kwargs['image'] == 100)
+            return {'coords':torch.tensor([[0,0,0,0]])}
+    sample = BaselineInput(sample_id='clip/1/16', frames=frames, masks=masks, reference_index=1)
+    result = reconstruct(sample, BaselineConfig(method='sam3d'), tmp_path/'out', pipeline=Pipeline())
+    assert result.selected_frames == [1]
