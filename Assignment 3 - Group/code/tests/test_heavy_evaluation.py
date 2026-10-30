@@ -26,6 +26,7 @@ def test_heavy_protocol_is_separate_from_quick(fake_root: Any, tmp_path: Path) -
     heavy = heavy_epoch_config(cfg, tmp_path, 1)
     assert not cfg.eval.refined_mesh
     assert heavy.eval.refined_mesh
+    assert heavy.eval.native_reference
     assert heavy.sampler.mode == 'flow' and heavy.sampler.steps == 25
     assert heavy.eval.refinement_steps == 25
     assert heavy.eval.metrics.max_points == 20000

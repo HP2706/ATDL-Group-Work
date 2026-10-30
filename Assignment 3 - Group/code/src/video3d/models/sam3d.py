@@ -111,9 +111,10 @@ class Sam3DGeometry(nn.Module):
         tokens = []
         for b in range(len(rgb)):
             rgba = p.merge_image_and_mask(rgb[b].cpu().numpy(), mask[b].cpu().numpy().astype(np.uint8) * 255)
-            with p.device, self._autocast():
+            with p.device:
                 pointmap = p.compute_pointmap(rgba)["pointmap"]
                 inputs = p.preprocess_image(rgba, p.ss_preprocessor, pointmap=pointmap)
+            with p.device, self._autocast():
                 self._lengths.clear()
                 args, _ = p.get_condition_input(self.embedder, inputs, p.ss_condition_input_mapping)
             tokens.append(args[0])

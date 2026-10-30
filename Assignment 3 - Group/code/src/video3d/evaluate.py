@@ -179,6 +179,12 @@ def evaluate(cfg: ExperimentConfig, run: str, k: int | None = None, shuffle: boo
         if device.type == 'cuda':
             torch.cuda.reset_peak_memory_stats(device)
         sample = ds[i]
+        if cfg.eval.native_reference and cfg.data.source in {'gso','omniobject3d'}:
+            from video3d.data.scanned import read_rgb, read_mask
+            row = ds.rows[i]
+            reference = sample['info']['r']
+            sample['inputs']['ref_rgb'] = torch.from_numpy(read_rgb(ds.root/row.frames[reference]))
+            sample['inputs']['ref_mask'] = torch.from_numpy(read_mask(ds.root/row.masks[reference],cfg.data.mask_threshold))
         if repeated_reference:
             from video3d.evaluate import repeat_reference
             sample = repeat_reference(sample)
@@ -301,7 +307,7 @@ def heavy_epoch_config(cfg: ExperimentConfig, run_dir: Path, epoch: int) -> Expe
         paths=chz.replace(cfg.paths, data_root=cfg.val.heavy_data_root,
                           output_root=str(run_dir.parent)),
         data=chz.replace(cfg.data, source='gso', eval_split='eval'),
-        eval=chz.replace(cfg.eval, refined_mesh=True, native_coarse=True, refinement_steps=25,
+        eval=chz.replace(cfg.eval, refined_mesh=True, native_coarse=True, native_reference=True, refinement_steps=25,
                          metrics=MetricsConfig(), evaluation_id=evaluation_id),
         logging=chz.replace(cfg.logging, media_samples=200))
 

@@ -182,6 +182,7 @@ class MetricsConfig:
 
 @chz.chz
 class EvalConfig:
+    native_reference: bool = False
     native_coarse: bool = False
     refined_mesh: bool = False
     refinement_steps: int = 25
