@@ -69,3 +69,33 @@ Thin objects with no token above the configured foreground threshold retain thei
 most-covered positive-coverage token(s). Background and padding stay excluded;
 a genuinely empty foreground still fails. Profiling can resume completed variants
 with `--resume=True --attempt=recovery1`, preserving prior attempt logs.
+
+## Full synthetic training export
+
+The same resolver accepts `--synthetic_root=/persistent/snapshot/full-q98`
+instead of `--omni_root`. It requires 10,000 clips by default and reuses
+`ClipDataset` and its existing asset-disjoint split. By default, 3% of assets
+are selected by the existing stable hash for validation; every clip containing
+one of those assets is excluded from training. Only held-out assets are targets
+in validation clips. Set `--synthetic_val_asset_frac` to change this fraction.
+The original export and shards remain intact and are linked into the run.
+
+`data/synthetic/split.json` records the exact asset lists, clip/target assignments,
+and actual sample counts. Epoch steps use training clip-object pairs, matching
+the trainer, rather than counting clips or unique assets. Validation sample
+counts include the existing deterministic reference-frame choices. The synthetic
+recipe fixes clip length at 16 frames to match this experiment's model comparison;
+all other image/video preprocessing is inherited from the base configuration.
+The fixed 250-object GSO evaluation selection and seven-model matrix are retained.
+
+```bash
+python experiments/conditioning_ablation/configure.py \
+  --base_config=/persistent/prior/configs/fusion-frozen.json \
+  --output=/persistent/conditioning-full-q98-<timestamp> \
+  --synthetic_root=/persistent/snapshot/full-q98 \
+  --gso_root=/persistent/gso-250 --seed=42
+```
+
+Run fresh target preparation and GPU profiling for the new dataset before
+submitting training. Transfer checksum validation and sample decoding are not a
+full audit of the author's export; retain that distinction in run provenance.
