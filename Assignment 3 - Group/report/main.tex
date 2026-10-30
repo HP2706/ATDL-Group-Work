@@ -35,7 +35,7 @@ Our hypothesis, is that with a relatively small adapter network and no finetunin
 
 \subsection{SAM3D}
 
-SAM3D\cite{sam3d} 
+SAM3D\cite{sam3d}
 
 \subsubsection{Data Generation}
 
@@ -44,7 +44,7 @@ A central challenge in training image-conditioned 3D reconstruction models is ob
 \begin{enumerate}
     \item \textbf{Pretraining} They render meshes from 24 viewpoints, pairing each image with the complete source geometry. This provides supervision for both visible and hidden surfaces.
 
-    \item \textbf{Mid-training} In this stage the goal is to learn mask-following, shape completion, and object placement. They take natural images and insert rendered objects into the image and provide a mask of the object as input. To incentivize the model to predict parts of objects when they are slightly occluded they place another rendered object in front of the target, retaining 10--90\% visibility while keeping the complete geometry as the training target. 
+    \item \textbf{Mid-training} In this stage the goal is to learn mask-following, shape completion, and object placement. They take natural images and insert rendered objects into the image and provide a mask of the object as input. To incentivize the model to predict parts of objects when they are slightly occluded they place another rendered object in front of the target, retaining 10--90\% visibility while keeping the complete geometry as the training target.
     \item \textbf{Post-training} Here they bootstrap a real-world dataset by having annotators select the best matching shape and texture from model proposals. Difficult cases are passed to 3D artists. Accepted reconstructions provide supervised training targets, while preferred and rejected candidates provide pairs for preference optimization.
 \end{enumerate}
 
@@ -129,7 +129,7 @@ Each video token is projected to the conditioning width and augmented with objec
     V_i=\Pi_{\theta_A}((V_G)_i)+m_i e_{\mathrm{obj}}+E_{\mathrm{time}}(\Delta t_i).
 \end{equation}
 
-Two gated cross-attention blocks use only the existing RGB conditioning tokens as queries and $V$ as keys and values.  Notably we use Zero-initialized gates to make the adapter an identity mapping at initialization. 
+Two gated cross-attention blocks use only the existing RGB conditioning tokens as queries and $V$ as keys and values.  Notably we use Zero-initialized gates to make the adapter an identity mapping at initialization.
 
 $C_{'rgb}$ todo
 

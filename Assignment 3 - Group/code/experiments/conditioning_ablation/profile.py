@@ -21,7 +21,7 @@ def profile(root: str, batches: tuple[int, ...] = (8, 16, 32), steps: int = 5,
         raise ValueError(f'Unknown trainable variant: {only}')
     progress = folder/'profiles'/f'{only}-progress.json' if only else folder/'profiles/progress.json'
     reports: dict[str, Any] = json.loads(progress.read_text()) if resume and progress.exists() else {}
-    suffix = f'-{attempt}' if attempt else '' 
+    suffix = f'-{attempt}' if attempt else ''
     for entry in matrix['entries']:
         if entry['baseline'] or (only and entry['name'] != only):
             continue

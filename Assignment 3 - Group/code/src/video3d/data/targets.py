@@ -148,5 +148,3 @@ def cache_latents(cfg: ExperimentConfig, split: str, sam3d: typing.Any, device: 
     out.write_text(json.dumps({"summary": summary, "per_asset": ious}, indent=1))
     log.info("round-trip IoU %s", summary)
     return summary
-
-
