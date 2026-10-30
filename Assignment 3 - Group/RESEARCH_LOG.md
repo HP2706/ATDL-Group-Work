@@ -479,3 +479,84 @@ All three SAM-LoRA conditions use rank 8 and alpha 8 throughout training,
 `to_kv` and `to_out` projections. Rank/alpha and insertion sites are matched
 across conditions; learned weights are separate per run and shared across all
 objects/videos within that run. Vision encoder LoRA is disabled.
+
+### Heavy evaluation and full training-distribution validation setup
+
+The quick and heavy protocols are separate. Quick monitoring keeps four-step
+shortcut coarse geometry. Heavy evaluation uses 25-step flow Stage 1, followed
+by the frozen native 25-step Stage 2, retaining both native coarse geometry and
+the exact refined decoder mesh. The trained adapter/SAM LoRA influences the
+sampled Stage-1 latent; refinement consumes that latent rather than regenerating
+a zero-shot shape. Native pruning/downsampling and pose scale are preserved.
+The native Stage-1 RNG continuation is retained for Stage 2.
+
+Heavy coarse scores match the older baselines' 20,000-point/100-iteration ICP
+configuration. Refined scores reuse their existing surface analyzer unchanged:
+8,192 samples in each direction, exact closest-triangle distances, 100-iteration
+similarity ICP, canonical/aligned errors and shared visibility regions. Exact
+mesh NPZ/PLY is scored; the simplified GLB is only a preview. Sampling mode,
+stage step counts, input frames, coordinate conventions and metric settings
+remain explicit. The older GSO MV/Stream results use four views, while the
+trained video models use 16; this method-input difference remains labelled.
+
+Future epoch-based training supports `val.heavy_epochs=[1,-1]`, where `-1`
+selects the last epoch, `val.heavy_data_root` for audited GSO, and
+`val.final_full_validation=True`. The conditioning experiment configurator now
+sets first/final heavy GSO evaluation and final full synthetic validation.
+Selected evaluations run from immutable EMA epoch checkpoints through the same
+standalone evaluator used for ad hoc work. Resume at a selected epoch boundary
+recovers missing heavy evaluation; resume at the final checkpoint also recovers
+full validation. Eighteen focused remote CPU tests passed, including exact
+training resume, explicit-checkpoint precedence, baseline reference selection,
+partial evaluation resume and scheduled-evaluation recovery. Future-training
+recovery source is `482637d`; current evaluation launch source is pinned at
+`3123f1ec9e441eef35cc0853e7ad357018c686bb`.
+
+The final training-distribution comparison uses the full held-out split:
+1,306 unique clip/object/reference cases across 642 clips and 131 target assets.
+There are 655 middle-frame and 655 most-occluded references, with four overlaps
+deduplicated. The target asset set is verified disjoint from optimization
+targets. All six trained models and frozen SAM3D/MV-SAM3D/Stream3D receive the
+same full sample-ID manifest and 16-frame window. Native SAM uses the actual
+selected reference index, not always the first frame. Fully empty target-mask
+views are omitted from upstream baseline input lists and their remaining source
+frame IDs are saved. This carries no target evidence those backends could use.
+
+The synthetic export contains voxel ground truth rather than original source
+meshes. Full synthetic validation therefore uses matched 25-step native coarse
+geometry scoring and records its occlusion metadata; GSO separately supplies the
+exact refined-mesh comparison. Neither synthetic voxel-surface distances nor
+quick scores are pooled with refined-mesh metrics as a single leaderboard.
+
+Persistent launch root:
+`/work/MathiasElmegaardNielsen#6181/heavy-eval-2026-10-30-12-01-58`.
+`schedule.json` and `validation-index.json` freeze identities, the held-out
+audit, resolved configs and cached GSO baseline references. CPU coordinator
+[12439940](https://cloud.sdu.dk/app/jobs/properties/12439940) exclusively owns
+15 gated native submissions: six epoch-1 heavy GSO jobs, six final-epoch jobs
+chaining heavy GSO and full validation, and three separate full-validation
+baseline jobs. It waits for final checkpoints on CPU without holding GPUs.
+Caps are two hours for an epoch-1 job, six hours for a chained final-model job,
+12 hours for a full-validation baseline and 12 hours for the CPU watcher.
+Every GPU job is a foreground native batch that releases on pipeline exit.
+
+Dedicated one-hour B200 check
+[12439871](https://cloud.sdu.dk/app/jobs/properties/12439871) was queued by
+provider capacity and is now RUNNING. Full fan-out is gated on both real-GPU
+PASS markers, for refined generation and full-validation baseline execution;
+runtime verification remains pending at this entry. Actual job receipts and
+script exit markers, rather than provider SUCCESS alone, establish progress.
+The follow-up checks this coordinator and must not submit duplicates. Existing
+training jobs and the quick epoch-1–4 evaluator remain untouched. The earlier
+16:00–16:30 CET estimate covered training and quick GSO evaluation; these added
+full-validation jobs extend the complete evaluation schedule.
+
+The saved format is documented in
+`code/docs/evaluations/artifact-format.md`. Each evaluation has an isolated ID
+with resolved protocol/data/source identity, explicit checkpoint SHA256, epoch,
+EMA weights and trigger (`scheduled`, `recovery` or `ad_hoc`), per-object JSONL,
+aggregate valid/expected counts, predictions/targets, inputs and reconstruction
+files. Heavy jobs additionally save pre-refinement latent/layout/RNG state,
+exact meshes, Stage-2 features, raw pose, sampled error maps, nearest triangles
+and alignment transforms. Completion audits require the exact expected sample
+IDs and saved outputs, accounting explicitly for empty predictions.
