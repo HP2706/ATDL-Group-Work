@@ -1,164 +1,409 @@
+"""`eval`: sample a shape for every eval sample and write per-sample metrics to `<label>.jsonl`.
+
+Runs: a trained run (directory, or run name under output_root; EMA weights of best.pt, else the
+latest checkpoint), `zero-shot`
+(C0: plain SAM 3D on the reference frame) or `best-frame` (C0b: plain SAM 3D on the frame of S
+with the largest visible_frac; an oracle, because it uses GT visibility).
+Seeds depend only on (clip_id, k, r), so all conditions see the same noise. Resumable.
+"""
+
 from __future__ import annotations
+import typing
 
 import json
 import hashlib
+import logging
+import time
 from pathlib import Path
-from typing import Any
+
 import numpy as np
-from scipy.spatial import cKDTree
 import torch
-import wandb
-from .config import ExperimentConfig
-from .data import Example, clip_inputs
-from .model import NativeSAM
-from .storage import atomic_json, atomic_torch, rng_state, restore_rng
+import chz
+from tqdm.auto import tqdm
+from video3d.config import read_config, config_dict
+from video3d.config import ExperimentConfig
+
+from video3d.data import reader, build_dataset, ground_truth
+from video3d.data.schemas import EvaluationRecord
+from video3d.data.samples import ClipDataset, build_sample, frame_subset
+from video3d.metrics import shape_metrics
+from video3d.models.adapter import build_adapter
+from video3d.models.encoders import build_kv_encoder
+from video3d.models.sam3d import build_sam3d
+from video3d.train import adapted_condition, reference_images, sample_flow_loss
+from video3d.utils import (append_jsonl, copy_to_output, pick_device, read_jsonl, sample_seed,
+                            setup_logging)
+
+log = logging.getLogger("video3d")
+BASELINES = {"zero-shot": "c0", "best-frame": "c0b_oracle"}
+MODEL_SECTIONS = ("adapter", "encoder", "target")   # taken from the run; the sampler is shared
 
 
-def surface_metrics(prediction: np.ndarray, truth: np.ndarray, threshold: float = 0.02) -> dict[str, float]:
-    if len(prediction) == 0 or len(truth) == 0:
-        return {"failed": 1.0, "chamfer": float(np.sqrt(3)), "fscore_002": 0.0}
-    p_to_g = cKDTree(truth).query(prediction)[0]
-    g_to_p = cKDTree(prediction).query(truth)[0]
-    precision, recall = float((p_to_g < threshold).mean()), float((g_to_p < threshold).mean())
-    return {"failed": 0.0, "chamfer": float((p_to_g.mean() + g_to_p.mean()) / 2), "fscore_002": 2 * precision * recall / max(precision + recall, 1e-12)}
+def sample_id(info: dict) -> str:
+    """Stable id of an eval sample."""
+    return f"{info['clip_id']}/{info['k']}/{info['r']}"
 
 
-def export_prediction(logits: torch.Tensor, directory: Path) -> tuple[np.ndarray, Path | None]:
-    import trimesh
-    from skimage.measure import marching_cubes
-    grid = logits.detach().float().cpu().numpy().squeeze()
-    np.save(directory / "occupancy_logits.npy", grid)
-    if float(grid.min()) >= 0 or float(grid.max()) <= 0:
-        return np.empty((0, 3)), None
-    vertices, faces, _, _ = marching_cubes(grid, level=0)
-    vertices = (vertices + 0.5) / np.array(grid.shape) - 0.5
-    mesh = trimesh.Trimesh(vertices=vertices, faces=faces, process=False)
-    path = directory / "prediction.glb"
-    mesh.export(path)
-    points, _ = trimesh.sample.sample_surface(mesh, 4096, seed=42)
-    np.save(directory / "prediction_points.npy", points)
-    return points, path
+def load_run(cfg: ExperimentConfig, run: str, device: typing.Any,
+             checkpoint: str | None = None) -> tuple[ExperimentConfig, torch.nn.Module | None, str]:
+    """(config, EMA adapter or None, name) for a run directory or a baseline name."""
+    if run in BASELINES:
+        if cfg.eval.evaluation_id:
+            cfg = chz.replace(cfg, run_name=cfg.eval.evaluation_id)
+        return chz.replace(cfg, sam3d=chz.replace(cfg.sam3d, lora=False)), None, BASELINES[run]
+    run_dir = Path(run) if Path(run).is_dir() else Path(cfg.paths.output_root) / run   # path or name
+    assert (run_dir / "config.json").is_file(), f"no run at {run} or {run_dir}"
+    run_cfg = read_config(run_dir / "config.json")
+    cfg = chz.replace(cfg, adapter=run_cfg.adapter, encoder=run_cfg.encoder,
+                      target=run_cfg.target, sam3d=run_cfg.sam3d,
+                      data=chz.replace(cfg.data, crop=run_cfg.data.crop,
+                                       video_input=run_cfg.data.video_input, frames=run_cfg.data.frames,
+                                       frame_stride=run_cfg.data.frame_stride,
+                                       num_subset_frames=run_cfg.data.num_subset_frames),
+                      provenance=run_cfg.provenance,
+                      condition=run_cfg.condition, run_name=run_cfg.run_name)
+    ckpt_path = Path(checkpoint) if checkpoint else run_dir / "best.pt"
+    if checkpoint is None and not ckpt_path.is_file():
+        ckpt_path = run_dir / json.loads((run_dir / "latest.json").read_text())["checkpoint"]
+    adapter = build_adapter(cfg.adapter).to(device).eval()
+    state = torch.load(ckpt_path, map_location=device, weights_only=False)
+    key = "ema" if cfg.eval.checkpoint_weights == "ema" else "adapter"
+    extra_key = "extra_ema" if cfg.eval.checkpoint_weights == "ema" else "extra"
+    adapter.load_state_dict(state[key])
+    adapter.extra_ema_state = state.get(extra_key, {})
+    if cfg.eval.evaluation_id:
+        cfg = chz.replace(cfg, run_name=cfg.eval.evaluation_id)
+    log.info("loaded EMA adapter from %s", ckpt_path)
+    return cfg, adapter, cfg.run_name
 
 
-def log_object_inputs(run: Any, example: Example, prefix: str, step: int) -> None:
-    # GLB must be logged directly: W&B Tables serialize via artifacts, which
-    # reject non-point-cloud Object3D media in the pinned SDK.
-    run.log({
-        f"{prefix}/input_video": wandb.Video(example.video, format="mp4"),
-        f"{prefix}/reference_rgb": wandb.Image(example.frames[0]),
-        f"{prefix}/reference_mask": wandb.Image(example.masks[0]),
-        f"{prefix}/ground_truth_mesh": wandb.Object3D(example.ground_truth_mesh),
-    }, step=step)
+def result_label(name: str, clip_len: int, default_len: int, shuffle: bool, wrong: bool,
+                 adapter: bool) -> str:
+    """e.g. c3_seed0, c3_seed0_k4, c3_seed0_shuffle; baselines do not depend on K."""
+    label = name
+    if adapter and clip_len != default_len:
+        label += f"_k{clip_len}"
+    return label + ("_shuffle" if shuffle else "") + ("_wrongvideo" if wrong else "")
 
 
-def log_training_assets(run: Any, examples: list[Example], step: int) -> None:
-    artifact = wandb.Artifact(run.id + "-training-assets", type="dataset")
-    seen: set[str] = set()
-    for example in examples:
-        if example.object_id in seen:
-            continue
-        seen.add(example.object_id)
-        log_object_inputs(run, example, f"training_assets/{example.object_id}", step)
-        for source, name in [(example.video, "input.mp4"), (example.frames[0], "reference.png"), (example.masks[0], "mask.png"), (example.ground_truth_mesh, "ground_truth.glb"), (example.target, "encoded_target.pt")]:
-            artifact.add_file(source, name=f"{example.object_id}/{name}")
-    run.log_artifact(artifact)
+def shuffle_frames(sample: dict) -> dict:
+    """H3 control: permute the clip frames (seeded by the sample id); Δt slots stay in place."""
+    x, info = sample["inputs"], sample["info"]
+    K = x["frames"].shape[0]
+    rng = np.random.default_rng(sample_seed(sample_id(info), "shuffle"))
+    perm = torch.from_numpy(rng.permutation(K))
+    ref_pos = int((perm == x["ref_pos"]).nonzero()[0, 0])
+    inputs = {**x, "frames": x["frames"][perm], "frame_masks": x["frame_masks"][perm], "ref_pos": ref_pos}
+    return {"inputs": inputs, "info": {**info, "frame_ids": [info["frame_ids"][i] for i in perm]}}
 
 
-def evaluate(model: NativeSAM, examples: list[Example], config: ExperimentConfig, step: int, run: Any) -> dict[str, float]:
-    import trimesh
-    device = next(model.parameters()).device
-    table = wandb.Table(columns=["example_id", "object_id", "variant", "step", "input_video", "reference", "mode", "prediction_point_cloud", "ground_truth_point_cloud", "chamfer", "fscore_002", "artifact_name"])
-    results: list[dict[str, Any]] = []
-    previous_rng = rng_state()
-    model.eval()
-    selected_examples: list[Example] = []
-    seen: set[str] = set()
-    for example in examples:
-        if example.object_id not in seen:
-            selected_examples.append(example)
-            seen.add(example.object_id)
-        if len(selected_examples) >= config.training.eval_examples:
-            break
-    for example in selected_examples:
-        truth_mesh = trimesh.load(example.ground_truth_mesh, force="mesh")
-        truth, _ = trimesh.sample.sample_surface(truth_mesh, 4096, seed=42)
-        reference = torch.load(example.reference_tokens, map_location=device, weights_only=True)[None]
-        prefix = f"final/{example.example_id}"
-        log_object_inputs(run, example, prefix, step)
-        baseline_error: float | None = None
-        for mode in ["native_image", "reference_repeated", "video"]:
-            directory = Path(config.training.output) / config.run_id / "evaluation" / f"step-{step:06d}" / example.example_id / mode
-            directory.mkdir(parents=True, exist_ok=True)
-            inputs = clip_inputs(example, config.data, repeated_reference=mode != "video")
-            video = inputs["video"][None].to(device)
-            foreground = inputs["foreground"][None].to(device)
-            torch.manual_seed(config.training.seed)
-            torch.cuda.manual_seed_all(config.training.seed)
-            with torch.autocast("cuda", dtype=torch.bfloat16):
-                if mode == "native_image":
-                    cache_key = hashlib.sha256((config.model.sam_revision + config.provenance.git_head + str(config.training.seed) + str(config.training.inference_steps)).encode() + Path(example.reference_tokens).read_bytes()).hexdigest()
-                    cache = Path(config.training.output) / "native_image_cache" / (cache_key + ".pt")
-                    if cache.exists():
-                        logits = torch.load(cache, map_location=device, weights_only=True)["logits"]
-                    else:
-                        logits = model.generate_native_image(reference, config.training.inference_steps)
-                        atomic_torch(cache, {"logits": logits.cpu()})
-                else:
-                    logits = model.generate(video, reference, config.training.inference_steps, foreground)
-            prediction, mesh_path = export_prediction(logits[0], directory)
-            metrics = surface_metrics(prediction, truth)
-            if example.occupancy:
-                truth_occupancy = np.load(example.occupancy)
-                prediction_occupancy = logits[0].float().cpu().numpy().squeeze() > 0
-                union = np.logical_or(truth_occupancy, prediction_occupancy).sum()
-                metrics["surface_occupancy_iou"] = float(np.logical_and(truth_occupancy, prediction_occupancy).sum() / max(int(union), 1))
-            if example.visibility:
-                regions = np.load(example.visibility)
-                distances = cKDTree(prediction).query(regions["points"])[0] if len(prediction) else np.full(len(regions["points"]), np.sqrt(3))
-                for region in ["reference_visible", "newly_revealed", "never_observed"]:
-                    selected = regions[region]
-                    if selected.any():
-                        metrics[f"{region}/completeness_distance"] = float(distances[selected].mean())
-                        metrics[f"{region}/recall_002"] = float((distances[selected] < 0.02).mean())
-            if mode == "reference_repeated":
-                baseline_error = metrics["chamfer"]
-            record = {"schema_version": 2, "example_id": example.example_id, "object_id": example.object_id, "split": example.split, "variant": config.variant, "step": step, "mode": mode, "selected_frames": example.frames, "selected_masks": example.masks, "distinct_views": len(set(example.frames)) if mode == "video" else 1, "video": example.video, "reference_frame": example.frames[0], "ground_truth_mesh": example.ground_truth_mesh, "prediction_mesh": str(mesh_path) if mesh_path else None, "metrics": metrics}
-            atomic_json(directory / "pairing.json", record)
-            artifact_name = f"{config.run_id}-{example.example_id}-{mode}-s{step}"
-            artifact = wandb.Artifact(artifact_name, type="reconstruction", metadata=record)
-            artifact.add_dir(str(directory))
-            if example.visibility:
-                artifact.add_file(example.visibility, name="visibility.npz")
-            artifact.add_file(example.video, name="input.mp4")
-            artifact.add_file(example.frames[0], name="reference.png")
-            artifact.add_file(example.masks[0], name="reference_mask.png")
-            artifact.add_file(example.ground_truth_mesh, name="ground_truth.glb")
-            run.log_artifact(artifact)
-            mesh_label = {"native_image": "native_sam3d_coarse_mesh", "reference_repeated": "our_repeated_reference_mesh", "video": "our_video_mesh"}[mode]
-            if mesh_path is not None:
-                run.log({f"{prefix}/{mesh_label}": wandb.Object3D(str(mesh_path))}, step=step)
+def wrong_video_partner(ds: ClipDataset, i: int) -> int:
+    """T7: a deterministic sample from a different clip (about half the dataset away)."""
+    clip_id = ds.index[i]["clip_id"]
+    for step in range(len(ds)):
+        j = (i + len(ds) // 2 + step) % len(ds)
+        if ds.index[j]["clip_id"] != clip_id:
+            return j
+    raise AssertionError("wrong-video control needs at least two clips")
+
+
+def with_video_of(sample: dict, other: dict) -> dict:
+    """Keep the SAM 3D reference inputs; take the clip (frames, masks, Δt) from another sample."""
+    keys = ("frames", "frame_masks", "dt", "ref_pos")
+    inputs = {**sample["inputs"], **{k: other["inputs"][k] for k in keys}}
+    return {"inputs": inputs, "info": {**sample["info"], "video_from": sample_id(other["info"])}}
+
+
+def best_frame(ds: ClipDataset, info: dict) -> tuple[reader.Clip, int]:
+    """C0b oracle: the frame of S (o = 0) where object k has the largest visible_frac."""
+    clip = ds.clip(info["clip_id"])
+    vis = reader.visibility(clip)[:, info["k"] - 1]
+    subset = frame_subset(0, ds.data_cfg.num_subset_frames, ds.data_cfg.frame_stride)
+    return clip, max(subset, key=lambda t: vis[t])
+
+
+@torch.no_grad()
+def evaluate(cfg: ExperimentConfig, run: str, k: int | None = None, shuffle: bool = False,
+             wrong_video: bool = False, repeated_reference: bool = False, split: str | None = None,
+             limit: int | None = None, checkpoint: str | None = None,
+             epoch: int | None = None, trigger: str = "ad_hoc", loss_only: bool = False) -> Path:
+    """Evaluate one run or baseline; returns the path of its results JSONL."""
+    setup_logging()
+    device = pick_device(cfg.device)
+    cfg, adapter, name = load_run(cfg, run, device, checkpoint)
+    clip_len = int(k or cfg.eval.k)
+    label = result_label(name, clip_len, int(cfg.eval.k), shuffle, wrong_video, adapter is not None)
+    label += "_repeated" if repeated_reference else ""
+    label += "_loss" if loss_only else ""
+    sam3d = build_sam3d(cfg, device)
+    encoder = build_kv_encoder(cfg, sam3d, device) if adapter is not None else None
+    if adapter is not None:
+        from video3d.checkpoint import extra_parameters, restore_extra
+        restore_extra(extra_parameters(encoder, sam3d), adapter.extra_ema_state)
+    if cfg.data.source != "synthetic" and run == "best-frame":
+        raise ValueError("The visibility-based oracle requires synthetic visibility metadata")
+    ds = build_dataset(cfg, split or cfg.data.eval_split, train=False, clip_len=clip_len)
+
+    scratch_dir, output_dir = Path(cfg.paths.scratch_root) / "eval", Path(cfg.paths.output_root) / "eval"
+    if cfg.eval.evaluation_id:
+        scratch_dir = Path(cfg.paths.scratch_root) / "evaluations" / cfg.eval.evaluation_id
+        output_dir = Path(cfg.paths.output_root) / "evaluations" / cfg.eval.evaluation_id
+    scratch_dir.mkdir(parents=True, exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    local, final = scratch_dir / f"{label}.jsonl", output_dir / f"{label}.jsonl"
+    from video3d.storage import atomic_json
+    signature = config_dict(cfg)
+    from video3d.provenance import source_identity, data_identity
+    signature.update(source_identity=source_identity(), data_identity=data_identity(cfg))
+    signature.update(evaluation_run=run, clip_len=clip_len, shuffle=shuffle,
+                     wrong_video=wrong_video, repeated_reference=repeated_reference, split=split, loss_only=loss_only)
+    if checkpoint:
+        with Path(checkpoint).open('rb') as handle:
+            checkpoint_hash = hashlib.file_digest(handle, 'sha256').hexdigest()
+        signature.update(checkpoint=str(Path(checkpoint).resolve()), checkpoint_sha256=checkpoint_hash)
+    signature.update(epoch=epoch, trigger=trigger, weights=cfg.eval.checkpoint_weights,
+                     output_scope='refined_mesh_and_coarse' if cfg.eval.refined_mesh else 'coarse_stage1')
+    metadata = output_dir / f"{label}.meta.json"
+    if metadata.exists() and json.loads(metadata.read_text()) != signature:
+        raise ValueError("Evaluation settings changed; choose a new output directory")
+    atomic_json(metadata, signature)
+    if cfg.eval.evaluation_id:
+        atomic_json(output_dir / "evaluation.json", signature)
+    records = {r["sample_id"]: r for r in read_jsonl(final) + read_jsonl(local)}
+    local.write_text("".join(json.dumps(r) + "\n" for r in records.values()))
+    log.info("%s: %d of %d samples already done", label, len(records), len(ds))
+
+    todo = [i for i in range(len(ds)) if sample_id(ds.index[i]) not in records]
+    from video3d.logging import RunLogger
+    from video3d.media import save_pair
+    logger = RunLogger(cfg)
+    for n, i in enumerate(tqdm(todo[:limit] if limit else todo, desc=f"Evaluate {label}", unit="video"), start=1):
+        inference_started = time.perf_counter()
+        if device.type == 'cuda':
+            torch.cuda.reset_peak_memory_stats(device)
+        sample = ds[i]
+        if cfg.eval.native_reference and cfg.data.source in {'gso','omniobject3d'}:
+            from video3d.data.scanned import read_rgb, read_mask
+            row = ds.rows[i]
+            reference = sample['info']['r']
+            sample['inputs']['ref_rgb'] = torch.from_numpy(read_rgb(ds.root/row.frames[reference]))
+            sample['inputs']['ref_mask'] = torch.from_numpy(read_mask(ds.root/row.masks[reference],cfg.data.mask_threshold))
+        if repeated_reference:
+            from video3d.evaluate import repeat_reference
+            sample = repeat_reference(sample)
+        if wrong_video:
+            sample = with_video_of(sample, ds[wrong_video_partner(ds, i)])
+        if shuffle:
+            sample = shuffle_frames(sample)
+        info = sample["info"]                    # ids and stratification of the eval sample
+        if cfg.eval.refined_mesh:
+            if cfg.fake_sam3d or cfg.data.source != 'gso':
+                raise ValueError('Heavy refined evaluation requires real SAM3D and audited GSO data')
+            info['visibility'] = str(ds.root / 'visibility' / f"{info['asset_id']}.npz")
+        extra: dict[str, typing.Any] = {}
+        loss_sample = sample
+        if adapter is None and run == "best-frame":
+            clip, r_best = best_frame(ds, info)
+            loss_sample = build_sample(clip, info["k"], r_best, 0, 1, cfg.data)
+            extra["oracle_frame"] = r_best
+        gt = torch.from_numpy(ground_truth(ds, info["asset_id"], cfg))
+        matched_loss = None
+        if loss_only or not cfg.eval.refined_mesh:
+            from video3d.data.targets import latent_path
+            if "target" not in loss_sample and not latent_path(cfg, info["asset_id"]).is_file():
+                loss_sample = {**loss_sample, "target": sam3d.encode_voxels(gt[None].to(device))[0]}
+            matched_loss = sample_flow_loss(sam3d, encoder, adapter, loss_sample, cfg, device)
+        extra.update(flow_loss=matched_loss, flow_loss_protocol="shape-flow-fixed-grid-v1",
+                     flow_loss_tau_grid=list(cfg.val.tau_grid))
+        seed = sample_seed(info["clip_id"], info["k"], info["r"])
+        metrics: dict[str, typing.Any] = {}
+        inference_seconds = 0.0
+        if not loss_only:
+            if adapter is not None:
+                cond = adapted_condition(sam3d, encoder, adapter, [sample], cfg, device)
             else:
-                run.summary[f"{prefix}/{mesh_label}_failure"] = "No zero level set in predicted occupancy; no mesh exists."
-            visual = wandb.Object3D(prediction) if len(prediction) else None
-            table.add_data(example.example_id, example.object_id, config.variant, step, wandb.Video(example.video, format="mp4"), wandb.Image(example.frames[0]), mode, visual, wandb.Object3D(truth), metrics["chamfer"], metrics["fscore_002"], artifact_name)
-            results.append(record)
-            if mode == "video" and baseline_error is not None:
-                results[-1]["improvement_over_reference"] = baseline_error - metrics["chamfer"]
-    aggregate: dict[str, float] = {}
-    for mode in ["native_image", "reference_repeated", "video"]:
-        selected = [row for row in results if row["mode"] == mode]
-        for metric in ["chamfer", "fscore_002", "failed"]:
-            aggregate[f"eval/{mode}/{metric}"] = float(np.mean([row["metrics"][metric] for row in selected]))
-    for region in ["reference_visible", "newly_revealed", "never_observed"]:
-        for mode in ["native_image", "reference_repeated", "video"]:
-            key = f"{region}/recall_002"
-            values = [row["metrics"][key] for row in results if row["mode"] == mode and key in row["metrics"]]
-            if values:
-                aggregate[f"eval/{mode}/{key}"] = float(np.mean(values))
-    aggregate["eval/improvement_over_reference"] = float(np.mean([row["improvement_over_reference"] for row in results if "improvement_over_reference" in row]))
-    run.log({**aggregate, "eval/paired_reconstructions": table}, step=step)
-    atomic_json(Path(config.training.output) / config.run_id / f"evaluation-{step:06d}.json", results)
-    restore_rng(previous_rng)
-    model.train()
-    model.conditioning.encoder.eval()
-    return aggregate
+                ref = sample
+                if run == "best-frame":
+                    clip, r_best = best_frame(ds, info)
+                    ref = build_sample(clip, info["k"], r_best, 0, 1, cfg.data)
+                    extra["oracle_frame"] = r_best
+                cond = sam3d.condition(*reference_images([ref], device))
+            seed = sample_seed(info["clip_id"], info["k"], info["r"])
+            if cfg.eval.video_diagnostics and adapter is not None:
+                from video3d.diagnostics import evaluate_video, exposure_for_sample
+                other = ds[wrong_video_partner(ds, i)] if "wrong" in cfg.eval.video_controls else None
+                video_result = evaluate_video(sample, other, gt, sam3d, encoder, adapter, cfg, device,
+                                              exposure_for_sample(cfg, ds, info))
+                z, layout, pred = video_result.latent, video_result.layout, video_result.prediction
+                extra.update(video_diagnostics=video_result.diagnostics, video_controls=video_result.controls)
+            else:
+                z, layout = sam3d.sample(cond, [seed], cfg.sampler)
+                pred = sam3d.decode_latent(z)[0].cpu()
+            mesh_metrics: dict[str, typing.Any] = {}
+            if cfg.eval.refined_mesh:
+                from video3d.storage import atomic_torch
+                atomic_torch(output_dir/'stages'/sample_id(info).replace('/','-')/'stage1.pt', {
+                    'sample_id':sample_id(info), 'latent':z.float().cpu(),
+                    'layout':{key:value.cpu() for key,value in layout.items()},
+                    'decoded_prediction':pred, 'ground_truth':gt, 'seed':seed,
+                    'rng_state_after_stage1':sam3d.sampling_rng_state.cpu(),
+                    'sampler':chz.asdict(cfg.sampler), 'frame_ids':info['frame_ids']})
+            if cfg.eval.refined_mesh and bool(pred.any()):
+                import shutil
+                from video3d.media import save_refined_prediction
+                from video3d.mesh_analysis import analyze
+                refined_dir = output_dir / "samples" / sample_id(info).replace("/", "-")
+                refined = sam3d.refine(z, layout, *reference_images([sample], device), seed, cfg.eval.refinement_steps)
+                save_refined_prediction(refined, refined_dir)
+                # Match cached baselines: score the final pruned/downsampled native coordinates.
+                coords = refined['coords'].detach().cpu().long()[:, 1:]
+                pred = torch.zeros_like(pred)
+                pred[coords[:, 0], coords[:, 1], coords[:, 2]] = True
+                row = ds.rows[i]
+                shutil.copy2(ds.root / row.mesh, refined_dir / "ground-truth.glb")
+                if row.cameras is not None:
+                    shutil.copy2(ds.root / row.cameras, refined_dir / "cameras.json")
+                atomic_json(refined_dir / "protocol.json", {
+                    "dataset": cfg.data.source, "frame_ids": info["frame_ids"],
+                    "camera_registration": "known_render_poses" if row.cameras else "unverified",
+                    "visibility_cache": info["visibility"], "seed": seed})
+                if device.type == 'cuda':
+                    torch.cuda.synchronize(device)
+                inference_seconds = time.perf_counter() - inference_started
+                mesh_metrics = analyze(str(refined_dir), samples=cfg.eval.surface_samples)
+            else:
+                inference_seconds = time.perf_counter() - inference_started
+                if cfg.eval.native_coarse and bool(pred.any()):
+                    sparse = sam3d.sparse_structure(z, layout)
+                    coords = sparse['coords'].detach().cpu().long()[:, 1:]
+                    pred = torch.zeros_like(pred)
+                    pred[coords[:, 0], coords[:, 1], coords[:, 2]] = True
+            metrics = shape_metrics(pred, gt, cfg.eval.metrics, seed=sample_seed(sample_id(info)))
+            if info.get('visibility'):
+                from video3d.metrics import visibility_metrics
+                metrics.update(visibility_metrics(pred, info['visibility']))
+            if cfg.eval.refined_mesh:
+                metrics['mesh_surface'] = mesh_metrics or None
+        resources = {'inference_seconds':inference_seconds,
+                     'sample_seconds':time.perf_counter()-inference_started}
+        if device.type == 'cuda':
+            resources.update(cuda_peak_allocated_bytes=torch.cuda.max_memory_allocated(device),
+                             cuda_peak_reserved_bytes=torch.cuda.max_memory_reserved(device),
+                             gpu=torch.cuda.get_device_name(device))
+        record = {"sample_id": sample_id(info), "label": label, "condition": cfg.condition if adapter
+                  is not None else name, "run": name, "clip_len": clip_len, "shuffle_frames": shuffle,
+                  "wrong_video": wrong_video, **{key: info[key] for key in (
+                      "clip_id", "k", "r", "reference_rules", "visible_frac", "amodal_px",
+                      "arc_span_deg", "num_objects", "asset_id")},
+                  **({"video_from": info["video_from"]} if "video_from" in info else {}),
+                  **extra, **metrics}
+        record.update(evaluation_id=cfg.eval.evaluation_id, epoch=epoch, trigger=trigger,
+                      output_scope='refined_mesh_and_coarse' if cfg.eval.refined_mesh else 'coarse_stage1',
+                      sampler=chz.asdict(cfg.sampler), refinement_steps=cfg.eval.refinement_steps if cfg.eval.refined_mesh else None,
+                      frame_ids=info['frame_ids'], seed=seed)
+        record.update(resources=resources)
+        if cfg.eval.refined_mesh:
+            record['refinement_status'] = 'complete' if mesh_metrics else 'empty_stage1'
+        record = EvaluationRecord.model_validate(record).model_dump()
+        logger.log_evaluation(record, len(records) + n)
+        if not loss_only:
+            from video3d.storage import atomic_torch
+            atomic_torch(output_dir / "predictions" / label / (sample_id(info).replace("/", "-") + ".pt"),
+                         {"sample_id": sample_id(info), "latent": z[0].float().cpu(),
+                          'layout':{key:value.cpu() for key,value in layout.items()},
+                          "prediction": pred, "ground_truth": gt, "metrics": record})
+            if len(records) + n <= cfg.logging.media_samples:
+                media_dir = output_dir / "media" / label / sample_id(info).replace("/", "-")
+                visibility_file, visible_frames = None, None
+                if cfg.data.source == "synthetic":
+                    from video3d.data.visibility import exposure_path, object_exposure
+                    visibility_file = exposure_path(cfg, info["clip_id"], info["k"])
+                    object_exposure(ds.clip(info["clip_id"]), info["k"],
+                                    reader.load_voxels(ds.voxels_file, info["asset_id"]), visibility_file)
+                    visible_frames = info["frame_ids"]
+                    if adapter is None or wrong_video:
+                        visible_frames = [extra.get("oracle_frame", info["r"])]
+                    elif repeated_reference:
+                        visible_frames = [info["r"]] * clip_len
+                save_pair(sample, pred, gt, record, media_dir, logger.run,
+                          visibility_file=visibility_file, frame_ids=visible_frames)
+        append_jsonl(local, record)
+        if n % cfg.eval.flush_every == 0:
+            copy_to_output(local, output_dir)
+            log.info("%s: %d / %d", label, len(records) + n, len(ds))
+    copy_to_output(local, output_dir)
+    log.info("wrote %s", final)
+    complete = read_jsonl(final)
+    logger.finish_evaluation(complete, output_dir, label, len(ds))
+    summary_path = output_dir / f"{label}.summary.json"
+    summary = json.loads(summary_path.read_text()) if summary_path.is_file() else {}
+    flow_losses = [row["flow_loss"] for row in complete if row.get("flow_loss") is not None]
+    summary.update(samples=len(complete), mean_flow_loss=sum(flow_losses) / len(flow_losses) if flow_losses else None,
+                   protocol="shape-flow-fixed-grid-v1", weights=cfg.eval.checkpoint_weights if adapter is not None else "pretrained")
+    if cfg.eval.video_diagnostics:
+        from video3d.diagnostics import summarize_video_records
+        summary.update(summarize_video_records(complete))
+    atomic_json(summary_path, summary)
+    logger.finish()
+    return final
+
+
+def heavy_epoch_config(cfg: ExperimentConfig, run_dir: Path, epoch: int) -> ExperimentConfig:
+    """Shared scheduled/ad-hoc heavy protocol, isolated from quick validation outputs."""
+    from video3d.config import MetricsConfig, SamplerConfig
+    if not cfg.val.heavy_data_root:
+        raise ValueError("Set val.heavy_data_root to the audited GSO manifest directory")
+    evaluation_id = f"{cfg.run_name}-epoch{epoch:02d}-heavy25"
+    return chz.replace(cfg, sampler=SamplerConfig(mode='flow', steps=25),
+        paths=chz.replace(cfg.paths, data_root=cfg.val.heavy_data_root,
+                          output_root=str(run_dir.parent)),
+        data=chz.replace(cfg.data, source='gso', eval_split='eval'),
+        eval=chz.replace(cfg.eval, refined_mesh=True, native_coarse=True, native_reference=True, refinement_steps=25,
+                         metrics=MetricsConfig(), evaluation_id=evaluation_id),
+        logging=chz.replace(cfg.logging, media_samples=200))
+
+
+def heavy_epoch_selected(epochs: list[int], epoch: int, final_epoch: int) -> bool:
+    return epoch in epochs or (-1 in epochs and epoch == final_epoch)
+
+
+def evaluate_training_epoch(cfg: ExperimentConfig, run_dir: Path, epoch: int) -> None:
+    """Run the same evaluator in a subprocess so W&B and Stage-2 memory are isolated."""
+    import subprocess
+    import sys
+    from video3d.storage import atomic_json
+    heavy = heavy_epoch_config(cfg, run_dir, epoch)
+    config_file = run_dir / f'heavy-eval-epoch-{epoch:02d}.json'
+    atomic_json(config_file, config_dict(heavy))
+    subprocess.run([sys.executable, '-m', 'video3d', 'eval-json', str(config_file), str(run_dir),
+                    f'--checkpoint={run_dir / f"epoch_{epoch:02d}.pt"}',
+                    f'--epoch={epoch}', '--trigger=scheduled'], check=True)
+
+
+def evaluate_full_validation(cfg: ExperimentConfig, run_dir: Path, epoch: int) -> None:
+    """Full held-out training-distribution split, not the 50-object monitoring panel."""
+    import subprocess
+    import sys
+    from video3d.config import MetricsConfig, SamplerConfig
+    from video3d.storage import atomic_json
+    evaluation_id = f'{cfg.run_name}-epoch{epoch:02d}-fullval-flow25'
+    full = chz.replace(cfg, sampler=SamplerConfig(mode='flow', steps=25),
+        data=chz.replace(cfg.data, source='synthetic', eval_split='val'),
+        eval=chz.replace(cfg.eval, refined_mesh=False, native_coarse=True,
+                         metrics=MetricsConfig(), evaluation_id=evaluation_id),
+        logging=chz.replace(cfg.logging, media_samples=1306))
+    config_file = run_dir / f'full-validation-epoch-{epoch:02d}.json'
+    atomic_json(config_file, config_dict(full))
+    subprocess.run([sys.executable, '-m', 'video3d', 'eval-json', str(config_file), str(run_dir),
+                    f'--checkpoint={run_dir / f"epoch_{epoch:02d}.pt"}',
+                    f'--epoch={epoch}', '--trigger=scheduled'], check=True)
+
+
+def repeat_reference(sample: dict) -> dict:
+    inputs = sample["inputs"]
+    count = len(inputs["frames"])
+    pos = inputs["ref_pos"]
+    changed = {**inputs, "frames": inputs["frames"][pos:pos+1].expand(count, -1, -1, -1),
+               "frame_masks": inputs["frame_masks"][pos:pos+1].expand(count, -1, -1),
+               "dt": torch.zeros_like(inputs["dt"])}
+    return {**sample, "inputs": changed}

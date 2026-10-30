@@ -1,6 +1,0 @@
-# Used by build.sh: docker build with the Dockerfile in scripts/gcp/, context = repo root.
-steps:
-  - name: gcr.io/cloud-builders/docker
-    args: ["build", "-f", "scripts/gcp/Dockerfile", "-t", "${_IMAGE_URI}", "."]
-images: ["${_IMAGE_URI}"]
-timeout: 14400s

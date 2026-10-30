@@ -1,0 +1,4 @@
+{
+  "dataset_root": "dataset",
+  "bg_pool_dir": "data/bg_pools"
+}

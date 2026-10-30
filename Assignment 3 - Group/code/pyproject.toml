@@ -1,43 +1,59 @@
 [project]
 name = "atdl-video-reconstruction"
-version = "0.1.0"
-requires-python = ">=3.11"
+version = "0.2.0"
+requires-python = ">=3.11,<3.12"
 dependencies = [
-    "chz>=0.4",
-    "pydantic>=2",
-    "numpy>=1.26,<3",
-    "pillow>=10",
-    "scipy>=1.11",
-    "omegaconf>=2.3",
-    "hydra-core>=1.3",
-    "optree>=0.14",
-    "astor>=0.8",
-    "loguru>=0.7",
-    "huggingface-hub>=0.30",
-    "fire>=0.7.1",
+  "chz>=0.4", "pydantic>=2", "fire>=0.7.1", "numpy>=1.26,<2",
+  "pillow>=10.4", "scipy>=1.13", "torch==2.7.1", "torchvision==0.22.1",
+  "omegaconf>=2.3", "hydra-core==1.3.2", "optree>=0.14", "astor>=0.8",
+  "loguru>=0.7", "huggingface-hub>=0.30", "einops>=0.8", "timm>=1",
+  "trimesh>=4.5,<5", "scikit-image>=0.24", "imageio[ffmpeg]>=2.36",
+  "matplotlib>=3.8", "opencv-python-headless>=4.10,<4.12", "requests>=2.32",
+  "tqdm>=4.66", "wandb>=0.19", "safetensors>=0.4", "iopath>=0.1.10",
 ]
-
-[project.optional-dependencies]
-gpu = ["torch==2.9.1", "torchvision==0.24.1", "timm>=1", "einops>=0.8", "wandb>=0.19", "trimesh>=4.5", "scikit-image>=0.24", "imageio[ffmpeg]>=2.36", "mediapy>=1.2", "iopath>=0.1.10", "safetensors>=0.4"]
 
 [dependency-groups]
-analysis = [
-    "ipykernel>=6",
-    "matplotlib>=3.8",
-    "modal>=1.4",
-    "nbclient>=0.10",
-    "nbformat>=5",
-    "plotly>=6",
-    "trimesh>=4.5",
-    "wandb>=0.19",
+dev = ["pytest>=8", "ruff>=0.9", "setuptools<81", "wheel"]
+generation = [
+    "blenderproc==2.8.0",
+    "open3d==0.18.0",
+    "embreex>=2.17",
+    "pyrender>=0.1.45",
+    "pyglet<2",
 ]
-dev = [
-    "imageio[ffmpeg]>=2.38.1",
-    "optree>=0.20.0",
-    "pytest>=8",
-    "scikit-image>=0.26.0",
-    "timm>=1.0.30",
-    "trimesh>=5.1.1",
+analysis = ["ipykernel>=6", "nbclient>=0.10", "nbformat>=5", "plotly>=6"]
+remote = ["modal>=1.4"]
+gpu_runtime = [
+    "easydict==1.13",
+    "lightning==2.3.3",
+    "igraph>=0.11",
+    "ninja>=1.11",
+    "plyfile>=1.1",
+    "pymeshfix>=0.17",
+    "pyvista>=0.44",
+    "utils3d==0.1.0",
+    "xatlas>=0.0.9",
+    "open3d==0.18.0",
+    "packaging<25",
+    "spconv-cu126==2.3.8; sys_platform == 'linux'",
+    "gsplat==1.4.0; sys_platform == 'linux'",
+    "pygltflib>=1.16.5",
+    "usd-core>=26.11",
+    "warp-lang>=1.18.0",
+    "ipycanvas>=0.14.3",
+    "ipyevents>=2.0.4",
+    "fvcore>=0.1.5.post20221221",
+    "rootutils>=1.0.7",
+    "roma>=1.8.0",
+    "randomname>=0.2.1",
+    "pycocotools>=2.0.11",
+    "einops-exts>=0.0.4",
+    "fasteners>=0.20",
+    "h5py>=3.16.0",
+    "ftfy>=6.3.1",
+    "rtree>=1.4.1",
+    "point-cloud-utils>=0.34.0",
+    "openexr>=3.5.2",
 ]
 
 [build-system]
@@ -47,6 +63,51 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/video3d"]
 
+[project.scripts]
+video3d = "video3d.cli:main"
+
+[project.optional-dependencies]
+stream3d = ["streaming3d"]
+mvsam3d = ["sam3d-objects"]
+
 [tool.pytest.ini_options]
-pythonpath = ["src"]
 testpaths = ["tests"]
+markers = ["gpu: requires a remote CUDA GPU and real checkpoints", "slow: renders clips with Blender", "sampled: checks dataset samples"]
+
+[tool.ruff.lint]
+select = ["F", "E9"]
+
+[tool.video3d.upstream]
+sam3d = "f91db411c50efee93d8db7aeb323885650f6f722"
+vjepa2 = "204698b45b3712590f06245fbfba32d3be539812"
+navi = "3fcfd406aba3dbd43760ad100afb04a6320b7d1c"
+pytorch3d = "75ebeeaea0908c5527e7b1e305fbc7681382db47"
+
+[tool.video3d.upstream.runtime]
+hydra_patch = "https://raw.githubusercontent.com/gleize/hydra/78f00766b5f37672aa7232ebbf01bdd74246bd60/hydra/core/utils.py"
+kaolin = "https://nvidia-kaolin.s3.us-east-2.amazonaws.com/torch-2.7.1_cu128/kaolin-0.18.0-cp311-cp311-linux_x86_64.whl"
+moge = "git+https://github.com/microsoft/MoGe.git@a8c37341bc0325ca99b9d57981cc3bb2bd3e255b"
+utils3d = "git+https://github.com/EasternJournalist/utils3d.git@3913c65d81e05e47b9f367250cf8c0f7462a0900"
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cu128", marker = "sys_platform == 'linux'" }]
+torchvision = [{ index = "pytorch-cu128", marker = "sys_platform == 'linux'" }]
+streaming3d = { git = "https://github.com/kaichen-z/STREAM3D.git", rev = "be551cc756f5710875ec1c6a4c0fa545b56d2c4f" }
+sam3d-objects = { git = "https://github.com/devinli123/MV-SAM3D.git", rev = "abb04b5e8af5bc33b0265bdf19937e76bbb6bcdd" }
+
+[tool.uv]
+conflicts = [[{ extra = "mvsam3d" }, { extra = "stream3d" }]]
+# pyrender pins 3.1.0, whose EGL loader fails with current Mesa. The maintained
+# PyOpenGL release preserves the API and supports headless software rendering.
+override-dependencies = ["PyOpenGL==3.1.10"]
+
+[[tool.uv.dependency-metadata]]
+name = "sam3d-objects"
+version = "0.0.1"
+# Use the shared GPU runtime instead of the upstream workstation freeze.
+requires-dist = []

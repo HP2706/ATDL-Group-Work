@@ -1,21 +1,12 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 umask 077
-# This file is the provider-native Batch processing parameter, not an SSH/nohup launcher.
-# UCloud ends this allocation when this foreground script exits, including failure.
-RUN_ROOT=/work/hp-video
+# Install this as the application's foreground Batch processing entrypoint.
+# Process exit must end the provider allocation; do not use SSH/nohup reservations.
+RUN_ROOT="${RUN_ROOT:-/work/hp-video}"
 mkdir -p "$RUN_ROOT"
 exec 9>"$RUN_ROOT/job.lock"
-flock -n 9 || { echo 'Another experiment owns this staging directory.' >&2; exit 1; }
-for directory in results dependencies cache data; do
-  mkdir -p "$RUN_ROOT/$directory"
-  if [[ ! -e "/work/$directory" ]]; then
-    ln -s "$RUN_ROOT/$directory" "/work/$directory"
-  elif [[ "$(readlink -f "/work/$directory")" != "$RUN_ROOT/$directory" ]]; then
-    echo "Unexpected existing /work/$directory; refusing to overwrite it." >&2
-    exit 1
-  fi
-done
+flock -n 9 || { echo 'Another batch job owns this staging directory.' >&2; exit 1; }
 exec > >(tee -a "$RUN_ROOT/batch.log") 2>&1
 finish() {
   status=$?
@@ -25,67 +16,39 @@ finish() {
 trap finish EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-if [[ ! -f /work/hp-video/runtime.env ]]; then
-  echo 'Missing private runtime.env containing HF_READ_TOKEN and WANDB_API_KEY.' >&2
+set -a
+. "$RUN_ROOT/runtime.env"
+set +a
+: "${HP_SOURCE_COMMIT:?Pin the reviewed source commit}"
+: "${RUN_CONFIG:?Set the absolute path to a resolved experiment JSON}"
+export HF_HOME="$RUN_ROOT/cache/huggingface" TORCH_HOME="$RUN_ROOT/cache/torch"
+export HF_TOKEN="${HF_TOKEN:-${HF_READ_TOKEN:-}}"
+export WANDB_DIR="$RUN_ROOT/results/wandb" LIDRA_SKIP_INIT=1 ATTN_BACKEND=sdpa
+export OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2
+mkdir -p "$WANDB_DIR" "$HF_HOME" "$TORCH_HOME"
+checkout="$RUN_ROOT/source-$HP_SOURCE_COMMIT"
+if [[ ! -d "$checkout/.git" ]]; then
+  git clone --filter=blob:none --no-checkout https://github.com/HP2706/ATDL-Group-Work.git "$checkout"
+  git -C "$checkout" fetch --depth 1 origin "$HP_SOURCE_COMMIT"
+  git -C "$checkout" checkout --detach "$HP_SOURCE_COMMIT"
+fi
+if [[ "$(git -C "$checkout" rev-parse HEAD)" != "$HP_SOURCE_COMMIT" ]]; then
+  echo 'Staged checkout revision mismatch.' >&2
   exit 1
 fi
-set -a
-. /work/hp-video/runtime.env
-set +a
-: "${WANDB_API_KEY:?Required for W&B logging}"
-: "${HF_READ_TOKEN:?Required for gated model access}"
-: "${HP_SOURCE_COMMIT:?Pin the reviewed source commit}"
-export HF_HOME=/work/cache/huggingface TORCH_HOME=/work/cache/torch
-export WANDB_DIR=/work/results/wandb WANDB_CONSOLE=off WANDB_MODE=online
-mkdir -p "$WANDB_DIR"
-export LIDRA_SKIP_INIT=1 SAM3D_GEOMETRY_ONLY=1 ATTN_BACKEND=sdpa
-export OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2
-if [[ "${HP_TRAINING_APPROVED:-0}" != 1 ]]; then
-  echo 'Reviewed run specification must be approved before allocating experiment work.' >&2
-  exit 2
-fi
-# 115-minute foreground deadline leaves five minutes for sync/provider shutdown.
-# timeout owns the whole process group; it does not depend on the laptop staying online.
-timeout --signal=INT --kill-after=60 6900 bash -s <<'PIPELINE'
+cd "$checkout/Assignment 3 - Group/code"
+# A provider wall-time limit is still required. This foreground deadline leaves cleanup time.
+export RUN_CONFIG
+export BATCH_SWEEP="${BATCH_SWEEP:-0}"
+timeout --signal=INT --kill-after=60 "${PIPELINE_SECONDS:-6900}" bash -s <<'PIPELINE'
 set -Eeuo pipefail
-clone_at() {
-  local name=$1 commit=$2 url=$3
-  if [[ ! -d /work/dependencies/"$name"/.git ]]; then
-    git clone --filter=blob:none --no-checkout "$url" /work/dependencies/"$name"
-  fi
-  git -C /work/dependencies/"$name" fetch --depth 1 origin "$commit"
-  git -C /work/dependencies/"$name" checkout --detach "$commit"
-}
-if [[ ! -d /work/ATDL-Group-Work/.git ]]; then
-  git clone --filter=blob:none --no-checkout https://github.com/HP2706/ATDL-Group-Work.git /work/ATDL-Group-Work
+bash scripts/setup_env.sh
+source .venv/bin/activate
+nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv
+if [[ "$BATCH_SWEEP" == 1 ]]; then
+  python -c 'import os; from video3d.config import read_config, apply_process_env; from video3d.sweep import sweep; c=read_config(os.environ["RUN_CONFIG"]); apply_process_env(c); sweep(c)'
+else
+  python -m video3d train-json "$RUN_CONFIG"
+  python -c 'import os; from pathlib import Path; from video3d.config import read_config, apply_process_env; from video3d.evaluate import evaluate; c=read_config(os.environ["RUN_CONFIG"]); apply_process_env(c); evaluate(c, str(Path(c.paths.output_root)/c.run_name))'
 fi
-git -C /work/ATDL-Group-Work fetch origin hp
-git -C /work/ATDL-Group-Work checkout --detach "$HP_SOURCE_COMMIT"
-CODE='/work/ATDL-Group-Work/Assignment 3 - Group/code'
-clone_at sam-3d-objects f91db411c50efee93d8db7aeb323885650f6f722 https://github.com/facebookresearch/sam-3d-objects.git
-clone_at vjepa2 204698b45b3712590f06245fbfba32d3be539812 https://github.com/facebookresearch/vjepa2.git
-clone_at navi 3fcfd406aba3dbd43760ad100afb04a6320b7d1c https://github.com/google/navi.git
-clone_at dinov2 7764ea0f912e53c92e82eb78a2a1631e92725fc8 https://github.com/facebookresearch/dinov2.git
-if ! command -v uv >/dev/null; then
-  curl -LsSf https://astral.sh/uv/install.sh | sh
-  export PATH="$HOME/.local/bin:$PATH"
-fi
-cd "$CODE"
-uv sync --frozen --extra gpu
-uv run --frozen --extra gpu python ucloud/prepare_upstream.py
-nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv > /work/results/device.csv
-if [[ ! -f /work/data/navi/.extraction-complete ]]; then
-  mkdir -p /work/data/navi
-  curl -fL --retry 2 --max-time 1200 -C - https://storage.googleapis.com/gresearch/navi-dataset/navi_v1.5.tar.gz -o /work/cache/navi_v1.5.tar.gz
-  tar -tzf /work/cache/navi_v1.5.tar.gz | head -n 8 > /work/results/navi-archive-layout.txt || true
-  tar -xzf /work/cache/navi_v1.5.tar.gz -C /work/data/navi --skip-old-files
-  touch /work/data/navi/.extraction-complete
-fi
-uv run --frozen --extra gpu python -m video3d.cli prepare
-GROUP="$(uv run --frozen --extra gpu python ucloud/resolve_group.py resolve)"
-if [[ "$(uv run --frozen --extra gpu python ucloud/resolve_group.py profile-needed "$GROUP")" == True ]]; then
-  timeout --signal=INT --kill-after=30 300 uv run --frozen --extra gpu python -m video3d.cli profile "training.group=$GROUP"
-fi
-uv run --frozen --extra gpu python -m video3d.cli sweep "training.group=$GROUP"
-uv run --frozen --extra gpu python ucloud/resolve_group.py complete
 PIPELINE
