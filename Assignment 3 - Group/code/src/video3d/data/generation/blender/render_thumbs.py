@@ -7,6 +7,7 @@ import blenderproc as bproc  # must be the first line under blenderproc run
 # orientation. Output is RGBA uint8 (SIZE, SIZE, 4) with a transparent background.
 
 import json
+import os
 import sys
 
 import bpy
@@ -33,13 +34,39 @@ def render(job: dict) -> None:
     bproc.camera.set_intrinsics_from_K_matrix(K, SIZE, SIZE)
     az, el = np.radians(AZIMUTH_DEG), np.radians(ELEVATION_DEG)
     eye = DISTANCE * np.array([np.cos(el) * np.cos(az), np.cos(el) * np.sin(az), np.sin(el)])
-    R = bproc.camera.rotation_from_forward_vec(-eye)
-    bproc.camera.add_camera_pose(bproc.math.build_transformation_mat(eye, R))
+    poses = []
+    views = job.get("views", 1)
+    for view in range(views):
+        if views == 1:
+            position = eye
+        else:
+            z = 1 - 2 * (view + 0.5) / views
+            angle = view * np.pi * (3 - np.sqrt(5))
+            position = DISTANCE * np.array([np.sqrt(1-z*z)*np.cos(angle),
+                                           np.sqrt(1-z*z)*np.sin(angle), z])
+        rotation = bproc.camera.rotation_from_forward_vec(-position)
+        pose = bproc.math.build_transformation_mat(position, rotation)
+        bproc.camera.add_camera_pose(pose)
+        poses.append(pose.tolist())
     data = bproc.renderer.render()
-    np.save(job["out"], np.asarray(data["colors"][0]).clip(0, 255).astype(np.uint8))
+    colors = np.asarray(data["colors"]).clip(0, 255).astype(np.uint8)
+    temporary = job["out"] + ".tmp.npy"
+    np.save(temporary, colors[0] if views == 1 else colors)
+    os.replace(temporary, job["out"])
+    if views > 1:
+        with open(job["cameras"] + ".tmp", "w") as stream:
+            json.dump({"K": K.tolist(), "resolution": SIZE,
+                       "T_object_camera": poses, "camera_axes": "OpenGL"}, stream)
+        os.replace(job["cameras"] + ".tmp", job["cameras"])
+
 
 
 def main(jobs_path: str) -> None:
+    global SIZE, SAMPLES
+    with open(jobs_path) as stream:
+        jobs = json.load(stream)
+    SIZE = jobs[0].get("resolution", SIZE)
+    SAMPLES = jobs[0].get("samples", SAMPLES)
     bproc.init()
     bpy.context.scene.view_settings.view_transform = "Standard"
     bproc.renderer.set_max_amount_of_samples(SAMPLES)
@@ -60,6 +87,8 @@ def main(jobs_path: str) -> None:
             print(f"[thumbs] ok {job['out']}", flush=True)
         except Exception as e:
             print(f"[thumbs] FAILED {job['out']}: {e!r}", flush=True)
+            if job.get("views", 1) > 1:
+                raise
 
 
 main(sys.argv[1])

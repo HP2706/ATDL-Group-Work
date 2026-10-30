@@ -145,6 +145,7 @@ class OptimConfig:
 
 @chz.chz
 class TrainConfig:
+    stage: Literal['stage1', 'stage2'] = 'stage1'
     epochs: int = 0
     batch_size: int = 2
     effective_batch_size: int = 32
@@ -156,6 +157,16 @@ class TrainConfig:
     resume: str = 'auto'
     benchmark_steps: int = 20
     max_seconds: int = 3600
+
+
+@chz.chz
+class Stage2Config:
+    lora: bool | None = None
+    lora_rank: int | None = None
+    lora_alpha: float | None = None
+    target_root: str = ''
+    stage1_run: str = ''
+    stage1_checkpoint: str = ''
 
 
 @chz.chz
@@ -239,6 +250,7 @@ class ExperimentConfig:
     loss: LossConfig = chz.field(default_factory=LossConfig)
     optim: OptimConfig = chz.field(default_factory=OptimConfig)
     train: TrainConfig = chz.field(default_factory=TrainConfig)
+    stage2: Stage2Config = chz.field(default_factory=Stage2Config)
     val: ValConfig = chz.field(default_factory=ValConfig)
     eval: EvalConfig = chz.field(default_factory=EvalConfig)
     analysis: AnalysisConfig = chz.field(default_factory=AnalysisConfig)

@@ -129,7 +129,11 @@ def adapted_condition(sam3d: typing.Any, encoder: typing.Any, adapter: typing.An
     """SAM 3D conditioning tokens of the reference frames with the adapter applied."""
     rgb, mask = reference_images(batch, device)
     with torch.no_grad():
-        cond = sam3d.condition(rgb, mask)
+        if cfg.train.stage == 'stage2':
+            from video3d.stage2 import condition
+            cond = condition(sam3d, rgb, mask)
+        else:
+            cond = sam3d.condition(rgb, mask)
     if cfg.adapter.strategy == "native":
         return cond
     feature_context = nullcontext() if cfg.encoder.vjepa.video_lora else torch.no_grad()
@@ -163,6 +167,12 @@ def batch_loss(sam3d: typing.Any, encoder: typing.Any, adapter: typing.Any, batc
     """Micro-batch loss; None adapter replays the pretrained baseline with the same RNG."""
     cond = (sam3d.condition(*reference_images(batch, device)) if adapter is None else
             adapted_condition(sam3d, encoder, adapter, batch, cfg, device))
+    if cfg.train.stage == 'stage2':
+        from video3d.stage2 import condition, training_loss
+        if adapter is None:
+            cond = condition(sam3d, *reference_images(batch, device))
+        return training_loss(sam3d, cond, batch, cfg, device, gen,
+                             sample_tau(len(batch), cfg.loss, gen, device))
     x1 = torch.stack([s["target"] if "target" in s else load_latent(cfg, s["info"]["asset_id"]) for s in batch])
     x1 = x1.to(device)
     tau = sample_tau(len(batch), cfg.loss, gen, device)
@@ -264,6 +274,8 @@ def train(cfg: ExperimentConfig, benchmark: bool = False, stop_at: int | None = 
         raise RuntimeError("Training and benchmarks must run remotely, never on the laptop")
     if benchmark:
         cfg = chz.replace(cfg, run_name=f"{cfg.run_name}_benchmark")
+    from video3d.stage2 import validate_training
+    validate_training(cfg)
     from video3d.provenance import source_identity, data_identity
     source_hash, data_hash = source_identity(), data_identity(cfg)
     device = pick_device(cfg.device)
@@ -310,11 +322,22 @@ def train(cfg: ExperimentConfig, benchmark: bool = False, stop_at: int | None = 
                         "video_total":sum(p.numel() for p in encoder.parameters())}
     from video3d.storage import atomic_json
     atomic_json(output_dir / "parameter_counts.json", parameter_counts)
+    if cfg.train.stage == 'stage2':
+        from video3d.stage2 import lora_settings
+        enabled, rank, alpha = lora_settings(cfg)
+        atomic_json(output_dir / 'stage2-model.json', {
+            'lora_enabled': enabled, 'lora_rank': rank, 'lora_alpha': alpha,
+            'lora_modules': sam3d.stage2_lora_modules,
+            'frozen_stage1_run': cfg.stage2.stage1_run,
+            'frozen_stage1_checkpoint': cfg.stage2.stage1_checkpoint,
+            'frozen_decoders': ['slat_decoder_mesh', 'slat_decoder_gs', 'slat_decoder_gs_4'],
+            'target_root': cfg.stage2.target_root, 'trainable_parameters': parameter_counts})
     opt = torch.optim.AdamW(groups, lr=ocfg.lr, betas=tuple(ocfg.betas))
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda s: lr_factor(
         s, ocfg.warmup_steps, max_steps, ocfg.min_lr / ocfg.lr))
 
     step, best = 0, -1.0
+    best_val_loss = math.inf
     epoch_loss_sum, epoch_examples = 0.0, 0
     epoch_history: list[dict[str, typing.Any]] = []
     ckpt_path = None if benchmark else find_resume_checkpoint(cfg)
@@ -334,6 +357,7 @@ def train(cfg: ExperimentConfig, benchmark: bool = False, stop_at: int | None = 
                 p.copy_(ckpt["extra"][name])
                 extra_ema[name].copy_(ckpt["extra_ema"][name])
         step, best = ckpt["step"], ckpt["best_val_viou"]
+        best_val_loss = ckpt.get('best_val_loss', math.inf)
         epoch_loss_sum = ckpt.get("epoch_loss_sum", 0.0)
         epoch_examples = ckpt.get("epoch_examples", 0)
         epoch_history = ckpt.get("epoch_history", [])
@@ -346,6 +370,9 @@ def train(cfg: ExperimentConfig, benchmark: bool = False, stop_at: int | None = 
     loader = DataLoader(train_ds, collate_fn=collate_list, num_workers=cfg.data.num_workers,
                         batch_sampler=sampler)
     val_ds = None if benchmark or not cfg.data.val_asset_frac else build_dataset(cfg, VAL, train=False)
+    if cfg.train.stage == 'stage2':
+        from video3d.stage2 import audit_training_targets
+        audit_training_targets(cfg, train_ds, val_ds)
     autocast = torch.autocast(device.type, dtype=torch.bfloat16, enabled=bool(tcfg.bf16))
     if use_epochs and step and step % epoch_steps == 0 and cfg.val.epoch_media_samples:
         completed_epoch = step // epoch_steps
@@ -367,7 +394,7 @@ def train(cfg: ExperimentConfig, benchmark: bool = False, stop_at: int | None = 
     def checkpoint_state() -> dict:
         return {"adapter": adapter.state_dict(), "ema": ema.state_dict(),
                 "optimizer": opt.state_dict(), "scheduler": sched.state_dict(),
-                "rng": rng_state(), "step": step, "best_val_viou": best,
+                "rng": rng_state(), "step": step, "best_val_viou": best, 'best_val_loss': best_val_loss,
                 "schema_version": 3, "config": chz.asdict(cfg),
                 "source_identity":source_hash,"data_identity":data_hash,
                 "extra": {name: p.detach().cpu().clone() for name, p in extra.items()},
@@ -428,7 +455,7 @@ def train(cfg: ExperimentConfig, benchmark: bool = False, stop_at: int | None = 
             progress.update(update_examples)
             progress.set_postfix(loss=f"{loss_sum:.4f}", step=step)
 
-            record = {"step": step, "loss": loss_sum, "lr": sched.get_last_lr()[0],
+            record = {"step": step, "loss": loss_sum, "training_stage": cfg.train.stage, "lr": sched.get_last_lr()[0],
                       "grad_norm": grad_norm, "s_per_step": step_times[-1],
                       **component_gradients, **adapter.gates()}
             media: dict[str, typing.Any] = {}
@@ -455,7 +482,12 @@ def train(cfg: ExperimentConfig, benchmark: bool = False, stop_at: int | None = 
             if val_ds is not None and step % cfg.val.loss_every == 0:
                 with use_ema(extra, extra_ema), autocast:
                     record["val_loss"] = val_flow_loss(sam3d, encoder, ema, val_ds, cfg, device)
-            if val_ds is not None and step % cfg.val.sample_every == 0:
+                if cfg.train.stage == 'stage2' and record['val_loss'] < best_val_loss:
+                    best_val_loss = record['val_loss']
+                    save_checkpoint(checkpoint_state(), cfg, 'best.pt', pointer=None)
+                    atomic_json(output_dir / 'best.json', {'step': step, 'val_loss': best_val_loss,
+                                                         'selection_metric': 'stage2_flow_loss'})
+            if val_ds is not None and cfg.train.stage == 'stage1' and step % cfg.val.sample_every == 0:
                 with use_ema(extra, extra_ema), autocast:
                     record.update(val_shape_metrics(sam3d, encoder, ema, val_ds, cfg, device,
                                                     output_dir / "validation" / f"step-{step:08d}.json"))
@@ -528,6 +560,14 @@ def sample_flow_loss(sam3d: typing.Any, encoder: typing.Any, adapter: typing.Any
     No classifier-free guidance or reconstruction sampler enters this loss.
     """
     taus = torch.tensor(list(cfg.val.tau_grid), device=device)
+    if cfg.train.stage == 'stage2':
+        from video3d.stage2 import condition, training_loss
+        cond = (condition(sam3d, *reference_images([sample], device)) if adapter is None else
+                adapted_condition(sam3d, encoder, adapter, [sample], cfg, device))
+        info = sample['info']
+        gen = torch.Generator(device).manual_seed(sample_seed('val', info['clip_id'], info['k'], info['r']))
+        losses = [training_loss(sam3d, cond, [sample], cfg, device, gen, tau[None]) for tau in taus]
+        return torch.stack(losses).mean().item()
     if adapter is None:
         cond = sam3d.condition(*reference_images([sample], device))
     else:

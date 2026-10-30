@@ -50,11 +50,13 @@ def load_run(cfg: ExperimentConfig, run: str, device: typing.Any,
     if run in BASELINES:
         if cfg.eval.evaluation_id:
             cfg = chz.replace(cfg, run_name=cfg.eval.evaluation_id)
-        return chz.replace(cfg, sam3d=chz.replace(cfg.sam3d, lora=False)), None, BASELINES[run]
+        return chz.replace(cfg, sam3d=chz.replace(cfg.sam3d, lora=False),
+                           stage2=chz.replace(cfg.stage2, lora=False)), None, BASELINES[run]
     run_dir = Path(run) if Path(run).is_dir() else Path(cfg.paths.output_root) / run   # path or name
     assert (run_dir / "config.json").is_file(), f"no run at {run} or {run_dir}"
     run_cfg = read_config(run_dir / "config.json")
     cfg = chz.replace(cfg, adapter=run_cfg.adapter, encoder=run_cfg.encoder,
+                      train=chz.replace(cfg.train, stage=run_cfg.train.stage), stage2=run_cfg.stage2,
                       target=run_cfg.target, sam3d=run_cfg.sam3d,
                       data=chz.replace(cfg.data, crop=run_cfg.data.crop,
                                        video_input=run_cfg.data.video_input, frames=run_cfg.data.frames,
@@ -131,6 +133,10 @@ def evaluate(cfg: ExperimentConfig, run: str, k: int | None = None, shuffle: boo
     setup_logging()
     device = pick_device(cfg.device)
     cfg, adapter, name = load_run(cfg, run, device, checkpoint)
+    if cfg.train.stage == 'stage2' and not loss_only and not cfg.eval.refined_mesh:
+        raise ValueError('Stage-2 geometry evaluation requires eval.refined_mesh=True; coarse scores cannot measure Stage-2 changes')
+    if cfg.train.stage == 'stage2' and cfg.eval.video_diagnostics:
+        raise ValueError('Stage-2 diagnostics require refined meshes; Stage-1-only video controls are not applicable')
     clip_len = int(k or cfg.eval.k)
     label = result_label(name, clip_len, int(cfg.eval.k), shuffle, wrong_video, adapter is not None)
     label += "_repeated" if repeated_reference else ""
@@ -197,9 +203,10 @@ def evaluate(cfg: ExperimentConfig, run: str, k: int | None = None, shuffle: boo
             sample = shuffle_frames(sample)
         info = sample["info"]                    # ids and stratification of the eval sample
         if cfg.eval.refined_mesh:
-            if cfg.fake_sam3d or cfg.data.source != 'gso':
-                raise ValueError('Heavy refined evaluation requires real SAM3D and audited GSO data')
-            info['visibility'] = str(ds.root / 'visibility' / f"{info['asset_id']}.npz")
+            if cfg.fake_sam3d or cfg.data.source not in {'gso', 'synthetic'}:
+                raise ValueError('Refined evaluation requires real SAM3D and audited GSO or recovered synthetic meshes')
+            if cfg.data.source == 'gso':
+                info['visibility'] = str(ds.root / 'visibility' / f"{info['asset_id']}.npz")
         extra: dict[str, typing.Any] = {}
         loss_sample = sample
         if adapter is None and run == "best-frame":
@@ -210,10 +217,11 @@ def evaluate(cfg: ExperimentConfig, run: str, k: int | None = None, shuffle: boo
         matched_loss = None
         if loss_only or not cfg.eval.refined_mesh:
             from video3d.data.targets import latent_path
-            if "target" not in loss_sample and not latent_path(cfg, info["asset_id"]).is_file():
+            if cfg.train.stage == 'stage1' and "target" not in loss_sample and not latent_path(cfg, info["asset_id"]).is_file():
                 loss_sample = {**loss_sample, "target": sam3d.encode_voxels(gt[None].to(device))[0]}
             matched_loss = sample_flow_loss(sam3d, encoder, adapter, loss_sample, cfg, device)
-        extra.update(flow_loss=matched_loss, flow_loss_protocol="shape-flow-fixed-grid-v1",
+        loss_protocol = 'slat-flow-fixed-grid-object-mean-v1' if cfg.train.stage == 'stage2' else 'shape-flow-fixed-grid-v1'
+        extra.update(flow_loss=matched_loss, flow_loss_protocol=loss_protocol,
                      flow_loss_tau_grid=list(cfg.val.tau_grid))
         seed = sample_seed(info["clip_id"], info["k"], info["r"])
         metrics: dict[str, typing.Any] = {}
@@ -227,7 +235,11 @@ def evaluate(cfg: ExperimentConfig, run: str, k: int | None = None, shuffle: boo
                     clip, r_best = best_frame(ds, info)
                     ref = build_sample(clip, info["k"], r_best, 0, 1, cfg.data)
                     extra["oracle_frame"] = r_best
-                cond = sam3d.condition(*reference_images([ref], device))
+                if cfg.train.stage == 'stage2':
+                    from video3d.stage2 import condition
+                    cond = condition(sam3d, *reference_images([ref], device))
+                else:
+                    cond = sam3d.condition(*reference_images([ref], device))
             seed = sample_seed(info["clip_id"], info["k"], info["r"])
             if cfg.eval.video_diagnostics and adapter is not None:
                 from video3d.diagnostics import evaluate_video, exposure_for_sample
@@ -237,7 +249,12 @@ def evaluate(cfg: ExperimentConfig, run: str, k: int | None = None, shuffle: boo
                 z, layout, pred = video_result.latent, video_result.layout, video_result.prediction
                 extra.update(video_diagnostics=video_result.diagnostics, video_controls=video_result.controls)
             else:
-                z, layout = sam3d.sample(cond, [seed], cfg.sampler)
+                if cfg.train.stage == 'stage2':
+                    from video3d.stage2 import coarse_condition
+                    stage1_cond = coarse_condition(sam3d, sample, device)
+                    z, layout = sam3d.sample(stage1_cond, [seed], cfg.sampler)
+                else:
+                    z, layout = sam3d.sample(cond, [seed], cfg.sampler)
                 pred = sam3d.decode_latent(z)[0].cpu()
             mesh_metrics: dict[str, typing.Any] = {}
             if cfg.eval.refined_mesh:
@@ -249,24 +266,22 @@ def evaluate(cfg: ExperimentConfig, run: str, k: int | None = None, shuffle: boo
                     'rng_state_after_stage1':sam3d.sampling_rng_state.cpu(),
                     'sampler':chz.asdict(cfg.sampler), 'frame_ids':info['frame_ids']})
             if cfg.eval.refined_mesh and bool(pred.any()):
-                import shutil
                 from video3d.media import save_refined_prediction
                 from video3d.mesh_analysis import analyze
                 refined_dir = output_dir / "samples" / sample_id(info).replace("/", "-")
-                refined = sam3d.refine(z, layout, *reference_images([sample], device), seed, cfg.eval.refinement_steps)
+                refinement = {'condition': cond} if cfg.train.stage == 'stage2' else {}
+                refined = sam3d.refine(z, layout, *reference_images([sample], device), seed,
+                                      cfg.eval.refinement_steps, **refinement)
                 save_refined_prediction(refined, refined_dir)
                 # Match cached baselines: score the final pruned/downsampled native coordinates.
                 coords = refined['coords'].detach().cpu().long()[:, 1:]
                 pred = torch.zeros_like(pred)
                 pred[coords[:, 0], coords[:, 1], coords[:, 2]] = True
-                row = ds.rows[i]
-                shutil.copy2(ds.root / row.mesh, refined_dir / "ground-truth.glb")
-                if row.cameras is not None:
-                    shutil.copy2(ds.root / row.cameras, refined_dir / "cameras.json")
+                from video3d.mesh_analysis import prepare_ground_truth
+                mesh_protocol = prepare_ground_truth(cfg, ds, i, info, refined_dir)
                 atomic_json(refined_dir / "protocol.json", {
                     "dataset": cfg.data.source, "frame_ids": info["frame_ids"],
-                    "camera_registration": "known_render_poses" if row.cameras else "unverified",
-                    "visibility_cache": info["visibility"], "seed": seed})
+                    **mesh_protocol, "seed": seed})
                 if device.type == 'cuda':
                     torch.cuda.synchronize(device)
                 inference_seconds = time.perf_counter() - inference_started
@@ -339,7 +354,7 @@ def evaluate(cfg: ExperimentConfig, run: str, k: int | None = None, shuffle: boo
     summary = json.loads(summary_path.read_text()) if summary_path.is_file() else {}
     flow_losses = [row["flow_loss"] for row in complete if row.get("flow_loss") is not None]
     summary.update(samples=len(complete), mean_flow_loss=sum(flow_losses) / len(flow_losses) if flow_losses else None,
-                   protocol="shape-flow-fixed-grid-v1", weights=cfg.eval.checkpoint_weights if adapter is not None else "pretrained")
+                   protocol="slat-flow-fixed-grid-object-mean-v1" if cfg.train.stage == "stage2" else "shape-flow-fixed-grid-v1", weights=cfg.eval.checkpoint_weights if adapter is not None else "pretrained")
     if cfg.eval.video_diagnostics:
         from video3d.diagnostics import summarize_video_records
         summary.update(summarize_video_records(complete))
@@ -386,10 +401,11 @@ def evaluate_full_validation(cfg: ExperimentConfig, run_dir: Path, epoch: int) -
     import sys
     from video3d.config import MetricsConfig, SamplerConfig
     from video3d.storage import atomic_json
-    evaluation_id = f'{cfg.run_name}-epoch{epoch:02d}-fullval-flow25'
+    refined = cfg.train.stage == 'stage2'
+    evaluation_id = f'{cfg.run_name}-epoch{epoch:02d}-fullval-flow25' + ('-refined' if refined else '')
     full = chz.replace(cfg, sampler=SamplerConfig(mode='flow', steps=25),
         data=chz.replace(cfg.data, source='synthetic', eval_split='val'),
-        eval=chz.replace(cfg.eval, refined_mesh=False, native_coarse=True,
+        eval=chz.replace(cfg.eval, refined_mesh=refined, native_coarse=True,
                          metrics=MetricsConfig(), evaluation_id=evaluation_id),
         logging=chz.replace(cfg.logging, media_samples=1306))
     config_file = run_dir / f'full-validation-epoch-{epoch:02d}.json'

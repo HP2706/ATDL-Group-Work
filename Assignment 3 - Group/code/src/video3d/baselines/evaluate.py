@@ -102,18 +102,12 @@ def evaluate(config: str, method: str, output: str, split: str | None = None,
         if info.get("visibility"):
             import torch
             metrics.update(visibility_metrics(torch.from_numpy(prediction), info["visibility"]))
-        if cfg.data.source in {"gso", "omniobject3d"} and full_mesh:
-            import shutil
-            from video3d.baselines.analysis import analyze
-            row = dataset.rows[index]
-            shutil.copy2(dataset.root / row.mesh, directory / "ground-truth.glb")
-            if row.cameras is not None:
-                shutil.copy2(dataset.root / row.cameras, directory / "cameras.json")
-            protocol = {"dataset": row.dataset, "frame_ids": info["frame_ids"],
-                "camera_registration": "known_render_poses" if row.cameras is not None else "unverified",
-                "visibility_cache": info["visibility"], "seed": run_cfg.seed}
-            (directory / "protocol.json").write_text(json.dumps(protocol, indent=2))
-            metrics["mesh_surface"] = analyze(str(directory))
+        if full_mesh:
+            from video3d.mesh_analysis import analyze, prepare_ground_truth
+            protocol = prepare_ground_truth(cfg, dataset, index, info, directory)
+            protocol.update(dataset=cfg.data.source, frame_ids=info['frame_ids'], seed=run_cfg.seed)
+            atomic_json(directory / 'protocol.json', protocol)
+            metrics['mesh_surface'] = analyze(str(directory), samples=cfg.eval.surface_samples)
         result.resources["metrics_seconds"] = time.perf_counter()-metrics_started
         metrics["flow_loss"] = None
         metrics["flow_loss_status"] = "not_computed: this runner scores generated geometry; fixed-grid training flow loss requires a separately specified conditioning objective"

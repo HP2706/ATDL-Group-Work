@@ -116,6 +116,23 @@ def video_metrics(split_dir: str, out: str, reference: int | None = None,
     print(json.dumps(execute(split_dir, out, reference, cache_dir), indent=2))
 
 
+def prepare_stage2(raw_root: str, output: str, asset_ids: list[str], *overrides: str,
+                   views: int = 32, batch_size: int = 4, blender_install_path: str = '.blender',
+                   blender_custom_path: str | None = None, condition: str = 'c3',
+                   env: str | None = None, **keywords: Any) -> None:
+    from video3d.data.stage2_prepare import prepare_features
+    cfg = config_for(overrides, condition, env, keywords)
+    print(json.dumps(prepare_features(cfg, raw_root, output, asset_ids, views, batch_size,
+                                     blender_install_path, blender_custom_path), indent=2))
+
+
+def cache_stage2(features_root: str, *overrides: str, condition: str = 'c3',
+                 env: str | None = None, **keywords: Any) -> None:
+    from video3d.data.stage2 import cache_targets
+    cfg = config_for(overrides, condition, env, keywords)
+    print(json.dumps(cache_targets(cfg, features_root), indent=2))
+
+
 def prepare(*overrides: str, condition: str = "c3", env: str | None = None,
             **keywords: Any) -> None:
     from video3d.prepare import prepare as execute
@@ -138,7 +155,7 @@ def sweep(*overrides: str, condition: str = "c3", env: str | None = None,
 
 def main(argv: list[str] | None = None) -> None:
     fire.Fire({"train": train, "train-json": train_json, "eval-json": evaluate_json, "sweep": sweep, "prepare": prepare, "eval": evaluate,
-               "cache-latents": cache_latents, "inspect": inspect, "check-env": check_env,
+               "cache-latents": cache_latents, "cache-stage2": cache_stage2, "prepare-stage2": prepare_stage2, "inspect": inspect, "check-env": check_env,
                "validate-data": validate_data, "analyze": analyze,
                "inspect-sam3d": inspect_sam3d, "frame-test": frame_test,
                "generation": generation, "scanned": scanned, "video-metrics": video_metrics}, command=argv)

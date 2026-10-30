@@ -57,7 +57,7 @@ class Sam3DGeometry(nn.Module):
             pcfg.ss_encoder_config_path, pcfg.ss_encoder_ckpt_path = "ss_encoder.yaml", "ss_encoder.ckpt"
         self.pipeline_cfg = pcfg
         self.pipeline = instantiate(pcfg)
-        if not cfg.eval.refined_mesh:
+        if not cfg.eval.refined_mesh and cfg.train.stage != 'stage2':
             for name in STAGE2_MODELS:
                 if name in self.pipeline.models:
                     del self.pipeline.models[name]
@@ -75,7 +75,7 @@ class Sam3DGeometry(nn.Module):
         self.sampling_rng_state: torch.Tensor | None = None
         self.requires_grad_(False)
         self.eval()
-        if cfg.sam3d.lora:
+        if cfg.sam3d.lora and cfg.train.stage == 'stage1':
             from video3d.adapters import inject_lora
             inject_lora(self.backbone, r"blocks\.\d+\.cross_attn\.shape\.(to_q|to_kv|to_out)",
                         cfg.sam3d.lora_rank, cfg.sam3d.lora_alpha)
@@ -94,6 +94,12 @@ class Sam3DGeometry(nn.Module):
         self._lengths: list[int] = []
         for module in self.embedder.module_list:
             module.register_forward_hook(lambda mod, inp, out: self._lengths.append(out.shape[1]))
+        self.stage1_cfg = None
+        self.stage1_adapter = None
+        self.stage1_encoder = None
+        if cfg.train.stage == 'stage2':
+            from video3d.stage2 import initialize_stage2
+            initialize_stage2(self, cfg, device)
 
     def _autocast(self) -> typing.Any:
         return torch.autocast(device_type="cuda", dtype=self.dtype)
@@ -123,6 +129,14 @@ class Sam3DGeometry(nn.Module):
 
     def velocity(self, x_tau: typing.Any, tau: typing.Any, cond: dict, layout_in: dict) -> typing.Any:
         """Backbone velocity at flow time τ ∈ [0, 1] with step size d = 0 (no CFG, no dropout)."""
+        if 'coords' in layout_in:
+            backbone = self.pipeline.models['slat_generator'].reverse_fn.backbone
+            generator = self.pipeline.models['slat_generator']
+            options = {'d': torch.zeros_like(tau)} if backbone.is_shortcut_model else {}
+            with torch.autocast('cuda', dtype=self.pipeline.dtype):
+                prediction = backbone(x_tau, tau.float() * generator.time_scale,
+                                      torch.cat(list(cond.values()), 1), layout_in['coords'].cpu().numpy(), **options)
+            return prediction, {}
         t = tau.float() * self.generator.time_scale
         kwargs = {"d": torch.zeros_like(t)} if self.backbone.is_shortcut_model else {}
         out = self.backbone({"shape": x_tau, **layout_in}, t, torch.cat(list(cond.values()), 1), **kwargs)
@@ -208,7 +222,8 @@ class Sam3DGeometry(nn.Module):
 
     @torch.no_grad()
     def refine(self, z: torch.Tensor, layout: dict[str, torch.Tensor], rgb: torch.Tensor,
-               mask: torch.Tensor, seed: int, steps: int) -> dict[str, typing.Any]:
+               mask: torch.Tensor, seed: int, steps: int,
+               condition: dict[str, torch.Tensor] | None = None) -> dict[str, typing.Any]:
         """Native Stage 2 from our sampled Stage 1; never replace it with zero-shot geometry."""
         pipeline = self.pipeline
         # Native sample_slat owns its autocast. FlexiCubes mesh extraction must
@@ -224,8 +239,12 @@ class Sam3DGeometry(nn.Module):
             coarse["scale"] = coarse["scale"] * factor
             assert self.sampling_rng_state is not None, 'Call Stage-1 sample before refinement'
             torch.cuda.set_rng_state(self.sampling_rng_state, self.device_)
-            slat = pipeline.sample_slat(pipeline.preprocess_image(image, pipeline.slat_preprocessor),
-                                        coords, inference_steps=steps, use_distillation=False)
+            if condition is None:
+                slat = pipeline.sample_slat(pipeline.preprocess_image(image, pipeline.slat_preprocessor),
+                                            coords, inference_steps=steps, use_distillation=False)
+            else:
+                from video3d.stage2 import sample_refinement
+                slat = sample_refinement(self, condition, coords, steps)
             outputs = pipeline.decode_slat(slat, ["mesh", "gaussian"])
             outputs['slat_features'] = slat.feats.detach().cpu()
             outputs['slat_coordinates'] = slat.coords.detach().cpu()

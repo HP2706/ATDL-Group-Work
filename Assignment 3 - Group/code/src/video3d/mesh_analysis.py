@@ -183,3 +183,23 @@ def analyze(directory: str, samples: int = 8192) -> dict[str, Any]:
     np.savez_compressed(root / 'surface-errors.npz', **fields)
     (root / 'surface-metrics.json').write_text(json.dumps(diagnostics, indent=2)+'\n')
     return diagnostics
+
+
+def prepare_ground_truth(cfg: Any, dataset: Any, index: int, info: dict[str, Any], directory: Path) -> dict[str, Any]:
+    """One geometry/attribution contract for trained models and all three baselines."""
+    import shutil
+    from video3d.data.stage2 import source_mesh, file_hash
+    from video3d.storage import atomic_json
+    if cfg.data.source == 'synthetic':
+        path = source_mesh(cfg, info['asset_id'])
+        trimesh.load(path, force='mesh', process=False).export(directory / 'ground-truth.glb')
+        atomic_json(directory / 'cameras.json', dataset.clip(info['clip_id']).info)
+        return {'camera_registration': 'synthetic_export_object_poses',
+                'ground_truth_mesh_sha256': file_hash(path),
+                'ground_truth_kind': 'recovered_original_canonical_mesh', 'visibility_cache': None}
+    row = dataset.rows[index]
+    shutil.copy2(dataset.root / row.mesh, directory / 'ground-truth.glb')
+    if row.cameras is not None:
+        shutil.copy2(dataset.root / row.cameras, directory / 'cameras.json')
+    return {'camera_registration': 'known_render_poses' if row.cameras else 'unverified',
+            'ground_truth_kind': 'exact_source_mesh', 'visibility_cache': info.get('visibility')}

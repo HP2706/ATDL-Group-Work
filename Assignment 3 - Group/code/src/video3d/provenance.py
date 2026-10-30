@@ -15,6 +15,14 @@ def source_identity() -> str:
 
 
 def data_identity(cfg: ExperimentConfig) -> str:
+    if cfg.train.stage == 'stage2':
+        from video3d.stage2 import stage2_identity
+        base = cache_identity_stage1(cfg)
+        return hashlib.sha256((base + stage2_identity(cfg)).encode()).hexdigest()
+    return cache_identity_stage1(cfg)
+
+
+def cache_identity_stage1(cfg: ExperimentConfig) -> str:
     if cfg.data.source in {"synthetic", "omniobject3d", "gso"}:
         from video3d.data.targets import cache_identity
         return cache_identity(cfg)
