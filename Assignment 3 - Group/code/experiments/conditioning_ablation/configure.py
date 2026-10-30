@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict
 
 from video3d.config import ExperimentConfig, config_dict, read_config, replace_config
 from video3d.data.scanned import records
+from video3d.data.scan_prepare import write_manifest
 from video3d.data.samples import ClipDataset, split_objects
 from video3d.data.reader import open_split
 from video3d.storage import atomic_json
@@ -95,9 +96,11 @@ def synthetic_snapshot(source: Path, root: Path, base: ExperimentConfig,
 def configure(base_config: str, output: str, omni_root: str = '', gso_root: str = '',
               expected_objects: int = 6000, epochs: int = 10, seed: int = 42,
               microbatch: int = 8, synthetic_root: str = '', expected_clips: int = 10000,
-              synthetic_val_asset_frac: float = .03) -> str:
+              synthetic_val_asset_frac: float = .03, evaluation_objects: int = 250) -> str:
     if microbatch not in [1, 2, 4, 8, 16, 32] or epochs < 1:
         raise ValueError('Positive epochs and a microbatch dividing effective batch 32 are required')
+    if not 1 <= evaluation_objects <= 250:
+        raise ValueError('evaluation_objects must be between 1 and 250')
     root = Path(output).absolute()
     if (root/'matrix.json').exists():
         raise ValueError('Choose a new experiment root; existing resolved configurations are immutable')
@@ -128,7 +131,14 @@ def configure(base_config: str, output: str, omni_root: str = '', gso_root: str 
         raise ValueError('GSO requires evaluation objects with at least 16 frames each')
     if len(gso_rows) != 250:
         raise ValueError('Use the fixed 250-object GSO evaluation selection')
-    audited_snapshot(Path(gso_root), root/'data/gso', 250)
+    gso_audit = audited_snapshot(Path(gso_root), root/'data/gso', 250)
+    selected = gso_rows[:evaluation_objects]
+    write_manifest(root/'data/gso', selected)
+    atomic_json(root/'data/gso/audit.json', {**gso_audit, 'objects':len(selected)})
+    atomic_json(root/'data/gso/selection.json', {
+        'source':str(Path(gso_root).resolve()), 'source_objects':250,
+        'selection':'prefix of the existing frozen manifest',
+        'object_ids':[row.object_id for row in selected]})
     if min(train_count, val_count) < 1:
         raise ValueError('Separate training and validation samples are required')
     steps = math.ceil(train_count/32)
@@ -160,6 +170,7 @@ def configure(base_config: str, output: str, omni_root: str = '', gso_root: str 
     atomic_json(root/'matrix.json', {'source_commit':revision, 'data_source':source,
         'train_objects':data_report['train_objects'], 'validation_objects':data_report['validation_objects'],
         'train_samples':train_count, 'validation_samples':val_count,
+        'evaluation_objects':evaluation_objects,
         'epochs':epochs, 'steps_per_epoch':steps,
         'effective_batch':32, 'entries':entries,
         'protocol':'16 matched frames; existing native mask/pointmap conditioning; no DINO video encoder'})

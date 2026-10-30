@@ -86,14 +86,17 @@ the trainer, rather than counting clips or unique assets. Validation sample
 counts include the existing deterministic reference-frame choices. The synthetic
 recipe fixes clip length at 16 frames to match this experiment's model comparison;
 all other image/video preprocessing is inherited from the base configuration.
-The fixed 250-object GSO evaluation selection and seven-model matrix are retained.
+The frozen 250-object GSO evaluation source and seven-model matrix are retained.
+`--evaluation_objects=200` freezes its first 200 manifest entries in the run,
+so every model and resumed evaluation uses exactly the same bounded selection.
+The source manifest remains unchanged.
 
 ```bash
 python experiments/conditioning_ablation/configure.py \
   --base_config=/persistent/prior/configs/fusion-frozen.json \
   --output=/persistent/conditioning-full-q98-<timestamp> \
   --synthetic_root=/persistent/snapshot/full-q98 \
-  --gso_root=/persistent/gso-250 --seed=42
+  --gso_root=/persistent/gso-250 --seed=42 --epochs=5 --evaluation_objects=200
 ```
 
 Run fresh target preparation and GPU profiling for the new dataset before
