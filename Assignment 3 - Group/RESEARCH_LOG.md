@@ -262,3 +262,43 @@ trainable pooler/projector while retaining native conditioning. Its independent
 frame encoding followed by pooling has no additional temporal position signal;
 V-JEPA pooling receives temporally contextualized video embeddings. This
 architectural distinction is not evidence of a performance difference.
+
+### First five priority jobs accepted
+
+The corrected real B200 check passed in native one-hour job
+[12439361](https://cloud.sdu.dk/app/jobs/properties/12439361), which then finished
+and released its allocation. It reloaded the completed five-update checkpoint,
+verified two finite GPU shape scores, evaluated one GSO object, and uploaded W&B
+scalars, media, tables and result artifacts. The partial one-object evaluation is
+explicitly labelled incomplete against the 200-object final evaluation target.
+Measured warm fusion throughput was 4.604 videos/s (6.951 seconds per effective
+32-video update), projecting 6.26 training-only hours for five epochs. Validation,
+profiling, setup and final evaluation are additional. Other architectures require
+their own measurements; this is not a measured completion ETA for all methods.
+
+The first five separate B200 jobs were submitted in the confirmed priority
+order, using immutable source `de7f8d81362b79d1f4e77a323eb97f71a5fe8c80`:
+
+| Order | Model | Native job | Provider state at acceptance check |
+|---|---|---|---|
+| 1 | V-JEPA fusion adapter | [12439375](https://cloud.sdu.dk/app/jobs/properties/12439375) | RUNNING |
+| 2 | Fusion + SAM LoRA | [12439376](https://cloud.sdu.dk/app/jobs/properties/12439376) | RUNNING |
+| 3 | Frozen SAM 3D | [12439377](https://cloud.sdu.dk/app/jobs/properties/12439377) | RUNNING |
+| 4 | V-JEPA attention pooling | [12439378](https://cloud.sdu.dk/app/jobs/properties/12439378) | RUNNING |
+| 5 | V-JEPA pooling + SAM LoRA | [12439379](https://cloud.sdu.dk/app/jobs/properties/12439379) | IN_QUEUE |
+
+Training jobs profile physical batches 16/32 in their own allocations before
+starting the five-epoch trainer, preserving effective batch 32. Variant-specific
+profile files prevent concurrent runs from overwriting each other's progress.
+Native foreground jobs release their allocation on pipeline exit; training jobs
+have a 12-hour provider fallback, an 11-hour training-loop fallback, and an
+explicit final-step completion guard before final evaluation. The baseline is a
+separate bounded two-hour evaluation allocation. All use the same immutable
+200-object GSO subset. Provider RUNNING may include setup/profiling; it does not
+by itself certify that an optimizer update has completed.
+
+Persistent experiment root:
+`/work/MathiasElmegaardNielsen#6181/conditioning-full-q98-2026-10-30-08-40-00`.
+Submission receipts are in `first-five-submitted.json`; resolved configs,
+per-variant profiles, logs, checkpoints, validation records and predictions are
+under that root. DINOv2 is handled separately after these five accepted jobs.
