@@ -89,3 +89,23 @@ def test_baseline_export_preserves_held_out_reference(fake_root: Any, tmp_path: 
     sample, info = export_sample(dataset, 0, 'synthetic', tmp_path/'inputs')
     assert info['baseline_available_frame_ids'][sample.reference_index] == info['r']
     assert set(info['baseline_available_frame_ids']) <= set(info['frame_ids'])
+
+
+def test_baseline_partial_resume_has_unique_records(fake_root: Any, tmp_path: Path,
+                                                   monkeypatch: pytest.MonkeyPatch) -> None:
+    import importlib
+    import json
+    module = importlib.import_module('video3d.baselines.evaluate')
+    class Pipeline:
+        def run(self, **kwargs: Any) -> dict[str, Any]:
+            coords = torch.cartesian_prod(torch.arange(25,29),torch.arange(25,29),torch.arange(25,29))
+            return {'coords':torch.cat([torch.zeros(len(coords),1,dtype=torch.long),coords],dim=1)}
+    monkeypatch.setattr(module, 'load_pipeline', lambda cfg: Pipeline())
+    cfg = fake_train_cfg(fake_root, tmp_path)
+    path = tmp_path/'config.json'
+    atomic_json(path, config_dict(cfg))
+    output = tmp_path/'baseline'
+    module.evaluate(str(path),'sam3d',str(output),split='val',limit=1,k=16)
+    module.evaluate(str(path),'sam3d',str(output),split='val',limit=2,k=16)
+    rows = [json.loads(line) for line in (output/'evaluation.jsonl').read_text().splitlines()]
+    assert len(rows) == len({row['sample_id'] for row in rows}) == 2

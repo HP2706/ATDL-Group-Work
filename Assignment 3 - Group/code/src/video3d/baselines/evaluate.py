@@ -16,7 +16,7 @@ from video3d.storage import atomic_json
 from video3d.data import build_dataset, ground_truth, reader
 from video3d.data.schemas import EvaluationRecord
 from video3d.metrics import shape_metrics, visibility_metrics
-from video3d.utils import sample_seed
+from video3d.utils import sample_seed, append_jsonl
 from video3d.evaluate import sample_id
 
 
@@ -142,7 +142,7 @@ def evaluate(config: str, method: str, output: str, split: str | None = None,
         atomic_json(root / "progress.json", {"completed": len(records), "sample_id": sample.sample_id,
                     "index": index, "phase": "saved"})
         print(json.dumps({"completed": len(records), "sample_id": sample.sample_id}), flush=True)
-        (root / "evaluation.jsonl").write_text("".join(json.dumps(row)+"\n" for row in records))
+        append_jsonl(root / 'evaluation.jsonl', record.model_dump())
     (root / "evaluation.jsonl").write_text("".join(json.dumps(row)+"\n" for row in records))
     logger.finish_evaluation(records, root, 'evaluation', len(dataset))
     logger.finish()
