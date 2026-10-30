@@ -366,3 +366,34 @@ after its consumers finished and verified terminal SUCCESS. The obsolete
 seven-model delayed-launch follow-up was paused after all six confirmed jobs
 were verified; it must not submit duplicate jobs. Active training allocations
 were retained.
+
+### Additional native SAM-only random-frame LoRA control
+
+The coordinating task reports full training verified in native UCloud job
+[12439491](https://cloud.sdu.dk/app/jobs/properties/12439491), using source
+`3e3ee609035c3341e59722f6b1583055ab33c3be`. This additional control bypasses the
+video encoder and adapter (`adapter.strategy=native`) and trains only 1,376,256
+SAM LoRA parameters. The existing frame sampler selects a uniformly eligible
+single training frame with `p_occluded_bias=0` and `clip_lengths=[1]`. Dataset
+roots, cached targets, full-q98 train/validation split, five epochs/3,240 updates
+and fixed 200-object GSO evaluation match the original six runs.
+
+Thirteen CPU tests and a real GPU check passed before full training: three
+optimizer updates, exact resume from step 1 to 3, changed SAM weights, two finite
+validation Chamfer scores, and one GSO evaluation with W&B artifacts. The
+coordinating task inspected full-run scratch metrics at step 4: finite loss
+0.89598, SAM gradient 0.00504, encoder gradient zero, and zero adapter/video
+trainable parameters. These early values establish execution, not a scientific
+comparison. Batch profiling selected physical/effective batch 32, measuring
+6.364 seconds/update and 30.64 GiB peak memory, projecting 5.73 training-only
+hours; validation and final evaluation are additional.
+
+Persistent root:
+`/work/MathiasElmegaardNielsen#6181/sam-native-2026-10-30-09-49-38`.
+Run name: `sam3d-random-frame-lora-2026-10-30-09-49-38`.
+The source is isolated in `repo-native-3e3ee60`; existing six-job sources and
+allocations were not modified. Earlier attempt `12439484` stopped before GPU
+training because its archive lacked Git metadata required by a configuration
+test. Its script exit was 1 despite provider SUCCESS. The retry uses a dedicated
+Git checkout from a bundle with unchanged model source. Earlier artifacts were
+preserved, the failed allocation released, and only the retry trains the control.
