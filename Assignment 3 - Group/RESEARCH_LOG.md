@@ -397,3 +397,28 @@ training because its archive lacked Git metadata required by a configuration
 test. Its script exit was 1 despite provider SUCCESS. The retry uses a dedicated
 Git checkout from a bundle with unchanged model source. Earlier artifacts were
 preserved, the failed allocation released, and only the retry trains the control.
+
+### Live checkpoint comparison, 2026-10-30 11:13 CET
+
+All six trainable native jobs are RUNNING and have completed their first epoch
+validation at update 648 on the fixed 50 held-out synthetic objects. Their full
+200-object GSO evaluations have not run yet. These are interim results:
+
+| Model | Current update / 3240 | Epoch-1 val loss | IoU | Aligned IoU | Chamfer ↓ | F-score 0.02 ↑ |
+|---|---:|---:|---:|---:|---:|---:|
+| Fusion adapter | 1074 | 0.346960 | 0.099955 | 0.120953 | 0.313792 | 0.195035 |
+| Fusion + SAM LoRA | 996 | 0.272933 | 0.110419 | 0.136140 | 0.307209 | 0.222722 |
+| V-JEPA pooling | 1156 | 0.331256 | 0.056189 | 0.063754 | 0.438451 | 0.138250 |
+| V-JEPA pooling + SAM LoRA | 1086 | 0.259314 | 0.087650 | 0.115823 | 0.319946 | 0.216395 |
+| DINOv2 pooling | 1196 | 0.336409 | 0.048147 | 0.062648 | 0.456136 | 0.131514 |
+| Native SAM random-frame LoRA | 676 | 0.293189 | 0.092602 | 0.110101 | 0.368824 | 0.198439 |
+
+All six validations have 50 valid shape scores and zero empty predictions.
+Fusion + SAM LoRA currently leads these epoch-1 geometry metrics. Pooling + SAM
+LoRA has the lowest validation flow loss, which does not imply the best geometry.
+The completed frozen SAM baseline remains the separate 200-object GSO result
+above; no frozen SAM result on this same synthetic panel is available in these
+artifacts, so its GSO scores cannot establish a trained-versus-frozen ranking on
+the synthetic panel. Provider states and live scratch metrics were read directly;
+the old native-control `batch-exit.json` with exit 1 belongs to its retained
+packaging-failure attempt, not the running retry.
