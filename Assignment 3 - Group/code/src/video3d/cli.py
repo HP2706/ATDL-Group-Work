@@ -33,11 +33,12 @@ def train_json(path: str) -> None:
 def evaluate(run: str, *overrides: str, condition: str = "c3", env: str | None = None,
              k: int | None = None, shuffle_frames: bool = False, wrong_video: bool = False,
              repeated_reference: bool = False, split: str | None = None,
-             limit: int | None = None, **keywords: Any) -> None:
+             limit: int | None = None, loss_only: bool = False,
+             **keywords: Any) -> None:
     from video3d.evaluate import evaluate as execute
     execute(config_for(overrides, condition, env, keywords), run, k=k,
             shuffle=shuffle_frames, wrong_video=wrong_video, repeated_reference=repeated_reference,
-            split=split, limit=limit)
+            split=split, limit=limit, loss_only=loss_only)
 
 
 def cache_latents(split: str, *overrides: str, condition: str = "c3",

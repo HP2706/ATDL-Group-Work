@@ -42,12 +42,14 @@ def kv_tokens(encoder: typing.Any, inputs: dict, kv_source: str) -> typing.Any:
     """One sample's keys/values -> (tokens (N, d), coverage (N,), Δt per token (N,)).
 
     kv_source: vjepa (tubelets of the clip), dinov2_ref (reference frame only, Δt = 0),
-    dinov2_clip (per-frame tokens averaged in pairs, same count as V-JEPA).
+    dinov2_clip (pairs averaged), dinov2_frames (all frame tokens retained).
     """
     frames, masks, dt = inputs["frames"], inputs["frame_masks"], inputs["dt"]
     if kv_source == "dinov2_ref":
         p = inputs["ref_pos"]
         frames, masks, dt = frames[p:p + 1], masks[p:p + 1], dt.new_zeros(1)
+    elif kv_source == "dinov2_frames":
+        dt = torch.arange(len(frames), device=dt.device) - inputs["ref_pos"]
     size = encoder.image_size
     if frames.shape[-1] != size:
         frames = F.interpolate(frames, size=(size, size), mode="bilinear", align_corners=False,
@@ -57,7 +59,7 @@ def kv_tokens(encoder: typing.Any, inputs: dict, kv_source: str) -> typing.Any:
     K, hw = frames.shape[0], (size // encoder.patch) ** 2
     if kv_source == "dinov2_clip" and K > 1:
         tokens = tokens.view(K // 2, 2, hw, -1).mean(1).flatten(0, 1)
-    tubelet = 1 if kv_source == "dinov2_ref" else 2
+    tubelet = 1 if kv_source in {"dinov2_ref", "dinov2_frames"} else 2
     coverage = token_coverage(masks[None], encoder.patch, tubelet)[0]
     dt_tok = per_token(dt[None], hw)[0]
     assert len(tokens) == len(coverage) == len(dt_tok), (tokens.shape, coverage.shape, dt_tok.shape)
@@ -165,8 +167,8 @@ def build_kv_encoder(cfg: ExperimentConfig, sam3d: nn.Module, device: torch.devi
         return encoder
     if source == "vjepa":
         encoder = VJEPAEncoder(cfg, device)
-    elif source in ("dinov2_ref", "dinov2_clip"):
-        assert source == "dinov2_ref" or cfg.encoder.dinov2.pair_average, "C2 needs pair_average"
+    elif source in ("dinov2_ref", "dinov2_clip", "dinov2_frames"):
+        assert source != "dinov2_clip" or cfg.encoder.dinov2.pair_average, "C2 needs pair_average"
         encoder = DinoEncoder(sam3d.dino_backbone(), cfg.encoder.dinov2.image_size)
     else:
         raise ValueError(f"unknown encoder.kv_source {source!r}")

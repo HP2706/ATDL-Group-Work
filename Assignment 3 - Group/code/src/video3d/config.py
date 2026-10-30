@@ -5,7 +5,7 @@ from datetime import datetime
 import json
 import os
 from pathlib import Path
-from typing import Any, get_origin, get_type_hints
+from typing import Any, Literal, get_origin, get_type_hints
 import chz
 from video3d.data.generation.config import Config as GenerationConfig
 
@@ -49,6 +49,8 @@ class DataConfig:
     min_visible_amodal_frac: float = 0.02
     crop: CropConfig = chz.field(default_factory=CropConfig)
     source: str = 'synthetic'
+    mask_threshold: float = 0.5
+    scanned_strides: list[int] = chz.field(default_factory=lambda: [1, 2, 4])
     prepared: str = 'data/navi-prepared'
     video_input: str = 'object_crop'
     frames: int = 16
@@ -177,6 +179,9 @@ class MetricsConfig:
 
 @chz.chz
 class EvalConfig:
+    checkpoint_weights: Literal["ema", "current"] = "ema"
+    video_diagnostics: bool = False
+    video_controls: list[str] = chz.field(default_factory=lambda: ["correct", "repeated", "wrong", "disabled"])
     k: int = 16
     middle_frame: int = 16
     flush_every: int = 20
@@ -259,6 +264,8 @@ def load_config(condition: str | None = None, env: str | None = None,
         "c2": {"encoder.kv_source": "dinov2_clip", "encoder.dinov2.pair_average": True},
         "c3": {}, "c3_nomask": {"adapter.use_object_embedding": False},
         "pooler": {"adapter.strategy": "pooler", "data.video_input": "full_scene", "data.crop.size": 384, "encoder.vjepa.image_size": 384},
+        "dino_pooler": {"adapter.strategy": "pooler", "encoder.kv_source": "dinov2_frames",
+                        "encoder.dinov2.pair_average": False, "adapter.max_dt": 15},
     }
     if name not in presets:
         raise ValueError(f"Unknown condition {name}; choose from {list(presets)}")
@@ -302,8 +309,8 @@ def load_config(condition: str | None = None, env: str | None = None,
         raise ValueError("steps, wall time and learning rate must be positive")
     if cfg.train.epochs < 0 or cfg.val.epoch_media_samples < 0:
         raise ValueError("epochs and per-epoch media counts must be nonnegative")
-    if cfg.data.source not in {"synthetic", "navi"}:
-        raise ValueError("data.source must be synthetic or navi")
+    if cfg.data.source not in {"synthetic", "navi", "gso", "omniobject3d"}:
+        raise ValueError("data.source must be synthetic, navi, gso or omniobject3d")
     return cfg
 
 

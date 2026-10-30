@@ -65,12 +65,19 @@ Use a provider-native batch entrypoint so process exit releases the GPU allocati
 
 ## Evaluation
 
+The `dino_pooler` training preset uses frozen DINOv2 on each input frame and
+learns a foreground attention pooler with 64 queries to produce SAM 3D
+conditioning tokens. It retains all frame-level patch embeddings; `c2` keeps its
+historical pair averaging. The preset uses the shared object crop and trainer,
+with SAM 3D frozen by default: `python -m video3d train --condition=dino_pooler`.
+
 ```bash
 python -m video3d eval /results/RUN paths.data_root=/data/export paths.output_root=/results paths.scratch_root=/scratch
 python -m video3d eval zero-shot paths.data_root=/data/export
 python -m video3d eval /results/RUN --repeated_reference=True
 python -m video3d eval /results/RUN --shuffle_frames=True
 python -m video3d eval /results/RUN --wrong_video=True
+python -m video3d eval /results/RUN eval.video_diagnostics=True eval.checkpoint_weights=current --limit=10
 ```
 
 Evaluation uses EMA weights and paired deterministic seeds. Results resume per sample
@@ -81,6 +88,72 @@ completeness are separate from bbox-normalized, similarity-ICP surface Chamfer/F
 The Chamfer here sums the directional means. Historical pilot metrics used a different
 protocol; do not pool those results. Resolved settings and metric protocol accompany
 new results. `analyze --results='["/results/eval/RUN.jsonl"]'` produces summaries.
+
+Every evaluation also records `flow_loss`, the conditional shape-velocity MSE
+against the cached ground-truth VAE latent. Pretrained `zero-shot` SAM 3D and
+trained runs use identical sample-keyed noise and `val.tau_grid`, without
+classifier-free guidance. `--loss_only=True` skips reconstruction and mesh
+metrics. Select `eval.checkpoint_weights=current` to compare the raw weights
+shown in epoch previews; the default is EMA. Each JSONL has a companion
+`.summary.json` with the mean loss, sample count, and protocol. These fixed-grid
+losses are comparable across models, but differ from stochastic training losses.
+Use the same split, reference rules, grid and data settings for every model.
+Evaluating the training split measures fit, not held-out generalization.
+
+```bash
+python -m video3d eval zero-shot --loss_only=True --split=train
+python -m video3d eval /results/RUN --loss_only=True --split=train eval.checkpoint_weights=current
+```
+
+### Video-use diagnostics
+
+`eval.video_diagnostics=True` enables paired correct-video, repeated-reference,
+wrong-video and disabled-video controls in both the evaluator and epoch previews.
+`eval.video_controls` selects a subset, always including `correct`. The reference
+RGB/mask and sampling seed stay fixed. For fusion, disabling video removes only
+the gated cross-attention updates and preserves learned feed-forward updates and
+SAM LoRA; for a replacement pooler it restores native reference conditioning.
+
+Records contain `video_diagnostics` and `video_controls`. W&B charts show per-block
+video-update norm divided by the original conditioning norm, object/background
+attention enrichment relative to token coverage, and correct-minus-control metric
+deltas. `video/attention` retains per-head temporal mass and enrichment. V-JEPA
+and pair-averaged DINO clip features have frame-pair resolution; the table lists
+both source frame IDs rather than claiming independent per-frame attention.
+
+Synthetic surface metrics use the cached voxel-derived surface and instance-mask,
+first-hit visibility estimate. Regions are reference-visible, reference-unseen,
+newly revealed by the correct clip, and never observed. Every control uses these
+same regions. Recall uses canonical distance <0.02; empty regions are null, and an
+empty prediction has zero recall with undefined distance. Positive correct-minus-
+control recall/IoU means video helps; negative distance delta means video helps.
+These region recalls are completeness measures, not regional volumetric IoU or
+proof of generalization. With all 100 clips used in training, their evaluation is
+in-sample. The diagnostics are opt-in because four controls require four shape
+samples per example. Full per-epoch records are included in reconstruction artifacts.
+
+### Shared model extension points
+
+All experiments use `ExperimentConfig` (chz), `train.py`, `evaluate.py`, the same
+loss, checkpoint/resume machinery, data contracts, and media output. Components:
+
+| Component | Owner | Configuration |
+| --- | --- | --- |
+| Dataset and preprocessing | `data/` | `data.*` |
+| Reference conditioning and geometry model | `models/sam3d.py` | `sam3d.*`, `sampler.*` |
+| Video/image token encoder | `models/encoders.py` | `encoder.kv_source`, `encoder.vjepa.*`, `encoder.dinov2.*` |
+| Fusion or replacement pooler | `models/adapter.py`, `models/pooler.py` | `adapter.strategy`, `adapter.*` |
+| Trainable LoRA and EMA state | `adapters.py`, `checkpoint.py` | `sam3d.lora`, `encoder.vjepa.video_lora` |
+| Video comparisons and visibility-region scores | `diagnostics.py` | `eval.video_diagnostics`, `eval.video_controls` |
+| Epoch reconstructions | `epochs.py` | `val.epoch_media_samples`, `eval.k` |
+
+The `c2` preset already provides frozen DINO clip tokens, averaged in frame pairs,
+through the same fusion path. A DINO-plus-pooler baseline is a configuration of
+these factories, not another trainer. New encoders must return tokens with aligned
+mask coverage and temporal offsets; new conditioning heads must integrate through
+`apply_adapter`. Architecture-specific diagnostics explicitly report availability;
+poolers do not pretend to have gated fusion blocks. Extend these interfaces and
+parameter factories rather than copying an end-to-end model-specific pipeline.
 
 ## Generation
 

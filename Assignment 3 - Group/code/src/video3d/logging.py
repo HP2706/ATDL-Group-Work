@@ -14,7 +14,7 @@ class RunLogger:
                                   name=cfg.run_name, id=cfg.run_name, resume="allow",
                                   config=chz.asdict(cfg))
 
-    def log(self, values: dict[str, Any], step: int) -> None:
+    def log(self, values: dict[str, Any], step: int | None = None) -> None:
         if self.run is not None:
             self.run.log(values, step=step)
 
