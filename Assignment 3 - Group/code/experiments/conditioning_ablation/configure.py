@@ -63,7 +63,7 @@ def synthetic_snapshot(source: Path, root: Path, base: ExperimentConfig,
     destination = root/'data/synthetic'
     destination.mkdir(parents=True, exist_ok=True)
     (destination/base.data.train_split).symlink_to(source.resolve(), target_is_directory=True)
-    split = open_split(source, root/'cache')
+    split = open_split(destination/base.data.train_split, root/'cache')
     if len(split.clips) < expected or split.index['num_clips'] != len(split.clips):
         raise ValueError(f'Full synthetic export required: {len(split.clips)} clips, expected {expected}')
     if not split.voxels_file.is_file():
