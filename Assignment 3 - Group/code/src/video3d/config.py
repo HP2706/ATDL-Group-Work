@@ -160,6 +160,9 @@ class TrainConfig:
 
 @chz.chz
 class ValConfig:
+    final_full_validation: bool = False
+    heavy_epochs: list[int] = chz.field(default_factory=list)
+    heavy_data_root: str = ''
     epoch_media_samples: int = 0
     loss_every: int = 1000
     loss_num_samples: int = 200
@@ -179,6 +182,11 @@ class MetricsConfig:
 
 @chz.chz
 class EvalConfig:
+    native_coarse: bool = False
+    refined_mesh: bool = False
+    refinement_steps: int = 25
+    surface_samples: int = 8192
+    evaluation_id: str = ''
     k: int = 16
     middle_frame: int = 16
     flush_every: int = 20

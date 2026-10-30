@@ -364,6 +364,11 @@ def train(cfg: ExperimentConfig, benchmark: bool = False, stop_at: int | None = 
                                                  output_dir / "epochs", completed_epoch, logger.run)
             logger.log(recovered_media, step)
 
+    if use_epochs and step and step % epoch_steps == 0 and cfg.val.heavy_epochs:
+        from video3d.evaluate import evaluate_training_epoch, heavy_epoch_selected
+        if heavy_epoch_selected(cfg.val.heavy_epochs, step // epoch_steps, tcfg.epochs):
+            evaluate_training_epoch(cfg, output_dir, step // epoch_steps)
+
     def checkpoint_state() -> dict:
         return {"adapter": adapter.state_dict(), "ema": ema.state_dict(),
                 "optimizer": opt.state_dict(), "scheduler": sched.state_dict(),
@@ -469,6 +474,14 @@ def train(cfg: ExperimentConfig, benchmark: bool = False, stop_at: int | None = 
                 log.info(" ".join(f"{k}={v:.4g}" if isinstance(v, float) else f"{k}={v}"
                                   for k, v in record.items()))
             logger.log({**record, **media}, step)
+            if epoch_finished and cfg.val.heavy_epochs:
+                from video3d.evaluate import evaluate_training_epoch, heavy_epoch_selected
+                epoch = step // epoch_steps
+                if heavy_epoch_selected(cfg.val.heavy_epochs, epoch, tcfg.epochs):
+                    evaluate_training_epoch(cfg, output_dir, epoch)
+            if epoch_finished and step // epoch_steps == tcfg.epochs and cfg.val.final_full_validation:
+                from video3d.evaluate import evaluate_full_validation
+                evaluate_full_validation(cfg, output_dir, tcfg.epochs)
             stopping = (stop_at is not None and step >= stop_at) or stopping_signal or time.monotonic() - started >= tcfg.max_seconds
             if not benchmark and (step % tcfg.ckpt_every == 0 or step == max_steps or stopping):
                 save_checkpoint(checkpoint_state(), cfg, f"ckpt_{step}.pt", keep=tcfg.keep_ckpts)
