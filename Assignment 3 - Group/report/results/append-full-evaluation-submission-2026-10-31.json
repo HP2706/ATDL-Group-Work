@@ -1,6 +1,6 @@
 {
   "created_at": "2026-10-31-09-41-18",
-  "status": "running_verified",
+  "status": "gso_complete_native_validation_running",
   "remote_root": "/work/MathiasElmegaardNielsen#6181/append-full-eval-2026-10-31-09-41-18",
   "api_root": "/12398721/append-full-eval-2026-10-31-09-41-18",
   "source_commit": "7cdc3046db4cd138c1a58117586baea9ec021f4d",
@@ -3672,6 +3672,78 @@
     "linux_launch_tests": {
       "passed": 3,
       "elapsed_seconds": 20.38
+    }
+  },
+  "completed_gso_results": {
+    "append-frozen": {
+      "viou": 0.146453963544832,
+      "viou_aligned": 0.2055040183220738,
+      "chamfer": 0.178742984700948,
+      "fscore@0.02": 0.533273182182986,
+      "fscore@0.05": 0.7584767917390233,
+      "flow_loss": null,
+      "count": 200,
+      "empty": 0,
+      "mesh_count": 200,
+      "mesh_chamfer": 0.08616532085238915,
+      "mesh_f02": 0.5508717782655258,
+      "mesh_f05": 0.7590498576001496,
+      "complete": true,
+      "source_path": "/12398721/append-full-eval-2026-10-31-09-41-18/results/evaluations/append-frozen-epoch05-gso200-heavy25-2026-10-31-09-41-18/append-frozen-epoch05-gso200-heavy25-2026-10-31-09-41-18.jsonl",
+      "source_sha256": "eb1d7e873c7544de9d259474447f52c4c561d411ee42b39d7cf04559480b38d3",
+      "checkpoint": "/work/MathiasElmegaardNielsen#6181/append-conditioning-2026-10-30-19-56-04/results/append-frozen-full-q98-seed42-2026-10-30-19-56-04/epoch_05.pt",
+      "checkpoint_sha256": "d5f207aefdacdfdc11432bba86dfbee81f9befafacb2109cd42c7c1f266403b0",
+      "weights": "ema",
+      "sampler": {
+        "mode": "flow",
+        "steps": 25,
+        "cfg_scale": null
+      },
+      "metrics_config": {
+        "device": "auto",
+        "max_points": 20000,
+        "icp_iterations": 100,
+        "icp_scale": true,
+        "fscore_thresholds": [
+          0.02,
+          0.05
+        ]
+      }
+    },
+    "append-sam-lora": {
+      "viou": 0.18614984010971036,
+      "viou_aligned": 0.22150700668228832,
+      "chamfer": 0.15954208332113923,
+      "fscore@0.02": 0.5766895493764395,
+      "fscore@0.05": 0.7986345672592856,
+      "flow_loss": null,
+      "count": 200,
+      "empty": 0,
+      "mesh_count": 200,
+      "mesh_chamfer": 0.07386179375431215,
+      "mesh_f02": 0.5922896955386914,
+      "mesh_f05": 0.8012304181280919,
+      "complete": true,
+      "source_path": "/12398721/append-full-eval-2026-10-31-09-41-18/results/evaluations/append-sam-lora-epoch05-gso200-heavy25-2026-10-31-09-41-18/append-sam-lora-epoch05-gso200-heavy25-2026-10-31-09-41-18.jsonl",
+      "source_sha256": "e295a58f10a017999910a38266c11030b0e1acb51e44de67cc42c0a4a89b31ad",
+      "checkpoint": "/work/MathiasElmegaardNielsen#6181/append-conditioning-2026-10-30-19-56-04/results/append-sam-lora-full-q98-seed42-2026-10-30-19-56-04/epoch_05.pt",
+      "checkpoint_sha256": "dfc2ee88f3b715b52327dfeadfb7d1c771dc71473141e97af89838e846446bf7",
+      "weights": "ema",
+      "sampler": {
+        "mode": "flow",
+        "steps": 25,
+        "cfg_scale": null
+      },
+      "metrics_config": {
+        "device": "auto",
+        "max_points": 20000,
+        "icp_iterations": 100,
+        "icp_scale": true,
+        "fscore_thresholds": [
+          0.02,
+          0.05
+        ]
+      }
     }
   }
 }

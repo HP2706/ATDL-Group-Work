@@ -295,8 +295,8 @@ Table~\ref{tab:gso-results} reports coarse and refined reconstruction on GSO. Th
  & V-JEPA attention pooling & 5.21 & 0.2075 & 23.06 & 39.00 \\
  & V-JEPA pooling + SAM LoRA & 10.43 & 0.1374 & 38.59 & 58.06 \\
  & DINOv2 attention pooling & 8.10 & 0.1612 & 33.00 & 50.84 \\
- & Appended video tokens & - & - & - & - \\
- & Appended video tokens + SAM LoRA & - & - & - & - \\
+ & Appended video tokens & 14.65 & 0.0862 & 55.09 & 75.90 \\
+ & Appended video tokens + SAM LoRA & 18.61 & 0.0739 & 59.23 & 80.12 \\
 \bottomrule
 \end{tabular*}
 \caption{GSO reconstruction on the same 200 objects, using epoch-5 EMA checkpoints and 25 steps in each generative stage. Mesh metrics use 8,192 surface samples and similarity ICP; Chamfer is normalized by the ground-truth longest side. IoU and F-scores are percentages. Video models use 16 views, multi-view baselines four, and single-image models one. Dashes mark pending or uncomputed results; bold marks the best score.}
@@ -305,7 +305,7 @@ Table~\ref{tab:gso-results} reports coarse and refined reconstruction on GSO. Th
 
 \subsection{Ablation Studies}
 
-The appended-token variants use the same five-epoch training budget. Their full native-validation and refined GSO evaluations are in progress.
+The appended-token variants use the same five-epoch training budget. Their refined GSO evaluations are complete; full native validation is in progress.
 
 \section{Discussion and Conclusion}
 
