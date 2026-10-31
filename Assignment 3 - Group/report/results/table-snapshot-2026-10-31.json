@@ -1,9 +1,7 @@
 {
   "checked_at": "2026-10-31T08:55:29.835624+01:00",
   "source_commit": "ea2b70d395a22bc42e0ae84afa77ff184bb523b8",
-  "running_jobs": [
-    "12440742"
-  ],
+  "running_jobs": [],
   "evaluations": {
     "dinov2-pooler-epoch01-gso-heavy": {
       "viou": 0.07845119854301086,
@@ -1207,6 +1205,34 @@
           0.05
         ]
       }
+    },
+    "append-frozen-epoch05-gso-auxiliary-loss": {
+      "count": 200,
+      "complete": true,
+      "mean_flow_loss": 0.3485734063386917,
+      "source_path": "/12398721/append-full-eval-2026-10-31-09-41-18/results/evaluations/append-frozen-epoch05-gso200-heavy25-2026-10-31-09-41-18-loss/append-frozen-epoch05-gso200-heavy25-2026-10-31-09-41-18-loss.jsonl",
+      "source_sha256": "e806b9586f708dce7284fef3d98d21765c38e5d669913457f20b8fac134f3562",
+      "checkpoint": "/work/MathiasElmegaardNielsen#6181/append-conditioning-2026-10-30-19-56-04/results/append-frozen-full-q98-seed42-2026-10-30-19-56-04/epoch_05.pt",
+      "checkpoint_sha256": "d5f207aefdacdfdc11432bba86dfbee81f9befafacb2109cd42c7c1f266403b0",
+      "weights": "ema",
+      "actual_scope": "coarse_stage1_with_flow_loss",
+      "used_in_paper": false,
+      "cli_exit_code": 2,
+      "diagnostic": "eval-json completed reconstruction and loss, then Fire rejected unsupported --loss_only=True. Historical exit marker preserved. Local CLI forwarding fix passes regression test."
+    },
+    "append-sam-lora-epoch05-gso-auxiliary-loss": {
+      "count": 200,
+      "complete": true,
+      "mean_flow_loss": 0.23013684626668693,
+      "source_path": "/12398721/append-full-eval-2026-10-31-09-41-18/results/evaluations/append-sam-lora-epoch05-gso200-heavy25-2026-10-31-09-41-18-loss/append-sam-lora-epoch05-gso200-heavy25-2026-10-31-09-41-18-loss.jsonl",
+      "source_sha256": "d0f9cc79643301c1b5a858f9d938d9105cf27ce3bbd00e8fc6f60057c85ef766",
+      "checkpoint": "/work/MathiasElmegaardNielsen#6181/append-conditioning-2026-10-30-19-56-04/results/append-sam-lora-full-q98-seed42-2026-10-30-19-56-04/epoch_05.pt",
+      "checkpoint_sha256": "dfc2ee88f3b715b52327dfeadfb7d1c771dc71473141e97af89838e846446bf7",
+      "weights": "ema",
+      "actual_scope": "coarse_stage1_with_flow_loss",
+      "used_in_paper": false,
+      "cli_exit_code": 2,
+      "diagnostic": "eval-json completed reconstruction and loss, then Fire rejected unsupported --loss_only=True. Historical exit marker preserved. Local CLI forwarding fix passes regression test."
     }
   },
   "training": {
@@ -1762,7 +1788,7 @@
     }
   },
   "pending_appended_full_evaluations": {
-    "status": "all_geometry_complete_auxiliary_loss_finalizing",
+    "status": "all_results_validated_auxiliary_cli_exit_2",
     "remote_root": "/work/MathiasElmegaardNielsen#6181/append-full-eval-2026-10-31-09-41-18",
     "api_root": "/12398721/append-full-eval-2026-10-31-09-41-18",
     "jobs": {
@@ -1771,5 +1797,53 @@
     },
     "created_at": "2026-10-31-09-41-18"
   },
-  "last_reconciled_at": "2026-10-31T11:46:31.864986+01:00"
+  "last_reconciled_at": "2026-10-31T12:01:00.409135+01:00",
+  "appended_final_validation": {
+    "checked_at": "2026-10-31T12:01:00.409135+01:00",
+    "status": "all_results_validated_auxiliary_cli_exit_2",
+    "benchmark_scopes_complete": true,
+    "native_cases_per_model": 1306,
+    "gso_cases_per_model": 200,
+    "provider_states": {
+      "12440741": "SUCCESS",
+      "12440742": "SUCCESS"
+    },
+    "script_exit_codes": {
+      "append-frozen": 2,
+      "append-sam-lora": 2
+    },
+    "dedicated_compute_released": true,
+    "auxiliary_loss_results": {
+      "append-frozen": {
+        "count": 200,
+        "complete": true,
+        "mean_flow_loss": 0.3485734063386917,
+        "source_path": "/12398721/append-full-eval-2026-10-31-09-41-18/results/evaluations/append-frozen-epoch05-gso200-heavy25-2026-10-31-09-41-18-loss/append-frozen-epoch05-gso200-heavy25-2026-10-31-09-41-18-loss.jsonl",
+        "source_sha256": "e806b9586f708dce7284fef3d98d21765c38e5d669913457f20b8fac134f3562",
+        "checkpoint": "/work/MathiasElmegaardNielsen#6181/append-conditioning-2026-10-30-19-56-04/results/append-frozen-full-q98-seed42-2026-10-30-19-56-04/epoch_05.pt",
+        "checkpoint_sha256": "d5f207aefdacdfdc11432bba86dfbee81f9befafacb2109cd42c7c1f266403b0",
+        "weights": "ema",
+        "actual_scope": "coarse_stage1_with_flow_loss",
+        "used_in_paper": false,
+        "cli_exit_code": 2,
+        "diagnostic": "eval-json completed reconstruction and loss, then Fire rejected unsupported --loss_only=True. Historical exit marker preserved. Local CLI forwarding fix passes regression test."
+      },
+      "append-sam-lora": {
+        "count": 200,
+        "complete": true,
+        "mean_flow_loss": 0.23013684626668693,
+        "source_path": "/12398721/append-full-eval-2026-10-31-09-41-18/results/evaluations/append-sam-lora-epoch05-gso200-heavy25-2026-10-31-09-41-18-loss/append-sam-lora-epoch05-gso200-heavy25-2026-10-31-09-41-18-loss.jsonl",
+        "source_sha256": "d0f9cc79643301c1b5a858f9d938d9105cf27ce3bbd00e8fc6f60057c85ef766",
+        "checkpoint": "/work/MathiasElmegaardNielsen#6181/append-conditioning-2026-10-30-19-56-04/results/append-sam-lora-full-q98-seed42-2026-10-30-19-56-04/epoch_05.pt",
+        "checkpoint_sha256": "dfc2ee88f3b715b52327dfeadfb7d1c771dc71473141e97af89838e846446bf7",
+        "weights": "ema",
+        "actual_scope": "coarse_stage1_with_flow_loss",
+        "used_in_paper": false,
+        "cli_exit_code": 2,
+        "diagnostic": "eval-json completed reconstruction and loss, then Fire rejected unsupported --loss_only=True. Historical exit marker preserved. Local CLI forwarding fix passes regression test."
+      }
+    },
+    "paper_completed_commit": "b3d9b0f",
+    "rerun_required": false
+  }
 }
