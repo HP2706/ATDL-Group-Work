@@ -4,6 +4,7 @@
 \makeatother
 \usepackage{spconf}
 \usepackage{amsmath,amssymb,graphicx}
+\usepackage{multirow}
 \usepackage{booktabs,array,longtable}
 \usepackage[hidelinks]{hyperref}
 \graphicspath{{figures/}{Assignment 3 - Group/report/figures/}}
@@ -244,28 +245,31 @@ Adapter biases, normalization parameters, group/time embeddings, and gates are e
 \section{Results}
 \subsection{Native Validation}
 
-Table~\ref{tab:validation-results} reports full-set coarse reconstruction results on the held-out synthetic validation split. We report only completed evaluations; the multi-view baselines remain in progress.
+Table~\ref{tab:validation-results} reports full-set coarse reconstruction results on the held-out synthetic validation split. All six original trained variants and all three pretrained baselines completed the same 1,306 reference cases. The appended-token variants are included with their saved validation losses; their full-set geometry evaluations are in progress.
 
 \begin{table*}[t]
 \centering
 \scriptsize
 \setlength{\tabcolsep}{2pt}
-\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}lccccc@{}}
+\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}l|lcccccc@{}}
 \toprule
-Method & IoU $\uparrow$ & Aligned IoU $\uparrow$ & Chamfer $\downarrow$ & F@2\% $\uparrow$ & F@5\% $\uparrow$ \\
+ & Method & Val. loss $\downarrow$ & IoU $\uparrow$ & Aligned IoU $\uparrow$ & Chamfer $\downarrow$ & F@2\% $\uparrow$ & F@5\% $\uparrow$ \\
 \midrule
-SAM 3D (frozen) & 9.74 & 13.48 & 0.3085 & 35.13 & 52.89 \\
-MV-SAM3D & - & - & - & - & - \\
-Stream3D & - & - & - & - & - \\
-SAM 3D + LoRA (single frame) & 12.29 & 17.21 & 0.2550 & 42.56 & 61.42 \\
-Fusion adapter & 11.41 & 15.36 & 0.2616 & 40.19 & 60.07 \\
-Fusion adapter + SAM LoRA & \textbf{14.05} & \textbf{19.26} & \textbf{0.2238} & \textbf{46.86} & \textbf{66.55} \\
-V-JEPA attention pooling & 5.71 & 7.00 & 0.4113 & 20.78 & 35.60 \\
-V-JEPA pooling + SAM LoRA & 9.63 & 12.20 & 0.3108 & 32.61 & 51.32 \\
-DINOv2 attention pooling & 6.51 & 7.85 & 0.4126 & 22.34 & 37.22 \\
+\multirow{3}{*}{\shortstack{Training-\\free}} & SAM 3D (frozen) & - & 9.74 & 13.48 & 0.3085 & 35.13 & 52.89 \\
+ & MV-SAM3D & - & 10.71 & 14.52 & 0.2970 & 36.94 & 54.85 \\
+ & Stream3D & - & 10.54 & 14.51 & 0.2986 & 37.06 & 54.94 \\
+\midrule
+\multirow{8}{*}{\rotatebox{90}{Trained}} & SAM 3D + LoRA (single frame) & 0.2462 & 12.29 & 17.21 & 0.2550 & 42.56 & 61.42 \\
+ & Fusion adapter & 0.2895 & 11.41 & 15.36 & 0.2616 & 40.19 & 60.07 \\
+ & Fusion adapter + SAM LoRA & \textbf{0.2382} & \textbf{14.05} & \textbf{19.26} & \textbf{0.2238} & \textbf{46.86} & \textbf{66.55} \\
+ & V-JEPA attention pooling & 0.3177 & 5.71 & 7.00 & 0.4113 & 20.78 & 35.60 \\
+ & V-JEPA pooling + SAM LoRA & 0.2394 & 9.63 & 12.20 & 0.3108 & 32.61 & 51.32 \\
+ & DINOv2 attention pooling & 0.3217 & 6.51 & 7.85 & 0.4126 & 22.34 & 37.22 \\
+ & Appended video tokens & 0.2710 & - & - & - & - & - \\
+ & Appended video tokens + SAM LoRA & 0.2410 & - & - & - & - & - \\
 \bottomrule
 \end{tabular*}
-\caption{Native synthetic validation on all 1,306 held-out reference cases (642 clips, 131 target assets). Trained variants use epoch-5 EMA checkpoints. All methods use 25-step Stage-1 flow sampling and the same reference cases; video and multi-view methods use a common 16-frame window, while single-image methods use its selected reference. Metrics score coarse geometry against $64^3$ surface-occupancy ground truth, using up to 20,000 surface points and 100 similarity-ICP iterations. IoU is before alignment; aligned IoU, Chamfer and F-scores use similarity alignment. Coarse Chamfer uses longest-side-two normalization; IoU and F-scores are percentages. V-JEPA pooling produces three empty predictions: they contribute zero IoU, while its aligned metrics average the 1,303 non-empty predictions. A dash denotes a full evaluation still in progress; partial-set scores are omitted. Bold indicates the best completed score in each column.}
+\caption{Native synthetic validation: 1,306 reference cases, epoch-5 EMA checkpoints and 25-step flow sampling. Geometry is scored against $64^3$ surface occupancy with 20,000 points and similarity ICP. IoU and F-scores are percentages; aligned metrics use similarity alignment. Validation loss uses the fixed 50-case monitoring panel. V-JEPA pooling has three empty predictions, excluded from aligned metrics. Dashes mark pending or uncomputed results; bold marks the best available score.}
 \label{tab:validation-results}
 \end{table*}
 
@@ -277,26 +281,31 @@ Table~\ref{tab:gso-results} reports coarse and refined reconstruction on GSO. Th
 \centering
 \scriptsize
 \setlength{\tabcolsep}{2pt}
-\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}lcccc@{}}
+\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}l|lcccc@{}}
 \toprule
-Method & Coarse IoU $\uparrow$ & Mesh Chamfer $\downarrow$ & Mesh F@2\% $\uparrow$ & Mesh F@5\% $\uparrow$ \\
+ & Method & Coarse IoU $\uparrow$ & Mesh Chamfer $\downarrow$ & Mesh F@2\% $\uparrow$ & Mesh F@5\% $\uparrow$ \\
 \midrule
-SAM 3D (frozen) & 20.41 & 0.0736 & 62.90 & 80.44 \\
-MV-SAM3D & 24.75 & 0.0439 & 73.66 & 89.81 \\
-Stream3D & \textbf{25.13} & \textbf{0.0420} & \textbf{75.38} & \textbf{91.10} \\
-SAM 3D + LoRA (single frame) & 20.18 & 0.0690 & 62.22 & 81.89 \\
-Fusion adapter & 18.29 & 0.0830 & 58.30 & 77.54 \\
-Fusion adapter + SAM LoRA & 19.46 & 0.0736 & 60.38 & 80.28 \\
-V-JEPA attention pooling & 5.21 & 0.2075 & 23.06 & 39.00 \\
-V-JEPA pooling + SAM LoRA & 10.43 & 0.1374 & 38.59 & 58.06 \\
-DINOv2 attention pooling & 8.10 & 0.1612 & 33.00 & 50.84 \\
+\multirow{3}{*}{\shortstack{Training-\\free}} & SAM 3D (frozen) & 20.41 & 0.0736 & 62.90 & 80.44 \\
+ & MV-SAM3D & 24.75 & 0.0439 & 73.66 & 89.81 \\
+ & Stream3D & \textbf{25.13} & \textbf{0.0420} & \textbf{75.38} & \textbf{91.10} \\
+\midrule
+\multirow{8}{*}{\rotatebox{90}{Trained}} & SAM 3D + LoRA (single frame) & 20.18 & 0.0690 & 62.22 & 81.89 \\
+ & Fusion adapter & 18.29 & 0.0830 & 58.30 & 77.54 \\
+ & Fusion adapter + SAM LoRA & 19.46 & 0.0736 & 60.38 & 80.28 \\
+ & V-JEPA attention pooling & 5.21 & 0.2075 & 23.06 & 39.00 \\
+ & V-JEPA pooling + SAM LoRA & 10.43 & 0.1374 & 38.59 & 58.06 \\
+ & DINOv2 attention pooling & 8.10 & 0.1612 & 33.00 & 50.84 \\
+ & Appended video tokens & - & - & - & - \\
+ & Appended video tokens + SAM LoRA & - & - & - & - \\
 \bottomrule
 \end{tabular*}
-\caption{GSO reconstruction on the same 200 objects for every method. Trained variants use epoch-5 EMA checkpoints; all methods use 25 Stage-1 flow steps and 25 Stage-2 refinement steps. Coarse IoU is a percentage before alignment. Refined-mesh metrics use 8,192 samples per direction, exact point-to-triangle distances and 100 similarity-ICP iterations; Mesh Chamfer is the sum of directional means in units of the ground-truth longest side, and F-scores are percentages at 2\% and 5\% of that side. Video-conditioned methods use 16 frames, MV-SAM3D and Stream3D use four fixed views, and single-image methods use one reference. Bold indicates the best score in each column.}
+\caption{GSO reconstruction on the same 200 objects, using epoch-5 EMA checkpoints and 25 steps in each generative stage. Mesh metrics use 8,192 surface samples and similarity ICP; Chamfer is normalized by the ground-truth longest side. IoU and F-scores are percentages. Video models use 16 views, multi-view baselines four, and single-image models one. Dashes mark pending or uncomputed results; bold marks the best score.}
 \label{tab:gso-results}
 \end{table*}
 
 \subsection{Ablation Studies}
+
+The appended-token variants use the same five-epoch training budget. Their full native-validation and refined GSO evaluations are in progress.
 
 \section{Discussion and Conclusion}
 
