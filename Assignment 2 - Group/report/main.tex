@@ -20,7 +20,7 @@
 \maketitle
 
 \begin{abstract}
-We replicate a subset of the experiments in ``Deep Double Descent: Where Bigger Models and More Data Hurt'' by Nakkiran et al. Using the authors' released ResNet18 and five-layer CNN definitions inside our own PyTorch training pipeline, we reproduce width sweeps, training trajectories and sample-size comparisons on CIFAR-10 and CIFAR-100, and compare them with the authors' released measurements. We further re-implement the IWSLT'14 Transformer experiments. To fit our budget, we train for at most a tenth of the original horizon with one seed per setting (229 vision runs, 14.98 B200 GPU-hours). Model-wise double descent under label noise, and the shift of the interpolation threshold with noise, augmentation and sample size, are reproduced qualitatively. Epoch-wise double descent is replicated for sufficiently large models, while small and medium sized models follow a monotone and U-shaped test error trajectories. The CNN plateau, where more data does not help, does not appear at the authors' widths, which we attribute to the fixed update budget. The noise-free peaks reported for CIFAR-100 are not confirmed at our horizons. [Translation: one sentence missing??] 
+We replicate a subset of the experiments in ``Deep Double Descent: Where Bigger Models and More Data Hurt'' by Nakkiran et al. Using the authors' released ResNet18 and five-layer CNN definitions inside our own PyTorch training pipeline, we reproduce width sweeps, training trajectories and sample-size comparisons on CIFAR-10 and CIFAR-100, and compare them with the authors' released measurements. We further re-implement the IWSLT'14 Transformer experiments. To fit our budget, we train for at most a tenth of the original horizon with one seed per setting (229 vision runs, 14.98 B200 GPU-hours). Model-wise double descent under label noise, and the shift of the interpolation threshold with noise, augmentation and sample size, are reproduced qualitatively. Epoch-wise double descent is replicated for sufficiently large models, while small and medium sized models follow a monotone and U-shaped test error trajectories. The CNN plateau, where more data does not help, does not appear at the authors' widths, which we attribute to the fixed update budget. The noise-free peaks reported for CIFAR-100 are not confirmed at our horizons. The reproduction of the translation experiments provided partial support for the paper’s results, but uncovered missing implementation details affecting the results.
 \end{abstract}
 
 \section{Introduction}
@@ -187,11 +187,9 @@ For figure 3 we used 25 widths, evenly spaced from 8 to 200, so $d_{model}=\{8,1
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{Deviations and compute?}
-Table~\ref{tab:runs} summarizes the completed experiments.
-
-The seven jobs used 14.98 GPU-hours in total.
-%% Add transformer (NLP) experiment GPU-hours
+\subsection{Deviations and compute}
+Table~\ref{tab:runs} summarizes the completed experiments. The seven vision experiment jobs used 14.98 GPU-hours in total. While the selected Translation experiments were reproduced in full.
+%% Add transformer (NLP) experiment GPU-hours?
 
 \begin{table*}[t]
 \centering
@@ -440,7 +438,7 @@ Detailed run coverage and deviations are recorded in the repository's
 \subsection{Individual contribution}
 \textbf{Hans Peter Lyngsøe}
 
-Wrote the training code for the vision experiments along with scaffolding for running multiple experiments on the same gpu in parallel in order to fully utilize the hardware. Ran and conducted the experiments for the model-wise double descent experiments
+Wrote the training code for the vision experiments along with scaffolding for running multiple experiments on the same gpu in parallel in order to fully utilize the hardware Ran and conducted the experiments for the model-wise double descent experiments
 
 \textbf{Mathias Elmegaard Nielsen:}
 Epoch-wise double descent (paper Figures~9 and~10). Ran and analyzed the CIFAR-10 ResNet18 trajectories for widths
