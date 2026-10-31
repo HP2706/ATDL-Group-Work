@@ -245,7 +245,7 @@ Adapter biases, normalization parameters, group/time embeddings, and gates are e
 \section{Results}
 \subsection{Native Validation}
 
-Table~\ref{tab:validation-results} reports full-set coarse reconstruction results on the held-out synthetic validation split. All six original trained variants and all three pretrained baselines completed the same 1,306 reference cases. The appended-token variants are included with their saved validation losses; their full-set geometry evaluations are in progress.
+Table~\ref{tab:validation-results} reports full-set coarse reconstruction results on the held-out synthetic validation split. All eight trained variants and all three pretrained baselines completed the same 1,306 reference cases. Validation losses are reported on the fixed monitoring panel.
 
 \begin{table*}[t]
 \centering
@@ -265,11 +265,11 @@ Table~\ref{tab:validation-results} reports full-set coarse reconstruction result
  & V-JEPA attention pooling & 0.3177 & 5.71 & 7.00 & 0.4113 & 20.78 & 35.60 \\
  & V-JEPA pooling + SAM LoRA & 0.2394 & 9.63 & 12.20 & 0.3108 & 32.61 & 51.32 \\
  & DINOv2 attention pooling & 0.3217 & 6.51 & 7.85 & 0.4126 & 22.34 & 37.22 \\
- & Appended video tokens & 0.2710 & - & - & - & - & - \\
- & Appended video tokens + SAM LoRA & 0.2410 & - & - & - & - & - \\
+ & Appended video tokens & 0.2710 & 11.14 & 15.07 & 0.2751 & 38.93 & 58.18 \\
+ & Appended video tokens + SAM LoRA & 0.2410 & 13.17 & 18.23 & 0.2348 & 45.12 & 64.98 \\
 \bottomrule
 \end{tabular*}
-\caption{Native synthetic validation: 1,306 reference cases, epoch-5 EMA checkpoints and 25-step flow sampling. Geometry is scored against $64^3$ surface occupancy with 20,000 points and similarity ICP. IoU and F-scores are percentages; aligned metrics use similarity alignment. Validation loss uses the fixed 50-case monitoring panel. V-JEPA pooling has three empty predictions, excluded from aligned metrics. Dashes mark pending or uncomputed results; bold marks the best available score.}
+\caption{Native synthetic validation: 1,306 reference cases, epoch-5 EMA checkpoints and 25-step flow sampling. Geometry is scored against $64^3$ surface occupancy with 20,000 points and similarity ICP. IoU and F-scores are percentages; aligned metrics use similarity alignment. Validation loss uses the fixed 50-case monitoring panel. V-JEPA pooling has three empty predictions, excluded from aligned metrics. A dash denotes an uncomputed loss; bold marks the best score.}
 \label{tab:validation-results}
 \end{table*}
 
@@ -299,13 +299,13 @@ Table~\ref{tab:gso-results} reports coarse and refined reconstruction on GSO. Th
  & Appended video tokens + SAM LoRA & 18.61 & 0.0739 & 59.23 & 80.12 \\
 \bottomrule
 \end{tabular*}
-\caption{GSO reconstruction on the same 200 objects, using epoch-5 EMA checkpoints and 25 steps in each generative stage. Mesh metrics use 8,192 surface samples and similarity ICP; Chamfer is normalized by the ground-truth longest side. IoU and F-scores are percentages. Video models use 16 views, multi-view baselines four, and single-image models one. Dashes mark pending or uncomputed results; bold marks the best score.}
+\caption{GSO reconstruction on the same 200 objects, using epoch-5 EMA checkpoints and 25 steps in each generative stage. Mesh metrics use 8,192 surface samples and similarity ICP; Chamfer is normalized by the ground-truth longest side. IoU and F-scores are percentages. Video models use 16 views, multi-view baselines four, and single-image models one. Bold marks the best score.}
 \label{tab:gso-results}
 \end{table*}
 
 \subsection{Ablation Studies}
 
-The appended-token variants use the same five-epoch training budget. Their refined GSO evaluations are complete; full native validation is in progress.
+The appended-token variants use the same five-epoch training budget. Both their refined GSO and full native-validation evaluations are complete.
 
 \section{Discussion and Conclusion}
 

@@ -2,7 +2,6 @@
   "checked_at": "2026-10-31T08:55:29.835624+01:00",
   "source_commit": "ea2b70d395a22bc42e0ae84afa77ff184bb523b8",
   "running_jobs": [
-    "12440741",
     "12440742"
   ],
   "evaluations": {
@@ -1124,6 +1123,90 @@
           0.05
         ]
       }
+    },
+    "append-frozen-epoch05-full-validation": {
+      "viou": 0.11139886642270719,
+      "viou_aligned": 0.15070855540325195,
+      "chamfer": 0.2750728991564369,
+      "fscore@0.02": 0.38928035327042587,
+      "fscore@0.05": 0.581824444233892,
+      "flow_loss": 0.288216265668639,
+      "count": 1306,
+      "empty": 0,
+      "valid_counts": {
+        "viou": 1306,
+        "viou_aligned": 1306,
+        "chamfer": 1306,
+        "fscore@0.02": 1306,
+        "fscore@0.05": 1306
+      },
+      "mesh_count": 0,
+      "mesh_chamfer": null,
+      "mesh_f02": null,
+      "mesh_f05": null,
+      "complete": true,
+      "source_path": "/12398721/append-full-eval-2026-10-31-09-41-18/results/evaluations/append-frozen-epoch05-fullval1306-flow25-2026-10-31-09-41-18/append-frozen-epoch05-fullval1306-flow25-2026-10-31-09-41-18.jsonl",
+      "source_sha256": "0c29e17ef26e4528eee8d6986e0ef4e9bf9bf4807db483c9f85d9c70b54f0a98",
+      "checkpoint": "/work/MathiasElmegaardNielsen#6181/append-conditioning-2026-10-30-19-56-04/results/append-frozen-full-q98-seed42-2026-10-30-19-56-04/epoch_05.pt",
+      "checkpoint_sha256": "d5f207aefdacdfdc11432bba86dfbee81f9befafacb2109cd42c7c1f266403b0",
+      "weights": "ema",
+      "sampler": {
+        "mode": "flow",
+        "steps": 25,
+        "cfg_scale": null
+      },
+      "metrics_config": {
+        "device": "auto",
+        "max_points": 20000,
+        "icp_iterations": 100,
+        "icp_scale": true,
+        "fscore_thresholds": [
+          0.02,
+          0.05
+        ]
+      }
+    },
+    "append-sam-lora-epoch05-full-validation": {
+      "viou": 0.13168817229840424,
+      "viou_aligned": 0.18232481737420073,
+      "chamfer": 0.2347621349762244,
+      "fscore@0.02": 0.45118409548672095,
+      "fscore@0.05": 0.6498434194562965,
+      "flow_loss": 0.25852231929509417,
+      "count": 1306,
+      "empty": 0,
+      "valid_counts": {
+        "viou": 1306,
+        "viou_aligned": 1306,
+        "chamfer": 1306,
+        "fscore@0.02": 1306,
+        "fscore@0.05": 1306
+      },
+      "mesh_count": 0,
+      "mesh_chamfer": null,
+      "mesh_f02": null,
+      "mesh_f05": null,
+      "complete": true,
+      "source_path": "/12398721/append-full-eval-2026-10-31-09-41-18/results/evaluations/append-sam-lora-epoch05-fullval1306-flow25-2026-10-31-09-41-18/append-sam-lora-epoch05-fullval1306-flow25-2026-10-31-09-41-18.jsonl",
+      "source_sha256": "9df72be4cfa17ac583908cdf292dab786cb4793ce87adc0313f0f1770884967a",
+      "checkpoint": "/work/MathiasElmegaardNielsen#6181/append-conditioning-2026-10-30-19-56-04/results/append-sam-lora-full-q98-seed42-2026-10-30-19-56-04/epoch_05.pt",
+      "checkpoint_sha256": "dfc2ee88f3b715b52327dfeadfb7d1c771dc71473141e97af89838e846446bf7",
+      "weights": "ema",
+      "sampler": {
+        "mode": "flow",
+        "steps": 25,
+        "cfg_scale": null
+      },
+      "metrics_config": {
+        "device": "auto",
+        "max_points": 20000,
+        "icp_iterations": 100,
+        "icp_scale": true,
+        "fscore_thresholds": [
+          0.02,
+          0.05
+        ]
+      }
     }
   },
   "training": {
@@ -1679,7 +1762,7 @@
     }
   },
   "pending_appended_full_evaluations": {
-    "status": "gso_complete_native_validation_running",
+    "status": "all_geometry_complete_auxiliary_loss_finalizing",
     "remote_root": "/work/MathiasElmegaardNielsen#6181/append-full-eval-2026-10-31-09-41-18",
     "api_root": "/12398721/append-full-eval-2026-10-31-09-41-18",
     "jobs": {
@@ -1688,5 +1771,5 @@
     },
     "created_at": "2026-10-31-09-41-18"
   },
-  "last_reconciled_at": "2026-10-31T11:15:18.855444+01:00"
+  "last_reconciled_at": "2026-10-31T11:46:31.864986+01:00"
 }
