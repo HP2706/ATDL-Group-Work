@@ -13,30 +13,34 @@
 
 \title{Video-Conditioned 3D Object Reconstruction}
 \name{\shortstack{Group 15: Hans Peter Lyngsøe, Harald Franck, \\ Mathias Elmegaard Nielsen and Julian Barragan}}
-\address{Assignment 3: Mini Research Report \\ \url{https://github.com/HP2706/ATDL-Group-Work}}
+\address{Assignment 3: Mini Research Report \\
+\small\textit{Baseline paper: SAM 3D\cite{sam3d}, Course-curated paper: V-JEPA\cite{vjepa21}} \\
+\small\url{https://github.com/HP2706/ATDL-Group-Work}}
+
 
 \begin{document}
 \maketitle
 
 \begin{abstract}
-Recent breakthroughs in vision foundation models, notably SAM3 and SAM3D, have substantially advanced single-image 3D object reconstruction. However, occluded parts of objects must be inferred from learned priors rather than observed evidence. Recent approaches have proposed training-free multi-view extensions to address this limitation by fusing predictions conditioned on different images. However these techniques remain limited in two ways.First they require repeated forward passes through the main backbone, leading to poor computational efficiency. Secondly for these methods to work, one needs a separate heuristic or models for selecting informative frames, hindering usability. We propose a lightweight adapter that conditions SAM 3D directly on video representations extracted by the pretrained V-JEPA 2.1 encoder. This architecture avoids per-view generator evaluations at each sampling step and remove the dependence on frame selection in the input pipeline. We investigate whether this approach improves coarse object reconstruction, particularly for surfaces revealed beyond the reference view.
+Recent breakthroughs in vision foundation models, notably SAM3 and SAM 3D, have substantially advanced single-image 3D object reconstruction. However, occluded parts of objects must be inferred from learned priors rather than observed evidence. Recent approaches have proposed training-free multi-view extensions to address this limitation by fusing predictions conditioned on different images. However these techniques remain limited in two ways. First they require repeated forward passes through the main backbone, leading to poor computational efficiency. Secondly for these methods to work, one needs a separate heuristic or models for selecting informative frames, hindering usability. We propose a lightweight adapter that conditions SAM 3D directly on video representations extracted by the pretrained V-JEPA 2.1 encoder. This architecture avoids per-view generator evaluations at each sampling step and remove the dependence on frame selection in the input pipeline. We investigate whether this approach improves coarse object reconstruction, particularly for surfaces revealed beyond the reference view.
 
 \end{abstract}
 
 \section{Introduction}
-\subsection{Research Question and Hypothesis}
+Foundation models for single-image 3D reconstruction, most notably SAM 3D~\cite{sam3d}, recover the complete geometry of a masked object from one photograph. Surfaces that are not visible in that image, however, must be inferred from learned shape priors, and front--back ambiguity remains a central source of error~\cite{front2back}. A short video of the object often observes exactly these surfaces, but SAM 3D can only be conditioned on a single image. In this paper, we thus propose a method for extending SAM 3D to video inputs by encoding a clip with the frozen self-supervised video encoder V-JEPA~2.1~\cite{vjepa21} and injecting its features into the conditioning tokens of SAM 3D's geometry model through a lightweight adapter. To address, whether a pretrained foundation model can accept a new input modality through a small adapter without losing its learned prior, and whether any resulting gain reflects the video itself or merely adaptation to the training domain, we formulate the following research questions and hypotheses:
 
-The primary research question, this work tries to study is, how easily new input modalities for foundation models, Specifically Sam3d.
+\textbf{Research question.} Can a lightweight adapter on frozen V-JEPA~2.1 features inject video evidence into SAM 3D and improve coarse geometry over (a) frozen SAM 3D, (b) an image-only fine-tuning control with the same training budget, and (c) training-free multi-view fusion, and how should the video features enter the conditioning sequence? We test three hypotheses:
+\begin{itemize}
+  \item[\textbf{H1}] In distribution, video conditioning improves coarse geometry over frozen SAM 3D, even with SAM 3D frozen, and over an image-only LoRA control, so that the gain is attributable to video evidence rather than domain adaptation.
+  \item[\textbf{H2}] The improvement transfers to scanned real-world objects (GSO), where the learned single-pass fusion matches or exceeds training-free multi-view fusion.
+  \item[\textbf{H3}] Strategies that preserve SAM 3D's native conditioning tokens outperform strategies that replace them, and identity-initialized gated fusion is the most robust.
+\end{itemize}
 
-Our hypothesis, is that with a relatively small adapter network and no finetuning of the backbone, we would be able to fuse a new input modality into this network.
-
-\subsection{Contributions}
+\textbf{Contributions.} (i) Three strategies for conditioning SAM 3D on V-JEPA~2.1 video features (gated fusion, attentive pooling, and appended tokens), each requiring a single backbone evaluation per flow step; (ii) a synthetic dataset of 10,000 rendered multi-object clips with exact masks and complete 3D geometry; (iii) a controlled comparison against frozen SAM 3D, two training-free multi-view methods, and a matched image-only fine-tuning control on held-out synthetic data and GSO, with paired bootstrap confidence intervals; (iv) the finding that video conditioning improves reconstruction in distribution but does not transfer to GSO, and that preserving the native conditioning tokens is essential.
 
 \section{Related Work}
 
 \subsection{SAM3D}
-
-SAM3D\cite{sam3d}
 
 \subsubsection{Data Generation}
 
@@ -136,7 +140,7 @@ Our approach instead learns to combine video evidence in the conditioning sequen
 
 \subsection{Architecture}
 
-In order to condition SAM3D on video, we must incorporate this information into the conditioning tokens provided to the model backbone. We use VJEPA2.1 \cite{vjepa21} to obtain video-embeddings.
+In order to condition SAM 3D on video, we must incorporate this information into the conditioning tokens provided to the model backbone. We use VJEPA2.1 \cite{vjepa21} to obtain video-embeddings.
 
 Let $V_G=f_{\theta_V}(I_{1:K})\in\mathbb{R}^{N_v\times d_v}$ denote the video embeddings for a clip of $K$ frames with $N_v$ as the number of spatiotemporal tokens and $d_v$ as the encoder feature width. For V-JEPA 2.1 ViT-L/16 using final-layer features, $d_v=1024$ and $N_v=T_v(H_v/16)(W_v/16)$, where $T_v=K/2$ for even $K>1$ and $T_v=1$ for a single frame. Framewise DINOv2 variants instead use $14\times14$ spatial patches.
 
@@ -168,9 +172,16 @@ Each video token is projected to the conditioning width and augmented with objec
     V_i=\Pi_{\theta_A}((V_G)_i)+m_i e_{\mathrm{obj}}+E_{\mathrm{time}}(\Delta t_i).
 \end{equation}
 
-Two gated cross-attention blocks use only the existing RGB conditioning tokens as queries and $V$ as keys and values.  Notably we use Zero-initialized gates to make the adapter an identity mapping at initialization.
-
-$C_{'rgb}$ todo
+Here $m_i\in[0,1]$ is the fraction of token $i$'s tubelet covered by the target mask and $\Delta t_i\in\{-7,\dots,7\}$ is its temporal offset from the reference frame. Two gated cross-attention blocks use the existing RGB conditioning tokens as queries and $V$ as keys and values. Starting from $C^{(0)}=C_{\mathrm{rgb}}$, block $\ell\in\{1,2\}$ computes
+\begin{equation}
+\begin{aligned}
+\widetilde C^{(\ell)} &= C^{(\ell-1)} + \tanh\!\big(g^{(\ell)}_{\mathrm{a}}\big)\,
+  \operatorname{MHA}\!\big(\operatorname{LN}(C^{(\ell-1)}),\operatorname{LN}(V)\big),\\
+C^{(\ell)} &= \widetilde C^{(\ell)} + \tanh\!\big(g^{(\ell)}_{\mathrm{f}}\big)\,
+  \operatorname{FFN}\!\big(\operatorname{LN}(\widetilde C^{(\ell)})\big),
+\end{aligned}
+\end{equation}
+where $\operatorname{MHA}(Q,K)$ is 16-head attention with $K$ as both keys and values, and the FFN has hidden width $2048$. The output $C'_{\mathrm{rgb}}=C^{(2)}$ has the same shape as $C_{\mathrm{rgb}}$. All gates are initialized to $g=0$, so $C'_{\mathrm{rgb}}=C_{\mathrm{rgb}}$ at initialization and training starts exactly from pretrained SAM 3D~\cite{flamingo}. The adapter has approximately $18$M parameters, about $1.5\%$ of the geometry model.
 
 \subsection{Video pooling}
 
@@ -245,7 +256,7 @@ Adapter biases, normalization parameters, group/time embeddings, and gates are e
 \section{Results}
 \subsection{Native Validation}
 
-Table~\ref{tab:validation-results} reports full-set coarse reconstruction results on the held-out synthetic validation split. All eight trained variants and all three pretrained baselines completed the same 1,306 reference cases. Validation losses are reported on the fixed monitoring panel.
+Table~\ref{tab:validation-results} reports full-set coarse reconstruction results on the held-out synthetic validation split, where all eight trained variants and all three pretrained baselines completed the same 1,306 reference cases. Fusion adapter + SAM LoRA achieves the best score on every native metric. Relative to the image-only LoRA control with the same training budget, it improves IoU by $1.77$ points ($[1.25, 2.31]$) and F@2\% by $4.30$ points ($[3.26, 5.35]$). The gain is therefore not explained by adaptation to the synthetic domain alone. Without LoRA, the fusion adapter improves on frozen SAM 3D by $1.68$ IoU points ($[1.17, 2.20]$) and exceeds both training-free multi-view baselines, which gain only about one IoU point from four views. However, it remains below the image-only LoRA control ($11.41$ vs.\ $12.29$ IoU), which itself improves on frozen SAM 3D by $2.55$ points. In distribution, domain adaptation therefore accounts for a larger share of the improvement than the video evidence. Both pooling variants fall below frozen SAM 3D, and LoRA only partially recovers V-JEPA pooling ($9.63$ IoU).
 
 \begin{table*}[t]
 \centering
@@ -275,7 +286,7 @@ Table~\ref{tab:validation-results} reports full-set coarse reconstruction result
 
 \subsection{GSO Reconstruction}
 
-Table~\ref{tab:gso-results} reports coarse and refined reconstruction on GSO. The native-validation and GSO Chamfer values use different geometry targets and normalization protocols and should not be compared numerically across tables.
+Table~\ref{tab:gso-results} reports coarse and refined reconstruction on GSO. The native-validation and GSO Chamfer values use different geometry targets and normalization protocols and should not be compared numerically across tables. On GSO, the ranking reverses. No trained variant exceeds frozen SAM 3D: fusion adapter + SAM LoRA differs by $-0.96$ coarse IoU points ($[-2.48, 0.52]$) and $-0.16$ mesh F@5\% points ($[-3.32, 3.14]$), and its advantage over the image-only control vanishes ($-0.73$ IoU, $[-2.07, 0.51]$). Without LoRA, the fusion adapter is significantly worse than frozen SAM 3D ($-2.12$ IoU, $[-3.59, -0.70]$). The training-free multi-view methods perform best: Stream3D exceeds fusion adapter + SAM LoRA by $5.68$ coarse IoU points ($[4.10, 7.28]$) and $10.83$ mesh F@5\% points ($[7.75, 14.07]$). These methods evaluate the pretrained model separately on four views with MoGe point maps, whereas our models receive 16 object-cropped $256\times256$ frames, so the comparison concerns complete pipelines rather than equal input budgets.
 
 \begin{table*}[t]
 \centering
@@ -304,8 +315,7 @@ Table~\ref{tab:gso-results} reports coarse and refined reconstruction on GSO. Th
 \end{table*}
 
 \subsection{Ablation Studies}
-
-The appended-token variants use the same five-epoch training budget. Both their refined GSO and full native-validation evaluations are complete.
+The ablations vary how video enters the conditioning sequence while the encoder, data, and training budget are held fixed. Replacing the RGB tokens is clearly harmful: V-JEPA pooling reaches $5.71$ native and $5.21$ GSO IoU, far below frozen SAM 3D, and produces three empty predictions. DINOv2 pooling of the same 16 frames performs similarly ($6.51$ and $8.10$). This indicates that the failure stems from discarding the native tokens expected by the pretrained cross-attention rather than from the choice of video encoder. Appending tokens preserves the native tokens and performs between the two alternatives. With LoRA, gated fusion outperforms appended tokens on native validation by $0.88$ IoU points ($[0.48, 1.31]$), whereas the GSO difference ($0.84$, $[-0.36, 2.03]$) is not significant. Without LoRA, appended tokens degrade GSO reconstruction considerably ($14.65$ vs.\ $18.29$ IoU for fusion), consistent with our expectation that tokens without identity initialization disrupt the frozen backbone.
 
 \section{Discussion and Conclusion}
 
@@ -313,14 +323,14 @@ The appended-token variants use the same five-epoch training budget. Both their 
 
 A potential weakness of our training data is insufficient occlusion to encourage the model to combine evidence across frames. When most of an object's visible structure can be observed in any single frame, the model may have little incentive to exploit complementary observations from the video. SAM 3D deliberately introduces artificial occluders during mid-training to encourage reconstruction of complete shapes from partial observations~\cite{sam3d}. For our video-conditioned model, the corresponding goal is to create clips in which different frames reveal complementary parts of the target object. Such examples would encourage the adapter to aggregate observed evidence across frames, while retaining learned shape priors for surfaces that remain unseen.
 
-
-
 \subsection{Hypothesis Assessment}
+Our hypothesis is supported in distribution and rejected out of distribution. Our trained zero-initialized adapter of approximately 18M parameters, which makes use of V-JEPA~2.1 features, improves on frozen SAM 3D and both training-free multi-view methods on our held-out synthetic clips while evaluating the geometry model only once per flow step. Two observations qualify this result. First, the frozen-backbone adapter does not exceed an image-only LoRA control, so on its own it does not show that video contributes more than domain adaptation. Only in combination with LoRA does video conditioning yield a significant gain over the matched control. Second, none of the gains transfer to GSO, where the trained models at best match frozen SAM 3D and remain well below training-free multi-view fusion. The adapter thus appears to exploit cues specific to our synthetic distribution, such as floating objects, planar backgrounds, and largely unoccluded targets, rather than learning a general mechanism for aggregating evidence across views. Finally, the ablations show that the integration strategy matters more than the encoder: a new modality can be added only if the native conditioning tokens are preserved, and identity initialization is most robust when the backbone remains frozen.
+
 \subsection{Limitations and Future Work}
 
 Hard foreground selection may discard useful boundary and scene-context features; an alternative is to pool all video tokens while supplying object coverage as an additional embedding.
 
-\clearpage
+\newpage
 \IfFileExists{ISBI_template-master/IEEEbib.bst}{%
   \bibliographystyle{ISBI_template-master/IEEEbib}
   \bibliography{references}
@@ -329,22 +339,31 @@ Hard foreground selection may discard useful boundary and scene-context features
   \bibliography{Assignment 3 - Group/report/references}
 }
 
-\section{Papers to Read}
-\begin{enumerate}
-  \item \href{https://arxiv.org/abs/2511.16624}{\textbf{SAM 3D: 3Dfy Anything in Images}}: generator and conditioning interface~\cite{sam3d}.
-  \item \href{https://arxiv.org/abs/2603.14482}{\textbf{V-JEPA 2.1}}: candidate video encoder and course connection~\cite{vjepa21}.
-  \item \href{https://arxiv.org/abs/2510.13454}{\textbf{VIST3A}}: representation stitching and linear adapters~\cite{vist3a}.
-  \item \href{https://arxiv.org/abs/2603.11633}{\textbf{MV-SAM3D}}: multi-view fusion baseline~\cite{mvsam3d}.
-  \item \href{https://arxiv.org/abs/2605.21472}{\textbf{Stream3D}}: streaming reconstruction baseline~\cite{stream3d}.
-  \item \href{https://arxiv.org/abs/2403.08768}{\textbf{3DFIRES}}: hidden-surface evaluation~\cite{fires3d}.
-  \item \href{https://arxiv.org/abs/1912.10589}{\textbf{Front2Back}}: front/back ambiguity and shape priors~\cite{front2back}.
-  \item \href{https://arxiv.org/abs/2306.09109}{\textbf{NAVI}}: real captures and ground-truth geometry~\cite{navi}.
-\end{enumerate}
+% \section{Papers to Read}
+% \begin{enumerate}
+%   \item \href{https://arxiv.org/abs/2511.16624}{\textbf{SAM 3D: 3Dfy Anything in Images}}: generator and conditioning interface~\cite{sam3d}.
+%   \item \href{https://arxiv.org/abs/2603.14482}{\textbf{V-JEPA 2.1}}: candidate video encoder and course connection~\cite{vjepa21}.
+%   \item \href{https://arxiv.org/abs/2510.13454}{\textbf{VIST3A}}: representation stitching and linear adapters~\cite{vist3a}.
+%   \item \href{https://arxiv.org/abs/2603.11633}{\textbf{MV-SAM3D}}: multi-view fusion baseline~\cite{mvsam3d}.
+%   \item \href{https://arxiv.org/abs/2605.21472}{\textbf{Stream3D}}: streaming reconstruction baseline~\cite{stream3d}.
+%   \item \href{https://arxiv.org/abs/2403.08768}{\textbf{3DFIRES}}: hidden-surface evaluation~\cite{fires3d}.
+%   \item \href{https://arxiv.org/abs/1912.10589}{\textbf{Front2Back}}: front/back ambiguity and shape priors~\cite{front2back}.
+%   \item \href{https://arxiv.org/abs/2306.09109}{\textbf{NAVI}}: real captures and ground-truth geometry~\cite{navi}.
+% \end{enumerate}
 
-\clearpage
 \appendix
 \section{Initial Ideas}
+% - Briefly specify each group member’s **initial idea or plan** before the group reaches a final agreement on the idea.
+\textbf{Hans Peter Lyngsøe:} \textit{[\ldots]}\\
+\textbf{Harald Franck:} \textit{[\ldots]}\\
+\textbf{Mathias Elmegaard Nielsen:} \textit{[\ldots]}\\
+\textbf{Julian Barragan:} \textit{[\ldots]}\\
+After discussion, we agreed to study whether video context from a self-supervised video encoder can help the single-image model SAM 3D reconstruct partially observed objects, while keeping the backbone frozen.
 
 \section{Individual Contributions}
+\textbf{Hans Peter Lyngsøe:} \textit{[\ldots]}\\
+\textbf{Harald Franck:} \textit{[\ldots]}\\
+\textbf{Mathias Elmegaard Nielsen:} \textit{[\ldots]}\\
+\textbf{Julian Barragan:} \textit{[\ldots]}
 
 \end{document}
