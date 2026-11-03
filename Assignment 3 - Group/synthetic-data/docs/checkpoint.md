@@ -43,3 +43,44 @@ Resume by reading this file, then `CLAUDE.md`. Decisions and their reasons are i
 - Tell the model team about scale-invariant targets (`DATASET.md` Section 7).
 - UCloud notes in `docs/m2_handover.md` and `docs/cluster_checklist.md` are for the colleague to fill in.
 - Delete the VM when the user says so: `gcloud compute instances delete sam3d-t6 --zone=europe-west4-a`.
+
+
+## CC0 background update (2026-10-28)
+
+New M2 runs use `data/bg_pools_polyhaven` via `configs/m2.yaml`. Prepare it on a CPU
+node with `uv run python scripts/prepare_polyhaven.py --limit 200 --views 4`.
+Powered by Poly Haven (https://polyhaven.com); assets: CC0 (https://polyhaven.com/license).
+The script converts tone-mapped equirectangular panoramas into 2048x1024 perspective
+JPEGs at 130 degree HFOV, keeping the existing compositor and lighting unchanged.
+It freezes the source selection/settings, verifies downloads, records source URLs and
+checksums, and splits by panorama before creating views. Do not rebuild these pools
+with the legacy image-ID-based `build_bg_pools.py`. Freeze pools before rendering.
+Background provenance is included in new clip metadata and exported sample JSON.
+
+Earlier SA-1B descriptions and M1/T6 results are historical. Preserve those clips, but
+exclude them from the HF release. Regenerate eval into a fresh dataset root using
+`configs/m1_polyhaven.yaml`, link its assets, and rerun coverage/visual validation.
+The source swap does not clear Objaverse/GSO license obligations; audit them before
+upload, including private HF hosting. Background preparation does not upload anything.
+
+
+## Object release allowlist (2026-10-28)
+
+The user approved CC0 and CC BY objects with attribution retained. The Objaverse downloader
+now filters those licenses before downloading GLBs and excludes incomplete CC BY credits.
+`--limit` counts candidates before filtering; selected/downloaded counts can be smaller.
+Rejections and allowed licenses are in `index.json`; ship `data/raw/objaverse/ATTRIBUTION.json`
+with derived data. Source metadata propagates author URL and license URL through preprocessing.
+This supersedes the historical decision to admit all licenses for research. No upload is performed.
+
+
+## Alpha-material compatibility check (2026-10-28)
+
+The full-pool benchmark found T1b silhouette failures on 3/29 clips. Their failing objects
+used BLEND/MASK materials; a geometry-only ray caster cannot reproduce alpha cutouts.
+A conservative material audit excludes such assets via `asset_exclusions_file` in M2.
+The runtime file `dataset/asset_exclusions_train.json` contains IDs and reasons, and must
+travel with the input-pool freeze. No assets are deleted and geometric tolerances stay
+unchanged. The reviewed 5,410-object pool becomes 4,550 opaque-compatible objects.
+The original 1/2/4-worker benchmark was 17.7/9.7/6.3 seconds per clip but failed geometry
+validation, so it is provisional until the revised pool and pilot pass.

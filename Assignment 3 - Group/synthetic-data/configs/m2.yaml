@@ -2,6 +2,9 @@
 # Use seeds 1000000-1009999: the per-seed streams don't depend on the split, so train seed s
 # would otherwise share N, layout and camera path with eval seed s.
 dataset_root: dataset
-bg_pool_dir: data/bg_pools
+bg_pool_dir: data/bg_pools_polyhaven
 # Blender 4.2.1 has no kernels for Blackwell GPUs (B200).
 blender_custom_path: .blender/blender-4.5.15-linux-x64
+
+# Audited alpha-material exclusions; keep this file with the frozen input pool.
+asset_exclusions_file: dataset/asset_exclusions_train.json

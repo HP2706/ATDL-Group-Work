@@ -285,3 +285,22 @@ Shards are plain tars, so `webdataset` reads them too (keys are the clip ids).
 - **No de-lit texture target.** Texture ground truth is out of scope; `rgb` is lit.
 - **No metric scale.** Scene units are arbitrary, whereas SAM 3D's MoGe pointmaps are metric (one of our units comes out at about 0.29 in MoGe's reconstruction, median over T6, varying per scene). Without a pointmap input, use scale-invariant translation and scale targets.
 - **Train split not generated yet** (M2). Its format will be identical; the assets are filtered Objaverse objects (`DATASET.md` Section 1).
+
+
+## CC0 background update (2026-10-28)
+
+New M2 runs use `data/bg_pools_polyhaven` via `configs/m2.yaml`. Prepare it on a CPU
+node with `uv run python scripts/prepare_polyhaven.py --limit 200 --views 4`.
+Powered by Poly Haven (https://polyhaven.com); assets: CC0 (https://polyhaven.com/license).
+The script converts tone-mapped equirectangular panoramas into 2048x1024 perspective
+JPEGs at 130 degree HFOV, keeping the existing compositor and lighting unchanged.
+It freezes the source selection/settings, verifies downloads, records source URLs and
+checksums, and splits by panorama before creating views. Do not rebuild these pools
+with the legacy image-ID-based `build_bg_pools.py`. Freeze pools before rendering.
+Background provenance is included in new clip metadata and exported sample JSON.
+
+Earlier SA-1B descriptions and M1/T6 results are historical. Preserve those clips, but
+exclude them from the HF release. Regenerate eval into a fresh dataset root using
+`configs/m1_polyhaven.yaml`, link its assets, and rerun coverage/visual validation.
+The source swap does not clear Objaverse/GSO license obligations; audit them before
+upload, including private HF hosting. Background preparation does not upload anything.

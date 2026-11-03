@@ -84,6 +84,7 @@ def clip_json(clip: Clip) -> dict:
         "T_cw": clip.T_cw.tolist(),
         "objects": objects,
         "visibility": meta["visibility"],
+        "background": meta.get("background", {}),
     }
     blender = meta.get("blender_version") or meta.get("render", {}).get("blender_version")
     if blender:

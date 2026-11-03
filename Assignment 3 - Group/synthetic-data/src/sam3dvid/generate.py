@@ -213,7 +213,11 @@ def generate_clip(cfg: Config, split: str, seed: int, out_root: Path) -> dict:
             "reference_T_cw": ref.tolist(),
             "light": light,
             "background": {"image_id": bg["image_id"], "width": bg_size[0], "height": bg_size[1],
-                           "virtual_hfov_deg": cfg.bg_hfov_deg, "K_bg": K_bg.tolist()},
+                           "virtual_hfov_deg": cfg.bg_hfov_deg, "K_bg": K_bg.tolist(),
+                           **{key: bg[key] for key in (
+                               "source", "source_id", "source_url", "download_url", "authors", "license", "license_url",
+                               "sha256", "source_sha256", "yaw_deg", "perspective_hfov_deg",
+                           ) if key in bg}},
             "render": {"seed": scene["render_seed"], "samples": cfg.cycles_samples, "denoiser": cfg.denoiser,
                        "blender_version": str(out["blender_version"])},
             "visibility": {k: v.tolist() for k, v in stats.items()},

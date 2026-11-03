@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import collections
+import itertools
 import os
 import signal
+import shutil
 import subprocess
 import sys
 import threading
@@ -12,6 +14,35 @@ import time
 from pathlib import Path
 
 BLENDER_SCRIPTS = Path(__file__).parent / "blender"
+_CPU_SLOTS = itertools.count()
+_CPU_SLOT = threading.local()
+
+
+def limit_blender_cpus(cmd: list[str]) -> list[str]:
+    """Opt-in Linux affinity for CPU preprocessing; inherited by Blender and its threads.
+
+    Restrict the parent's affinity to the allocated CPU count before starting workers.
+    Each worker thread keeps a separate slice. Unset means unchanged renderer behavior.
+    """
+    value = os.environ.get("SAM3DVID_BLENDER_CPUS")
+    if value is None:
+        return cmd
+    count = int(value)
+    if count < 1:
+        raise ValueError("SAM3DVID_BLENDER_CPUS must be positive")
+    taskset = shutil.which("taskset")
+    if not hasattr(os, "sched_getaffinity") or taskset is None:
+        raise RuntimeError("SAM3DVID_BLENDER_CPUS requires Linux taskset")
+    available = sorted(os.sched_getaffinity(0))
+    if count > len(available):
+        raise ValueError("Blender CPU limit exceeds parent affinity")
+    if not hasattr(_CPU_SLOT, "index"):
+        _CPU_SLOT.index = next(_CPU_SLOTS)
+    slots = len(available) // count
+    start = (_CPU_SLOT.index % slots) * count
+    selected = available[start:start + count]
+    print(f"[affinity] Blender worker CPUs: {selected}", flush=True)
+    return [taskset, "-c", ",".join(map(str, selected)), *cmd]
 
 
 def run_blenderproc(
@@ -27,6 +58,7 @@ def run_blenderproc(
     exe = Path(sys.executable).parent / "blenderproc"
     blender = ["--custom-blender-path", custom_path] if custom_path else ["--blender-install-path", install_path]
     cmd = [str(exe), "run", *blender, str(BLENDER_SCRIPTS / script), *args]
+    cmd = limit_blender_cpus(cmd)
     if stall_timeout is not None:
         run_with_stall_timeout(cmd, stall_timeout)
         return

@@ -15,7 +15,11 @@ With --limit, the subset is the first N candidates of a seeded shuffle of the sh
 candidate list, so a larger limit extends a smaller one. GLBs go to <out>/glbs/<uid>.glb via .part
 files (resumed after interruption); existing files are skipped. Licenses and authors come from the
 Objaverse 1.0 per-chunk metadata, cached compactly under <out>/meta/. <out>/index.json lists the
-selection with sha256, aesthetic score, license and source URL per object; the order of its
+selection with sha256, aesthetic score, license and source URL per object. Only CC0 and
+CC BY assets with attribution metadata are admitted before GLBs are downloaded; --limit
+counts candidates before license filtering, so the downloaded count can be smaller.
+ATTRIBUTION.json records credits for downloaded assets; include it with any release.
+The order of its
 "selection" list is the order `python -m sam3dvid.assets --limit N` uses.
 """
 
@@ -43,6 +47,29 @@ HF = "https://huggingface.co/datasets"
 CSV_URL = f"{HF}/JeffreyXiang/TRELLIS-500K/resolve/main/ObjaverseXL_sketchfab.csv"
 OBJAVERSE = f"{HF}/allenai/objaverse/resolve/main"
 CHUNK = 1 << 20
+
+
+LICENSES = {
+    "by": ("CC-BY-4.0", "https://creativecommons.org/licenses/by/4.0/"),
+    "cc0": ("CC0-1.0", "https://creativecommons.org/publicdomain/zero/1.0/"),
+}
+
+
+def release_entries(entries: list[dict]) -> tuple[list[dict], list[dict]]:
+    """Fail closed: other/unknown licenses and incomplete CC BY credits are excluded."""
+    accepted, rejected = [], []
+    for entry in entries:
+        code = entry.get("license")
+        if code not in LICENSES:
+            reason = "license_not_allowed"
+        elif code == "by" and not all(entry.get(k) for k in ("author", "name", "source_url")):
+            reason = "missing_attribution"
+        else:
+            spdx, url = LICENSES[code]
+            accepted.append({**entry, "license_spdx": spdx, "license_url": url})
+            continue
+        rejected.append({"uid": entry["uid"], "license": code, "reason": reason})
+    return accepted, rejected
 
 
 class DownloadError(RuntimeError):
@@ -169,7 +196,7 @@ def chunk_metadata(chunk: str, out: Path) -> dict[str, dict]:
 def download_glb(entry: dict, object_paths: dict[str, str], out: Path) -> bool:
     """Ensure <out>/glbs/<uid>.glb exists with the expected sha256. Returns False if it was already there."""
     dest = out / "glbs" / f"{entry['uid']}.glb"
-    if dest.exists():
+    if dest.exists() and sha256_of(dest) == entry["sha256"]:
         return False
     fetch(f"{OBJAVERSE}/{object_paths[entry['uid']]}", dest)
     if sha256_of(dest) != entry["sha256"]:
@@ -185,6 +212,9 @@ def write_index(out: Path, args: argparse.Namespace, num_candidates: int, entrie
         "min_aesthetic": args.min_aesthetic,
         "seed": args.seed,
         "num_candidates": num_candidates,
+        "candidate_limit": args.limit,
+        "allowed_licenses": ["CC0-1.0", "CC-BY-4.0"],
+        "license_rejections": getattr(args, "license_rejections", []),
         "num_selected": len(entries),
         "num_downloaded": len(downloaded),
         "licenses": dict(Counter(e["license"] for e in entries)),
@@ -196,6 +226,16 @@ def write_index(out: Path, args: argparse.Namespace, num_candidates: int, entrie
     tmp = out / "index.json.tmp"
     tmp.write_text(json.dumps(index, indent=1) + "\n")
     tmp.replace(out / "index.json")
+    attribution = {
+        "description": "Credits for downloaded source assets. Include with derived clips and shape targets.",
+        "changes": "Assets may be normalized, triangulated, voxelized, posed, lit and rendered into synthetic clips.",
+        "assets": [{key: entry.get(key) for key in (
+            "uid", "name", "author", "author_url", "source_url", "license_spdx", "license_url", "sha256"
+        )} for entry in entries if entry["uid"] in set(downloaded)],
+    }
+    credits_tmp = out / "ATTRIBUTION.json.tmp"
+    credits_tmp.write_text(json.dumps(attribution, indent=2) + "\n")
+    credits_tmp.replace(out / "ATTRIBUTION.json")
     return len(downloaded)
 
 
@@ -208,6 +248,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--min-aesthetic", type=float, default=5.5)
     p.add_argument("--workers", type=int, default=8)
     args = p.parse_args(argv)
+    if (args.limit is not None and args.limit < 1) or args.workers < 1:
+        p.error("--limit and --workers must be positive")
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 
     out = args.out
@@ -235,6 +277,12 @@ def main(argv: list[str] | None = None) -> int:
         entries.append({**r, "license": m.get("license"), "name": m.get("name"), "author": m.get("author"),
                         "author_url": m.get("author_url"), "glb_size": m.get("glb_size"),
                         "download_url": f"{OBJAVERSE}/{object_paths[r['uid']]}"})
+    entries, args.license_rejections = release_entries(entries)
+    log.info("license filter: %d allowed, %d rejected; reasons: %s", len(entries),
+             len(args.license_rejections), dict(Counter(e["reason"] for e in args.license_rejections)))
+    if not entries:
+        log.error("No CC0/CC BY assets with sufficient attribution in the candidate selection")
+        return 1
     log.info("selected %d; licenses: %s", len(entries), dict(Counter(e["license"] for e in entries)))
 
     failed: dict[str, str] = {}
