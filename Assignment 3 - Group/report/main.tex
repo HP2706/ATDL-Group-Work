@@ -463,7 +463,8 @@ frames are likely needed for the learned fusion to generalize.
 
 \section{Initial Ideas}
 % - Briefly specify each group member’s **initial idea or plan** before the group reaches a final agreement on the idea.
-\textbf{Hans Peter Lyngsøe:} Presented the initial idea of extending SAM 3D to accept video clips as a new modality. ....\\
+\textbf{Hans Peter Lyngsøe:} I Presented to the group the initial idea of extending SAM 3D to accept video clips as a new modality. My Initial approach for this research direction was to use a pretrained video encoder like VJepa and then incorporate this information into the the dino embeddings already provided to Sam3d via some kind of fusion network.
+
 \textbf{Harald Franck:} My initial idea was that we could use a pretrained video-encoder and then train some kind of adapter, as SAM3D uses DINOv2 embeddings, so we would need the embeddings to be the right type before feeding them into a frozen SAM3D. I was also thinking that we would have to make our own dataset with ground truths, to have videos of 3D objects. I was not sure how we would produce thousands of 3D objects before we found the Scanned Objects by Google.\\
 \textbf{Mathias Elmegaard Nielsen:} My initial idea was to average embeddings of several DINOv2 runs on key frames. However, after hearing the idea of including V-JEPA presented the idea of using some kind of cross-attention adapter to fuse the embeddings of DINOv2 and V-JEPA.\\
 \textbf{Julian Barragan:} My initial idea was to artificially generate a synthetic dataset in Blender with the scenes needed for both training and evaluation. The idea was to have a synthetic dataset with reliable ground truth that we could manipulate to align with conventions and assumptions for in-distribution training data used for SAM 3D and then move on to public datasets and benchmarks.
