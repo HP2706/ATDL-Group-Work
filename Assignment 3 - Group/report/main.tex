@@ -393,16 +393,20 @@ The training-free multi-view methods perform best. Stream3D exceeds fusion adapt
 
 \subsection{Weaknesses}
 
-As noted in Section~\ref{sec:datagen}, our training data deliberately follows
-SAM 3D's simpler pre- and mid-training stages to first establish a baseline,
-and therefore rarely requires combining evidence across frames, so the model
-has little incentive to exploit complementary observations from the video
-Clips in which different frames reveal complementary parts of the target. The video analogue of SAM 3D's artificial occluders~\cite{sam3d},
-would encourage the adapter to aggregate evidence across frames,
-whilst retaining learned shape priors for surfaces that remain unseen.
-Furthermore, our training scenes are limited in diversity:
+As noted in Section~\ref{sec}, our training data follows
+SAM 3D's simpler pre- and mid-training stages to establish a baseline,
+and rarely requires combining evidence across frames, giving the model
+little incentive to exploit complementary video observations.
+Clips in which different frames reveal complementary parts of the target,
+analogous to SAM 3D's artificial occluders~\cite{sam3d},
+would encourage the adapter to aggregate evidence across frames
+while retaining learned shape priors for unseen surfaces.
+Furthermore, our training scenes lack diversity:
 objects float without contact, supporting surfaces, or clutter,
-which likely widens the gap to scanned objects.
+likely widening the gap to scanned objects.
+The maximum camera rotation of 70 degrees also limits additional
+information across frames, potentially underestimating the benefits
+of video-based 3D reconstruction.
 
 \subsection{Hypothesis Assessment}
 Our hypotheses are supported in distribution and rejected out of distribution.
@@ -461,7 +465,7 @@ After discussion, we agreed to study whether video context from a self-supervise
 \textbf{Hans Peter Lyngsøe:} 
 
 Developed the V-Jepa attention pooling methods along with the Appended video token method. Implemented the two multi-view fusion baseline methods and the evaluation infrastructure. Ran the experiments, created result tables and the adapted SAM 3D figure. Wrote the abstract, experimental setup  and parts of the Background, Architecture and Discussion with Mathias. \\
-\textbf{Harald Franck:} Generated the synthetic training dataset by running the data generation pipeline, adapting it to use Poly Haven backgrounds, made the objects suitable for redistribution and wrote parts of the data generation section with Julian.\\
+\textbf{Harald Franck:} Generated the synthetic training dataset by running the data generation pipeline, adapting it to use Poly Haven backgrounds, made the objects suitable for redistribution and wrote parts of the data generation section and discussion section with Julian.\\
 \textbf{Mathias Elmegaard Nielsen:} Developed the fusion adapter method and discussed the experimental setup with Hans Peter. Wrote the introduction, results, conclusion and parts of the Background, Architecture and Discussion with Hans Peter.\\
 \textbf{Julian Barragan:} Developed the pipeline for data generation and designed the dataset specification for our synthetic dataset based on pre- and mid-training considerations similar to the ones in the original SAM 3D paper\cite{sam3d}. Tested the pipeline locally on a first clip and 500 GSO evaluation clips, and ran SAM 3D on our renders in the cloud to ensure that the generated data adhered to the specification and aligned with SAM 3D's conventions and assumptions, before the 10,000 training clips were generated. Wrote parts of the data generation section with Harald Franck and edited most sections, trimming redundancy and proofreading.
 
