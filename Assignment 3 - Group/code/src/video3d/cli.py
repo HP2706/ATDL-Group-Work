@@ -140,11 +140,13 @@ def prepare(*overrides: str, condition: str = "c3", env: str | None = None,
 
 
 def evaluate_json(path: str, run: str, checkpoint: str | None = None,
-                  epoch: int | None = None, trigger: str = 'ad_hoc', limit: int | None = None) -> None:
+                  epoch: int | None = None, trigger: str = 'ad_hoc', limit: int | None = None,
+                  loss_only: bool = False) -> None:
     from video3d.evaluate import evaluate as execute
     cfg = read_config(path)
     apply_process_env(cfg)
-    execute(cfg, run, checkpoint=checkpoint, epoch=epoch, trigger=trigger, limit=limit)
+    execute(cfg, run, checkpoint=checkpoint, epoch=epoch, trigger=trigger, limit=limit,
+            loss_only=loss_only)
 
 
 def sweep(*overrides: str, condition: str = "c3", env: str | None = None,

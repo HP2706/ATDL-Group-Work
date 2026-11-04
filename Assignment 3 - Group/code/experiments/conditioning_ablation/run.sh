@@ -45,6 +45,7 @@ elif [[ "$variant" == sam3d-baseline ]]; then
   "$python" -m video3d eval-json "$evaluation" zero-shot
 else
   test -f "$root/targets-ready.json"
+  "$python" -c 'import sys;from video3d.config import read_config;from experiments.conditioning_ablation.configure import validate_evaluation_schedule;validate_evaluation_schedule(read_config(sys.argv[1]))' "$config"
   "$python" -m video3d train-json "$config"
   run_dir="$root/results/$("$python" -c 'import sys;from video3d.config import apply_process_env, read_config;print(read_config(sys.argv[1]).run_name)' "$config")"
   RUN_CONFIG="$config" RUN_DIRECTORY="$run_dir" EXPERIMENT_ROOT="$root" "$python" - <<'PYTHON'

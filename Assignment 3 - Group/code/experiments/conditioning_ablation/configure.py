@@ -33,6 +33,16 @@ def variants() -> list[Variant]:
     return [Variant.model_validate(row) for row in json.loads(Path(__file__).with_name('variants.json').read_text())]
 
 
+def validate_evaluation_schedule(cfg: ExperimentConfig) -> None:
+    """Full synthetic matrix launches must retain both final evaluation stages."""
+    if cfg.data.source != 'synthetic' or not cfg.train.epochs:
+        return
+    if not cfg.val.final_full_validation:
+        raise ValueError('Full synthetic runs require val.final_full_validation=True')
+    if not cfg.val.heavy_data_root or not ({-1, cfg.train.epochs} & set(cfg.val.heavy_epochs)):
+        raise ValueError('Full synthetic runs require final heavy GSO evaluation and its data root')
+
+
 def variant_config(base: ExperimentConfig, variant: Variant, run_name: str) -> ExperimentConfig:
     """Only these three model switches differ; all image/video preprocessing stays matched."""
     width = 1024 if variant.encoder == 'dinov2_frames' and not base.fake_sam3d else base.adapter.d_vid

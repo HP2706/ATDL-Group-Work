@@ -1,5 +1,101 @@
 Jeg ved ikke hvor lang tid det ville tage at køre data pipelinen igen og hvor svært det ville være at køre igen, men jeg tror det kunne være fedt at have nogle videor hvor objekterne er mere occluded, f.eks i sam3d paper gør de netop det bevidst så modellen er incentiveret til at forudse objektet ud fra en intern model den bygger af objektet og ikke bare information på billedet. Det samme for vores model skal vi incentivere den til at samle information fra flere billeder hvilket den jo ikke rigtigt behøver hvis det meste af objektet kan ses på alle billederne. igen vi kan også bare nævne det som en weakness, men hvis vi kan nå at have det med kunne det være meget fedt.
 
+## 2026-10-31: Completed run audit and matched final results
+
+Checked 2026-10-31T08:55:29.835624+01:00. No UCloud jobs are currently RUNNING in the project. All eight training runs completed five epochs and 3,240 updates. The six original models completed epoch-1 and epoch-5 heavy GSO (200/200 each) and final native validation (1,306/1,306 each). All three pretrained baselines completed full native validation. Both resumed baseline entrypoints exited zero. Completion is established from saved per-object IDs, completion markers and script exits, rather than provider SUCCESS alone.
+
+This section supersedes the historical live-progress tables and launch estimates below. The original log entries remain as dated evidence.
+
+### Native validation: all 1,306 reference cases
+
+| Method | IoU % ↑ | Aligned IoU % ↑ | Chamfer ↓ | F@2% ↑ | F@5% ↑ |
+|---|---:|---:|---:|---:|---:|
+| SAM 3D (frozen) | 9.74 | 13.48 | 0.3085 | 35.13 | 52.89 |
+| MV-SAM3D | 10.71 | 14.52 | 0.2970 | 36.94 | 54.85 |
+| Stream3D | 10.54 | 14.51 | 0.2986 | 37.06 | 54.94 |
+| SAM 3D + LoRA (single frame) | 12.29 | 17.21 | 0.2550 | 42.56 | 61.42 |
+| Fusion adapter | 11.41 | 15.36 | 0.2616 | 40.19 | 60.07 |
+| Fusion adapter + SAM LoRA | 14.05 | 19.26 | 0.2238 | 46.86 | 66.55 |
+| V-JEPA attention pooling | 5.71 | 7.00 | 0.4113 | 20.78 | 35.60 |
+| V-JEPA pooling + SAM LoRA | 9.63 | 12.20 | 0.3108 | 32.61 | 51.32 |
+| DINOv2 attention pooling | 6.51 | 7.85 | 0.4126 | 22.34 | 37.22 |
+
+Protocol: 25-step Stage-1 flow, up to 20,000 metric points, 100 similarity-ICP iterations, identical sample-ID manifest and 16-frame window. Single-image methods receive the selected reference. IoU is unaligned; other displayed metrics use similarity alignment. V-JEPA pooling has three empty predictions, zero IoU on those cases, and 1,303 valid aligned scores. All other rows have 1,306 valid outputs. Chamfer uses longest-side-two coarse normalization. Fusion + SAM LoRA is best on each displayed native-validation metric; this is one training seed, not a statistical significance claim.
+
+### GSO: matched 200-object heavy evaluation
+
+| Method | Coarse IoU % ↑ | Mesh Chamfer ↓ | Mesh F@2% ↑ | Mesh F@5% ↑ |
+|---|---:|---:|---:|---:|
+| SAM 3D (frozen) | 20.41 | 0.0736 | 62.90 | 80.44 |
+| MV-SAM3D | 24.75 | 0.0439 | 73.66 | 89.81 |
+| Stream3D | 25.13 | 0.0420 | 75.38 | 91.10 |
+| SAM 3D + LoRA (single frame) | 20.18 | 0.0690 | 62.22 | 81.89 |
+| Fusion adapter | 18.29 | 0.0830 | 58.30 | 77.54 |
+| Fusion adapter + SAM LoRA | 19.46 | 0.0736 | 60.38 | 80.28 |
+| V-JEPA attention pooling | 5.21 | 0.2075 | 23.06 | 39.00 |
+| V-JEPA pooling + SAM LoRA | 10.43 | 0.1374 | 38.59 | 58.06 |
+| DINOv2 attention pooling | 8.10 | 0.1612 | 33.00 | 50.84 |
+
+Every row uses the exact same 200 IDs from `schedule.json`; baseline records were selected from their original 250-object runs. All predictions are non-empty. Protocol: 25 Stage-1 flow steps, 25 native Stage-2 refinement steps, 8,192 surface samples per direction and 100 similarity-ICP iterations. Mesh Chamfer sums directional point-to-triangle means in units of the GT longest side. Video models use 16 frames, multiview baselines four fixed views, single-image methods one. Stream3D is best on each displayed GSO metric. GSO mesh distances and native-validation voxel distances are different measurements.
+
+### Appended-token runs: training complete, matched evaluations absent
+
+| Method | Updates | Quick GSO cases | Coarse IoU % | Aligned IoU % | Chamfer | F@2% | F@5% | Empty |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Appended video tokens | 3,240 | 200/200 | 13.82 | 20.03 | 0.2121 | 31.66 | 71.80 | 3 |
+| Appended video tokens + SAM LoRA | 3,240 | 200/200 | 18.35 | 22.72 | 0.1877 | 32.32 | 76.09 | 0 |
+
+These epoch-5 EMA results use four shortcut steps, 2,048 metric points and 40 ICP iterations. The frozen-backbone variant has 197 valid aligned scores. Their 25-step full validation and refined-mesh GSO evaluations are **not run**, rather than running or complete. The report includes both models in the main tables, marks quick GSO entries with Q, and retains the full quick scores in a separate ablation table. Final epoch-average training losses are 0.189765 (frozen) and 0.169791 (SAM LoRA); fixed-grid GSO flow losses are 0.348441 and 0.230923, respectively. Training and evaluation losses are distinct measurements.
+
+### Exact jobs and persistent artifacts
+
+Links below open the job or persistent UCloud file browser. `/12398721/` is mounted as `/work/MathiasElmegaardNielsen#6181/`. Training folders retain `epoch_01.pt` through `epoch_05.pt`, `epochs.json`, `training-complete.json`, configs and metrics. Heavy evaluation folders retain `evaluation.json` with checkpoint SHA256, per-object JSONL, completion marker and prediction artifacts.
+
+| Model | Training job | Epoch-1 heavy job | Epoch-5 heavy + full-validation job | Saved run |
+|---|---|---|---|---|
+| Fusion adapter | [12439375](https://cloud.sdu.dk/app/jobs/properties/12439375) | [12440013](https://cloud.sdu.dk/app/jobs/properties/12440013) | [12440256](https://cloud.sdu.dk/app/jobs/properties/12440256) | [checkpoints and training records](https://cloud.sdu.dk/app/files?path=%2F12398721%2Fconditioning-full-q98-2026-10-30-08-40-00%2Fresults%2Ffusion-frozen-full-q98-seed42-2026-10-30-08-40-00) |
+| Fusion adapter + SAM LoRA | [12439376](https://cloud.sdu.dk/app/jobs/properties/12439376) | [12440014](https://cloud.sdu.dk/app/jobs/properties/12440014) | [12440296](https://cloud.sdu.dk/app/jobs/properties/12440296) | [checkpoints and training records](https://cloud.sdu.dk/app/files?path=%2F12398721%2Fconditioning-full-q98-2026-10-30-08-40-00%2Fresults%2Ffusion-sam-lora-full-q98-seed42-2026-10-30-08-40-00) |
+| V-JEPA attention pooling | [12439378](https://cloud.sdu.dk/app/jobs/properties/12439378) | [12440015](https://cloud.sdu.dk/app/jobs/properties/12440015) | [12440229](https://cloud.sdu.dk/app/jobs/properties/12440229) | [checkpoints and training records](https://cloud.sdu.dk/app/files?path=%2F12398721%2Fconditioning-full-q98-2026-10-30-08-40-00%2Fresults%2Fpooler-frozen-full-q98-seed42-2026-10-30-08-40-00) |
+| V-JEPA pooling + SAM LoRA | [12439379](https://cloud.sdu.dk/app/jobs/properties/12439379) | [12440016](https://cloud.sdu.dk/app/jobs/properties/12440016) | [12440247](https://cloud.sdu.dk/app/jobs/properties/12440247) | [checkpoints and training records](https://cloud.sdu.dk/app/files?path=%2F12398721%2Fconditioning-full-q98-2026-10-30-08-40-00%2Fresults%2Fpooler-sam-lora-full-q98-seed42-2026-10-30-08-40-00) |
+| DINOv2 attention pooling | [12439418](https://cloud.sdu.dk/app/jobs/properties/12439418) | [12440017](https://cloud.sdu.dk/app/jobs/properties/12440017) | [12440179](https://cloud.sdu.dk/app/jobs/properties/12440179) | [checkpoints and training records](https://cloud.sdu.dk/app/files?path=%2F12398721%2Fconditioning-full-q98-2026-10-30-08-40-00%2Fresults%2Fdinov2-pooler-full-q98-seed42-2026-10-30-08-40-00) |
+| SAM 3D + LoRA (single frame) | [12439491](https://cloud.sdu.dk/app/jobs/properties/12439491) | [12440018](https://cloud.sdu.dk/app/jobs/properties/12440018) | [12440292](https://cloud.sdu.dk/app/jobs/properties/12440292) | [checkpoints and training records](https://cloud.sdu.dk/app/files?path=%2F12398721%2Fsam-native-2026-10-30-09-49-38%2Fresults%2Fsam3d-random-frame-lora-2026-10-30-09-49-38) |
+| Appended video tokens | [12440551](https://cloud.sdu.dk/app/jobs/properties/12440551) | Not run | Not run | [checkpoints and training records](https://cloud.sdu.dk/app/files?path=%2F12398721%2Fappend-conditioning-2026-10-30-19-56-04%2Fresults%2Fappend-frozen-full-q98-seed42-2026-10-30-19-56-04) |
+| Appended video tokens + SAM LoRA | [12440552](https://cloud.sdu.dk/app/jobs/properties/12440552) | Not run | Not run | [checkpoints and training records](https://cloud.sdu.dk/app/files?path=%2F12398721%2Fappend-conditioning-2026-10-30-19-56-04%2Fresults%2Fappend-sam-lora-full-q98-seed42-2026-10-30-19-56-04) |
+
+| Baseline | GSO-250 job | Full-validation job | Full-validation records | GSO-250 records |
+|---|---|---|---|---|
+| SAM 3D (frozen) | [12439137](https://cloud.sdu.dk/app/jobs/properties/12439137) | [12440297](https://cloud.sdu.dk/app/jobs/properties/12440297) | [1,306-case JSONL](https://cloud.sdu.dk/app/files?path=%2F12398721%2Fheavy-eval-2026-10-30-12-01-58%2Fresults%2Ffull-validation-baselines%2Fsam3d%2Fevaluation.jsonl) | [250-case JSONL; select matched 200 IDs](https://cloud.sdu.dk/app/files?path=%2F12398721%2Fgso-baselines-250-2026-10-29-22-33-26%2Fresults%2Fsam3d%2Fevaluation.jsonl) |
+| MV-SAM3D | [12439138](https://cloud.sdu.dk/app/jobs/properties/12439138) | [12440565](https://cloud.sdu.dk/app/jobs/properties/12440565) (resumes [12440298](https://cloud.sdu.dk/app/jobs/properties/12440298)) | [1,306-case JSONL](https://cloud.sdu.dk/app/files?path=%2F12398721%2Fheavy-eval-2026-10-30-12-01-58%2Fresults%2Ffull-validation-baselines%2Fmvsam3d%2Fevaluation.jsonl) | [250-case JSONL; select matched 200 IDs](https://cloud.sdu.dk/app/files?path=%2F12398721%2Fgso-baselines-250-2026-10-29-22-33-26%2Fresults%2Fmvsam3d%2Fevaluation.jsonl) |
+| Stream3D | [12439139](https://cloud.sdu.dk/app/jobs/properties/12439139) | [12440566](https://cloud.sdu.dk/app/jobs/properties/12440566) (resumes [12440299](https://cloud.sdu.dk/app/jobs/properties/12440299)) | [1,306-case JSONL](https://cloud.sdu.dk/app/files?path=%2F12398721%2Fheavy-eval-2026-10-30-12-01-58%2Fresults%2Ffull-validation-baselines%2Fstream3d%2Fevaluation.jsonl) | [250-case JSONL; select matched 200 IDs](https://cloud.sdu.dk/app/files?path=%2F12398721%2Fgso-baselines-250-2026-10-29-22-33-26%2Fresults%2Fstream3d%2Fevaluation.jsonl) |
+
+| Evaluation | Exact saved record | Checkpoint identity |
+|---|---|---|
+| dinov2-pooler-epoch01-gso-heavy | [per-object JSONL](https://cloud.sdu.dk/app/files?path=%2F12398721%2Fheavy-eval-2026-10-30-12-01-58%2Fresults%2Fevaluations%2Fdinov2-pooler-epoch01-gso200-heavy25-2026-10-30-12-01-58%2Fdinov2-pooler-epoch01-gso200-heavy25-2026-10-30-12-01-58.jsonl) | `2aaa60e27b81ede8513e2dc11682ae85c55a2b2453ff234094c2aadf0da105e8` |
+| dinov2-pooler-epoch05-full-validation | [per-object JSONL](https://cloud.sdu.dk/app/files?path=%2F12398721%2Fheavy-eval-2026-10-30-12-01-58%2Fresults%2Fevaluations%2Fdinov2-pooler-epoch05-fullval1306-flow25-2026-10-30-12-01-58%2Fdinov2-pooler-epoch05-fullval1306-flow25-2026-10-30-12-01-58.jsonl) | `9d67877a47c7f53af68abdf127211f89bf8cbfceadd65d9b8716c715b60b4cce` |
+| dinov2-pooler-epoch05-gso-heavy | [per-object JSONL](https://cloud.sdu.dk/app/files?path=%2F12398721%2Fheavy-eval-2026-10-30-12-01-58%2Fresults%2Fevaluations%2Fdinov2-pooler-epoch05-gso200-heavy25-2026-10-30-12-01-58%2Fdinov2-pooler-epoch05-gso200-heavy25-2026-10-30-12-01-58.jsonl) | `9d67877a47c7f53af68abdf127211f89bf8cbfceadd65d9b8716c715b60b4cce` |
+| fusion-frozen-epoch01-gso-heavy | [per-object JSONL](https://cloud.sdu.dk/app/files?path=%2F12398721%2Fheavy-eval-2026-10-30-12-01-58%2Fresults%2Fevaluations%2Ffusion-frozen-epoch01-gso200-heavy25-2026-10-30-12-01-58%2Ffusion-frozen-epoch01-gso200-heavy25-2026-10-30-12-01-58.jsonl) | `498819447c188197cc805634d7263b1e7fd0068dcf64582252eacdc7865f2d78` |
+| fusion-frozen-epoch05-full-validation | [per-object JSONL](https://cloud.sdu.dk/app/files?path=%2F12398721%2Fheavy-eval-2026-10-30-12-01-58%2Fresults%2Fevaluations%2Ffusion-frozen-epoch05-fullval1306-flow25-2026-10-30-12-01-58%2Ffusion-frozen-epoch05-fullval1306-flow25-2026-10-30-12-01-58.jsonl) | `f029b0833e6ce1508b1033d514196ec93300d19569d11110a9262b90a9af1990` |
+| fusion-frozen-epoch05-gso-heavy | [per-object JSONL](https://cloud.sdu.dk/app/files?path=%2F12398721%2Fheavy-eval-2026-10-30-12-01-58%2Fresults%2Fevaluations%2Ffusion-frozen-epoch05-gso200-heavy25-2026-10-30-12-01-58%2Ffusion-frozen-epoch05-gso200-heavy25-2026-10-30-12-01-58.jsonl) | `f029b0833e6ce1508b1033d514196ec93300d19569d11110a9262b90a9af1990` |
+| fusion-sam-lora-epoch01-gso-heavy | [per-object JSONL](https://cloud.sdu.dk/app/files?path=%2F12398721%2Fheavy-eval-2026-10-30-12-01-58%2Fresults%2Fevaluations%2Ffusion-sam-lora-epoch01-gso200-heavy25-2026-10-30-12-01-58%2Ffusion-sam-lora-epoch01-gso200-heavy25-2026-10-30-12-01-58.jsonl) | `8e8fd5b962219170746d0370bf2b21b82d3d7463fd7d25f0e669f09cad2408aa` |
+| fusion-sam-lora-epoch05-full-validation | [per-object JSONL](https://cloud.sdu.dk/app/files?path=%2F12398721%2Fheavy-eval-2026-10-30-12-01-58%2Fresults%2Fevaluations%2Ffusion-sam-lora-epoch05-fullval1306-flow25-2026-10-30-12-01-58%2Ffusion-sam-lora-epoch05-fullval1306-flow25-2026-10-30-12-01-58.jsonl) | `f909e3cad221202487befd5dbaf0ec72450fda0581b49bb0b30f7a486963b625` |
+| fusion-sam-lora-epoch05-gso-heavy | [per-object JSONL](https://cloud.sdu.dk/app/files?path=%2F12398721%2Fheavy-eval-2026-10-30-12-01-58%2Fresults%2Fevaluations%2Ffusion-sam-lora-epoch05-gso200-heavy25-2026-10-30-12-01-58%2Ffusion-sam-lora-epoch05-gso200-heavy25-2026-10-30-12-01-58.jsonl) | `f909e3cad221202487befd5dbaf0ec72450fda0581b49bb0b30f7a486963b625` |
+| pooler-frozen-epoch01-gso-heavy | [per-object JSONL](https://cloud.sdu.dk/app/files?path=%2F12398721%2Fheavy-eval-2026-10-30-12-01-58%2Fresults%2Fevaluations%2Fpooler-frozen-epoch01-gso200-heavy25-2026-10-30-12-01-58%2Fpooler-frozen-epoch01-gso200-heavy25-2026-10-30-12-01-58.jsonl) | `f11c1eef4686764a872d3987645d9d1e132def5f978ff76898857f2b1c33630d` |
+| pooler-frozen-epoch05-full-validation | [per-object JSONL](https://cloud.sdu.dk/app/files?path=%2F12398721%2Fheavy-eval-2026-10-30-12-01-58%2Fresults%2Fevaluations%2Fpooler-frozen-epoch05-fullval1306-flow25-2026-10-30-12-01-58%2Fpooler-frozen-epoch05-fullval1306-flow25-2026-10-30-12-01-58.jsonl) | `01e299108792cf3315e1c79cfcdf653ad7abe788c977137cdf66236cd7feff79` |
+| pooler-frozen-epoch05-gso-heavy | [per-object JSONL](https://cloud.sdu.dk/app/files?path=%2F12398721%2Fheavy-eval-2026-10-30-12-01-58%2Fresults%2Fevaluations%2Fpooler-frozen-epoch05-gso200-heavy25-2026-10-30-12-01-58%2Fpooler-frozen-epoch05-gso200-heavy25-2026-10-30-12-01-58.jsonl) | `01e299108792cf3315e1c79cfcdf653ad7abe788c977137cdf66236cd7feff79` |
+| pooler-sam-lora-epoch01-gso-heavy | [per-object JSONL](https://cloud.sdu.dk/app/files?path=%2F12398721%2Fheavy-eval-2026-10-30-12-01-58%2Fresults%2Fevaluations%2Fpooler-sam-lora-epoch01-gso200-heavy25-2026-10-30-12-01-58%2Fpooler-sam-lora-epoch01-gso200-heavy25-2026-10-30-12-01-58.jsonl) | `2c6b0a6d004431e83b93274aa37924ac5e23a35391056bc65f8092d2dd63c43e` |
+| pooler-sam-lora-epoch05-full-validation | [per-object JSONL](https://cloud.sdu.dk/app/files?path=%2F12398721%2Fheavy-eval-2026-10-30-12-01-58%2Fresults%2Fevaluations%2Fpooler-sam-lora-epoch05-fullval1306-flow25-2026-10-30-12-01-58%2Fpooler-sam-lora-epoch05-fullval1306-flow25-2026-10-30-12-01-58.jsonl) | `f5e3cdd24023e1ea98ce30ac03f59a98be083817adfad4dd0ea57b183e778f3f` |
+| pooler-sam-lora-epoch05-gso-heavy | [per-object JSONL](https://cloud.sdu.dk/app/files?path=%2F12398721%2Fheavy-eval-2026-10-30-12-01-58%2Fresults%2Fevaluations%2Fpooler-sam-lora-epoch05-gso200-heavy25-2026-10-30-12-01-58%2Fpooler-sam-lora-epoch05-gso200-heavy25-2026-10-30-12-01-58.jsonl) | `f5e3cdd24023e1ea98ce30ac03f59a98be083817adfad4dd0ea57b183e778f3f` |
+| sam3d-random-frame-lora-epoch01-gso-heavy | [per-object JSONL](https://cloud.sdu.dk/app/files?path=%2F12398721%2Fheavy-eval-2026-10-30-12-01-58%2Fresults%2Fevaluations%2Fsam3d-random-frame-lora-epoch01-gso200-heavy25-2026-10-30-12-01-58%2Fsam3d-random-frame-lora-epoch01-gso200-heavy25-2026-10-30-12-01-58.jsonl) | `e3260e9fe6f137b2768cafdb62c2e1c99fee5141deb62d7d5d354b4e72cbb2d5` |
+| sam3d-random-frame-lora-epoch05-full-validation | [per-object JSONL](https://cloud.sdu.dk/app/files?path=%2F12398721%2Fheavy-eval-2026-10-30-12-01-58%2Fresults%2Fevaluations%2Fsam3d-random-frame-lora-epoch05-fullval1306-flow25-2026-10-30-12-01-58%2Fsam3d-random-frame-lora-epoch05-fullval1306-flow25-2026-10-30-12-01-58.jsonl) | `066539e77e703d5d6f294ea6f1347574412e318cf80ed8360a742ab3d0af61de` |
+| sam3d-random-frame-lora-epoch05-gso-heavy | [per-object JSONL](https://cloud.sdu.dk/app/files?path=%2F12398721%2Fheavy-eval-2026-10-30-12-01-58%2Fresults%2Fevaluations%2Fsam3d-random-frame-lora-epoch05-gso200-heavy25-2026-10-30-12-01-58%2Fsam3d-random-frame-lora-epoch05-gso200-heavy25-2026-10-30-12-01-58.jsonl) | `066539e77e703d5d6f294ea6f1347574412e318cf80ed8360a742ab3d0af61de` |
+| append-frozen-gso-quick | [per-object JSONL](https://cloud.sdu.dk/app/files?path=%2F12398721%2Fappend-conditioning-2026-10-30-19-56-04%2Fresults%2Feval%2Fappend-frozen-full-q98-seed42-2026-10-30-19-56-04.jsonl) | Epoch-5 EMA, quick protocol |
+| append-sam-lora-gso-quick | [per-object JSONL](https://cloud.sdu.dk/app/files?path=%2F12398721%2Fappend-conditioning-2026-10-30-19-56-04%2Fresults%2Feval%2Fappend-sam-lora-full-q98-seed42-2026-10-30-19-56-04.jsonl) | Epoch-5 EMA, quick protocol |
+
+Machine-readable audit: [table snapshot](report/results/table-snapshot-2026-10-31.json), including exact source paths, downloaded-file SHA256 hashes, valid counts, checkpoint hashes and provider jobs. [Per-case metrics](report/results/per-case-metrics-2026-10-31.csv) retain 15,154 records across the audited evaluations. Original GSO-250 files are retained remotely; the audit uses only the registered shared 200-object subset.
+
+Stage-2 development is separate from this benchmark: integrated real-source-target preflight [12440583](https://cloud.sdu.dk/app/jobs/properties/12440583) reached provider SUCCESS; the existing [real-source-mesh smoke record](#real-source-mesh-stage-2-fine-tuning-and-refined-validation-2026-10-30) documents its small training/resume/refinement check. It is not a completed full-data Stage-2 training experiment and adds no row to the main tables.
+
+
 ### GSO evaluation: the same 200 objects, coarse geometry
 
 All six trained epoch-1 checkpoints completed evaluation on exactly the same 200 GSO object IDs. Older baseline results below are recomputed from their saved per-object scores on that exact subset of the original 250 objects. Loss was not computed in these geometry evaluations.
@@ -643,3 +739,246 @@ status check because the GPU retry was queued. Current immutable evaluation
 source is `ea2b70d` in `repo-native-reference`. A follow-up is active to repair
 routine failures and verify submissions without duplicates. It must read actual
 script exits because UCloud can mark a failed entrypoint SUCCESS.
+
+
+## 2026-10-30: Stage-2 supervision recovery audit
+
+The HF `ATDLgroup/SAM3Dvid` revision `16f95cb82a2fbb8b50f866ca2c711bc1146ff223`
+exports RGB, masks, poses and 64-cubed surface occupancy, but does not publish the
+original asset GLBs. This is an export limitation, not a limitation of the source
+assets. Generation normalizes and triangulates source assets, retaining
+`mesh.glb`, `mesh.ply`, `normalize.json` and per-asset metadata before voxelization.
+Full-format clips additionally retain depth, amodal masks and foreground RGBA;
+the packed export intentionally omits those arrays.
+
+Recovery was verified remotely for asset `20cc2cf3ed3b40c9977cf45b2501bbbd`
+(the dinosaur in validation clip `01000007`, object 3). Downloaded original GLB:
+3,348,824 bytes, 25,008 primitive vertices, 44,058 triangles, one material and one
+embedded image/texture. SHA256 matches the HF attribution manifest. All 4,515
+attributed asset IDs map to Objaverse download paths; only this one file has been
+downloaded and hash-verified, so bulk availability is not yet established.
+Evidence and recovered GLB are preserved at
+`/work/MathiasElmegaardNielsen#6181/stage2-recovery-audit-2026-10-30/`.
+
+SAM3D's pretrained `slat_encoder.ckpt` and config are already cached. The encoder
+expects sparse 1,024-channel inputs and emits 8-channel latent features, so a raw
+mesh is not directly a Stage-2 flow target. Next verification must recover exact
+normalization, reproduce stored voxel support, prepare compatible sparse surface
+features, encode/decode one asset, and check geometry and appearance before any
+bulk target caching or training launch. Reuse recovered source materials rather
+than treating lit composited RGB as an intrinsic texture target. Keep held-out
+target assets separate from training targets. No Stage-2 training was launched;
+existing baseline evaluations were left running.
+
+
+
+## 2026-10-30: Original asset download and optional Stage-2 training draft
+
+Submitted native CPU download job `12440504` (4 vCPU, eight download workers,
+4-hour provider cap). It uses the existing Objaverse download helper with exact
+HF attribution IDs, incremental `.part` transfers and SHA256 verification.
+Persistent root: `/work/MathiasElmegaardNielsen#6181/sam3dvid-original-assets-2026-10-30`.
+Expected assets: 4,515 / 39,118,830,396 bytes. Provider reports SUCCESS, but this
+is not completion: read-only `/api/files/download` access found no completion
+or exit marker; the latest status journal records 1,725 verified assets /
+15,075,835,092 bytes, zero failures. New native verification submission was
+rejected with `NOT_ENOUGH_STORAGE_CREDITS`. Storage wallet shows 25,000/25,000
+GB and no remaining capacity. Preserve files and resume after quota recovery.
+
+The user requested a 10-minute wait and coordination with the storage agent.
+After waiting, contacted task `Find video token conditioning chat`; that task
+reports removal of 542.745 GB of authorized Omni archives while preserving the
+extracted data/GSO/results/checkpoints. Accounting still shows the old value.
+This task performs no deletion and must not duplicate that cleanup.
+
+The isolated `stage2-training` worktree extends the existing trainer/evaluator,
+not a second training loop: `train.stage=stage2`, verified per-asset sparse
+latent cache, native normalization, equal per-object flow loss, Stage-2
+cross-attention LoRA, optional pinned frozen Stage-1 checkpoint/adapter, existing
+EMA/checkpoint/resume, and refined evaluation. Coarse-only scoring is rejected
+for Stage-2 geometry evaluation. Best checkpoint uses Stage-2 validation flow
+loss. Target manifests pin source geometry/normalization hashes and SAM revision;
+generated predictions are not accepted as source-mesh targets.
+
+26 selected Stage-2/configuration/heavy-protocol tests pass, plus Ruff F and diff
+checks. Five existing upstream parity tests could not import `sam3d_objects` in
+the laptop venv; the remote SAM environment and real GPU verification remain
+pending quota recovery. Native GPU smoke scripts are prepared locally under
+`/tmp/stage2-assets-launch/`, explicitly using non-scientific fixture latents.
+No Stage-2 scientific training has been launched and this draft is not merged
+into main. Source-mesh rendering/sparse-feature preparation and encoder/decoder
+round-trip verification are still required before actual Stage-2 target caching.
+See `code/docs/stage2-training.md` for contracts and resolved limitations.
+
+
+## 2026-10-30: Asset download completed; native Stage-2 backend smoke passed
+
+Storage recovered to 472 GB remaining. Native CPU resume job `12440545`
+completed all 4,515 original textured GLBs, 39,118,830,396 bytes SHA256 verified.
+Both `complete.json` and foreground `job-exit.json` (exit 0) were read. Elapsed
+resume pass 442.10 seconds. Persistent root is
+`/work/MathiasElmegaardNielsen#6181/sam3dvid-original-assets-2026-10-30`.
+No cached source data was deleted by this task.
+
+Native GPU preflight `12440560` passed two sparse Stage-2 forward/backward and
+optimizer updates, frozen Stage-1 checkpoint/LoRA restoration, and 25-step native
+Stage-2 generation/mesh decoding: 194,210 vertices, 1,376,256 trainable Stage-2
+LoRA parameters, 18,971,739,136 bytes peak allocated memory. Foreground exit 0
+and provider terminal SUCCESS verified; allocation released automatically.
+This used explicit non-scientific fixture latents. No scientific Stage-2 result
+or actual source-mesh target cache is claimed.
+
+First preflight `12440547` exposed an unregistered native pipeline generator;
+fixed by registering the SLAT generator before base freezing/LoRA injection.
+Second `12440549` exposed an absent `no_shortcut` state on plain FlowMatching;
+fixed using the backbone's explicit shortcut contract and restoring applicable
+sampler state. Regression tests cover both defects. 27 tests passed in the native
+remote SAM environment, including upstream loss parity. Immutable successful
+source archive SHA256 `0a6f87c721cab1e4ef5bfae250ddd7ab67823070f3199943571640a8fae4657e`;
+GPU evidence under `stage2-development-2026-10-30/check3/`.
+
+Remaining preparation: canonical source-mesh normalization, sparse multiview
+feature extraction and actual SLAT encoder/decoder target round-trip checks.
+The optional backend and cache encoder are implemented in the isolated
+`stage2-training` worktree. The full shared-trainer Stage-2 checkpoint/resume
+loop has not yet been exercised with native sparse targets. Existing source
+checkpoints and historical evaluation outputs remain preserved.
+
+### Original downloader recovery support, 2026-10-30
+
+Updated the maintained `scripts/generation/download_objaverse.py`, retaining the seeded
+TRELLIS CSV mode and adding exact attribution-manifest selection plus cached mapping
+reuse. Existing files now require SHA256 verification; corrupt copies and prior completion
+records are preserved. Partial downloads resume. The index contains only verified
+successful downloads, source attribution and manifest digest; compact progress and
+completion records include selected identity, bytes and failures. Failed assets produce
+a nonzero process exit, avoiding misleading provider-success-only checks.
+
+Verification: five focused tests passed (exact selection/order, valid cache reuse,
+corrupt-cache recovery/preservation, failed-download accounting and exit propagation,
+HTTP Range resume, duplicate/missing mapping rejection, original seeded CSV selection).
+Ruff F checks and git diff checks passed. Native CPU verification job **12440569**
+completed with provider SUCCESS and explicit exit 0: **4515/4515**, **39,118,830,396 bytes**,
+**0 fetched**, **10.8309 s**. Maintained downloader source SHA256:
+`aa5389158388` (prefix). Persistent evidence under
+`/work/MathiasElmegaardNielsen#6181/sam3dvid-original-assets-2026-10-30/`:
+`index.json`, `status.json`, `complete.json`, `original-script-verification.log`, and
+`original-script-verification-exit.json`. Verification allocation released automatically.
+Initial verification submission 12440567 could not execute because its batch script was
+not yet uploaded after an unavailable SSH port; provider reported SUCCESS without a
+script exit marker. Its missing-path placeholder was preserved; verified upload preceded
+retry 12440569. No asset data was deleted or redownloaded.
+
+### Real source-mesh Stage-2 fine-tuning and refined validation, 2026-10-30
+
+Completed the optional Stage-2 path in the existing trainer/evaluator, integrated
+with current main's shared fusion/pooler/appended-video-mask interface. The default
+Stage-2 LoRA settings inherit `sam3d.lora`, rank and alpha; independent nullable
+Stage-2 overrides are opt-in. LoRA attaches to 72 q/kv/output cross-attention
+projections in the sparse flow generator (rank 8, alpha 8, 1,376,256 trainable
+parameters in the native check). The corresponding Stage-1 checkpoint/EMA adapter
+and LoRA stay frozen, as do feature encoders and mesh/Gaussian decoders. Resolved
+attachments and frozen components are saved in `stage2-model.json`.
+
+Implemented source targets by reusing the Blender canonical normalizer/renderer:
+32 deterministic 518px textured views, frozen DINOv2-L/14-register prenorm features,
+bilinear projection and all-view pooling onto canonical 64³ surface cells, followed
+by the frozen native SLAT encoder. Original geometry and normalization hashes,
+feature recipe/source/weight hashes and target hashes are recorded. Real source
+assets `34cc975385564b139208212e9350c966` (train) and
+`20cc2cf3ed3b40c9977cf45b2501bbbd` (held-out dinosaur) both reproduce the exported
+surface occupancy exactly, IoU 1.0. No generated teacher latents were used as targets.
+
+Native B200 **12440583**: PASS, explicit exit 0, provider SUCCESS, automatic release.
+Verified two real-target optimizer updates, full trainer checkpoint/resume, refined
+held-out prediction and finite nonzero fusion/pooler/appended-token adapter gradients
+with the video encoder frozen. Rank-8/alpha-8 settings were inherited, not separately
+overridden. Recorded native training/evaluation peak allocation: 18,772,855,808 bytes.
+This is a bounded functional check, not production batch profiling or a scientific
+training result. The held-out source encoder/decoder round trip produced 203,390
+vertices with canonical mesh Chamfer L1 sum 0.00420447 (GT longest side 1), F@0.01
+0.96429. Those are target-recovery diagnostics, not model benchmark scores.
+
+Final in-distribution Stage-2 evaluation now preserves the original full held-out
+selection and generates refined meshes against recovered original source geometry.
+GSO still uses the audited same-case manifest. All three baseline evaluators share
+the same original-mesh preparation and exact surface analyzer for full-mesh mode.
+Coarse voxel and high-resolution surface protocols remain separate. Stage-2 flow-loss
+summaries are correctly labeled SLAT flow. Coarse-only epoch previews remain disabled.
+Full-dataset feature/target generation and scientific Stage-2 runs have not been launched.
+
+All **61** selected remote regression tests passed; local Ruff F checks and git diff
+checks passed. Evidence root:
+`/work/MathiasElmegaardNielsen#6181/stage2-real-targets-2026-10-30/`, including
+`ready-integrated.json`, `run-specification-integrated.json`,
+`preflight-integrated-exit.json`, `final-regression-complete.log` and
+`final-regression-exit.json`. Runtime source archive SHA256:
+`4972224a36cc66a878cfb7efacc7893e2591a5c2183971524a3c5e59887bc7fa`.
+Earlier 12440577 failed before training because fresh-image Blender libraries were
+missing; 12440579 passed real training/resume and refined evaluation but its round-trip
+test harness lacked `camera_registration`. Both failures/diagnostics were preserved;
+the integrated rerun fixed the runtime setup and test protocol. No existing training,
+validation jobs or source assets were changed or stopped.
+
+### 2026-10-31: Main-table inclusion and validation-loss audit
+
+Both appended-token models now appear in report Tables 2 and 3. Table 2 reports their saved native validation losses and marks missing full-set geometry with dashes. Table 3 marks their quick GSO IoU/loss with Q and leaves refined-mesh cells uncomputed. Quick and heavy geometry scores remain explicitly distinguished. A vertical rule separates the training-status labels from the methods, and a horizontal rule separates training-free from trained rows.
+
+| Model | Native validation loss (50 cases, EMA, update 3,240) | Exact training record |
+|---|---:|---|
+| fusion-frozen | 0.289479 | [metrics.jsonl](https://cloud.sdu.dk/app/files?path=%2F12398721%2Fconditioning-full-q98-2026-10-30-08-40-00%2Fresults%2Ffusion-frozen-full-q98-seed42-2026-10-30-08-40-00%2Fmetrics.jsonl) |
+| fusion-sam-lora | 0.238168 | [metrics.jsonl](https://cloud.sdu.dk/app/files?path=%2F12398721%2Fconditioning-full-q98-2026-10-30-08-40-00%2Fresults%2Ffusion-sam-lora-full-q98-seed42-2026-10-30-08-40-00%2Fmetrics.jsonl) |
+| pooler-frozen | 0.317693 | [metrics.jsonl](https://cloud.sdu.dk/app/files?path=%2F12398721%2Fconditioning-full-q98-2026-10-30-08-40-00%2Fresults%2Fpooler-frozen-full-q98-seed42-2026-10-30-08-40-00%2Fmetrics.jsonl) |
+| pooler-sam-lora | 0.239433 | [metrics.jsonl](https://cloud.sdu.dk/app/files?path=%2F12398721%2Fconditioning-full-q98-2026-10-30-08-40-00%2Fresults%2Fpooler-sam-lora-full-q98-seed42-2026-10-30-08-40-00%2Fmetrics.jsonl) |
+| dinov2-pooler | 0.321715 | [metrics.jsonl](https://cloud.sdu.dk/app/files?path=%2F12398721%2Fconditioning-full-q98-2026-10-30-08-40-00%2Fresults%2Fdinov2-pooler-full-q98-seed42-2026-10-30-08-40-00%2Fmetrics.jsonl) |
+| sam3d-random-frame-lora | 0.246227 | [metrics.jsonl](https://cloud.sdu.dk/app/files?path=%2F12398721%2Fsam-native-2026-10-30-09-49-38%2Fresults%2Fsam3d-random-frame-lora-2026-10-30-09-49-38%2Fmetrics.jsonl) |
+| append-frozen | 0.270981 | [metrics.jsonl](https://cloud.sdu.dk/app/files?path=%2F12398721%2Fappend-conditioning-2026-10-30-19-56-04%2Fresults%2Fappend-frozen-full-q98-seed42-2026-10-30-19-56-04%2Fmetrics.jsonl) |
+| append-sam-lora | 0.240991 | [metrics.jsonl](https://cloud.sdu.dk/app/files?path=%2F12398721%2Fappend-conditioning-2026-10-30-19-56-04%2Fresults%2Fappend-sam-lora-full-q98-seed42-2026-10-30-19-56-04%2Fmetrics.jsonl) |
+
+Loss uses the fixed native validation panel and flow-time grid [0.1, 0.5, 0.9], not the full 1,306 geometry cases. GSO quick losses are 0.348441 (appended frozen) and 0.230923 (appended + SAM LoRA), over 200 GSO objects; heavy GSO jobs did not compute loss. These are validation losses, not epoch-average training losses. Full source paths and SHA256 hashes are saved in the updated table snapshot.
+
+## 2026-10-31: Appended-token full evaluations submitted; quick scores withdrawn
+
+Both final epoch-5 EMA checkpoints now have dedicated provider-native B200 batch evaluations: [append-frozen: 12440741](https://cloud.sdu.dk/app/jobs/properties/12440741); [append-sam-lora: 12440742](https://cloud.sdu.dk/app/jobs/properties/12440742). Both were verified RUNNING after submission. Each pipeline runs heavy GSO-200 (25 flow steps in each stage, native meshes, 8,192 surface samples), full native validation (1,306 cases, 25-step flow) and a separate fixed-grid GSO loss pass. All exact IDs reuse the previous frozen schedule. Six-hour provider limits are fallbacks; foreground pipeline exit releases each dedicated allocation.
+
+Persistent root: `/work/MathiasElmegaardNielsen#6181/append-full-eval-2026-10-31-09-41-18`. Exact configs, payloads, source hashes and submission IDs are retained in [the launch record](report/results/append-full-evaluation-submission-2026-10-31.json). Per-model logs and exit markers are under `logs/`; per-scope outputs are under `results/evaluations/<evaluation_id>/`, with isolated GSO loss IDs to preserve heavy evaluation metadata.
+
+The original launch configs had `val.heavy_epochs=[]` and `val.final_full_validation=False`, despite the generator already enabling both. Corrected the remote launch configs to `[1,-1]`, the shared GSO root, and full validation enabled; preserved their original bytes in timestamped sibling backups. Historical training configs/checkpoints and previous quick evaluation artifacts remain intact. The shared batch runner now rejects full synthetic training launches that omit final heavy GSO or full validation; the focused regression test passes.
+
+Tables 2 and 3 retain both appended-token rows, remove all quick Q scores and use dashes for pending geometry/GSO loss. Saved native 50-case monitoring losses remain explicitly labeled. Table 4 is removed, and the two main captions are shortened. The earlier quick-protocol results in this log are historical records, not the current matched benchmark.
+
+Startup verification: both jobs generated valid 25-step native meshes and saved exact mesh/error-array artifacts. At the check, frozen completed 18/200 and SAM LoRA 14/200 GSO objects. Three Linux launch/configuration tests passed in 20.38 seconds, including actual shell rejection of an incomplete synthetic evaluation schedule. Startup evidence is saved at `/work/MathiasElmegaardNielsen#6181/append-full-eval-2026-10-31-09-41-18/startup-validation.json`.
+
+Live evaluation tracking: [appended frozen](https://forge.coreweave.com/wandb/hprjdk/atdl-video-to-3d/runs/append-frozen-epoch05-gso200-heavy25-2026-10-31-09-41-18), [appended SAM LoRA](https://forge.coreweave.com/wandb/hprjdk/atdl-video-to-3d/runs/append-sam-lora-epoch05-gso200-heavy25-2026-10-31-09-41-18). These are heavy GSO stages; the native-validation and loss stages follow within the same batch jobs.
+
+### 2026-10-31: Remove the incomplete GSO loss column
+
+The saved epoch-5 heavy GSO results for the six original trained variants have no flow loss. Removed validation loss from report Table 3 because a complete matched loss comparison is unavailable. Table 2 retains the recorded native validation losses. The two submitted appended-token jobs remain unchanged, including their GSO loss stage; those artifacts do not establish losses for the other methods.
+
+### 2026-10-31: Appended-token heavy GSO results completed
+
+Both epoch-5 heavy GSO evaluations passed exact 200-ID, completion-summary and EMA checkpoint checks; Table 3 now contains these matched scores.
+
+| Model | Coarse IoU % | Mesh Chamfer | Mesh F@2% | Mesh F@5% |
+|---|---:|---:|---:|---:|
+| append-frozen | 14.65 | 0.0862 | 55.09 | 75.90 |
+| append-sam-lora | 18.61 | 0.0739 | 59.23 | 80.12 |
+
+The native full-validation stages remain active (986/1,306 and 922/1,306 at the check), so Table 2 retains dashes for appended geometry. A 15-minute follow-up is active to insert verified full-set results, rebuild the paper and push the remaining paper/data update when ready. No partial-set means are published. Source paths and checkpoint/file hashes are recorded in the updated result snapshot.
+
+### 2026-10-31: Full appended-token native validation complete
+
+Both epoch-5 EMA native evaluations passed all 1,306 unique expected sample IDs, completion markers and summary checks, with no empty predictions. Table 2 is now filled; Table 3 already contains matched heavy GSO results. The native monitoring losses remain on the existing 50-case panel.
+
+| Model | IoU % | Aligned IoU % | Chamfer | F@2% | F@5% |
+|---|---:|---:|---:|---:|---:|
+| append-frozen | 11.14 | 15.07 | 0.2751 | 38.93 | 58.18 |
+| append-sam-lora | 13.17 | 18.23 | 0.2348 | 45.12 | 64.98 |
+
+Auxiliary-stage diagnostic: the frozen GSO loss pass saved a complete 200-object set, but Fire then rejected the unsupported `eval-json --loss_only=True` argument and the batch marker records exit 2. It actually performed coarse geometry plus loss, under an isolated loss evaluation ID. The native and refined GSO benchmark scopes had already completed and are unaffected. The LoRA auxiliary pass was still running at the check. Preserve these true exit markers rather than relabeling the provider SUCCESS as a clean application exit. No retraining or duplicate benchmark run is needed. Source paths and checkpoint hashes are in the result snapshot.
+
+The maintained `eval-json` CLI now accepts and forwards `loss_only`; a focused Fire-parser regression test passes. This code fix is left uncommitted with the existing experiment-code changes, separate from the paper-only push. Historical job exit markers remain unchanged.
+
+### 2026-10-31: Evaluation allocations released and monitor finished
+
+Both provider jobs are terminal SUCCESS and their dedicated GPU allocations have ended. All native 1,306-case and heavy GSO 200-case benchmark scopes were already validated and published in commit `b3d9b0f`. Both additional GSO passes also saved 200 complete loss records: frozen 0.3485734063, SAM LoRA 0.2301368463. Their application exits are both 2 because Fire rejected the unused `--loss_only` argument after evaluation; the true markers are retained, and the CLI fix is covered by a passing parser regression test. These diagnostic losses are not a paper column and no rerun is needed. Final identity/count/exit evidence is stored at `/work/MathiasElmegaardNielsen#6181/append-full-eval-2026-10-31-09-41-18/final-validation.json` and in the result snapshot. The follow-up monitor can now be removed.
