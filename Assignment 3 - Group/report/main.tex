@@ -130,9 +130,9 @@ Our approach instead learns to combine video evidence in the conditioning sequen
 \section{Method}
 \begin{figure*}[t]
   \centering
-  \includegraphics[width=\textwidth]{pooling_adapter_source_style_v2.png}
-  \caption{Mask-aware video conditioning for our coarse-geometry pilot. A 64-query attentive pooler and linear projection replace the native RGB token streams while retaining reference-mask tokens and zero point-map slots. The texture and refinement stage is shown for context and is outside the pilot. Adapted from Figure 2 of SAM 3D~\cite{sam3d}; renderings and layout are adapted, with the video-conditioning pathway added.}
-  \label{fig:pooling-adapter}
+  \includegraphics[width=\textwidth]{fusion_adapter_source_style_v2.png}
+  \caption{Gated fusion of video features into SAM 3D conditioning. V-JEPA 2.1 video features are projected and augmented with object-coverage and temporal embeddings. Two gated cross-attention blocks update the native RGB conditioning tokens, using RGB tokens as queries and video features as keys and values. Zero-initialized gates preserve the original conditioning at initialization. Mask tokens and zero point-map slots are retained. Adapted from Figure 2 of SAM 3D~\cite{sam3d}.}
+  \label{fig:fusion-adapter}
 \end{figure*}
 
 \subsection{Data Generation}
@@ -144,7 +144,7 @@ In order to condition SAM 3D on video, we must incorporate this information into
 
 Let $V_G=f_{\theta_V}(I_{1:K})\in\mathbb{R}^{N_v\times d_v}$ denote the video embeddings for a clip of $K$ frames with $N_v$ as the number of spatiotemporal tokens and $d_v$ as the encoder feature width. For V-JEPA 2.1 ViT-L/16 using final-layer features, $d_v=1024$ and $N_v=T_v(H_v/16)(W_v/16)$, where $T_v=K/2$ for even $K>1$ and $T_v=1$ for a single frame. Framewise DINOv2 variants instead use $14\times14$ spatial patches.
 
-we hypothesize that appending new tokens to the conditioning set may be more disruptive to the pretrained backbone and may require backbone weight updates. We therefore incorporate video information by updating or replacing the existing RGB conditioning streams.
+We compare three strategies for incorporating video information: updating the native RGB tokens through gated fusion, replacing them with pooled video tokens, and appending video and mask tokens. We hypothesize that extending the conditioning sequence may be more disruptive to the pretrained backbone and require backbone weight updates.
 
 Recall that
 \begin{equation}
@@ -159,11 +159,11 @@ where $[\cdot]$ indicates an optional input and
     \in\mathbb{R}^{N_{\mathrm{rgb}}\times1024}.
 \end{equation}
 
-Both architectures modify only $C_{\mathrm{rgb}}$, retaining the mask and optional point-map streams. We study two versions of the mapping
+Gated fusion and video pooling modify only $C_{\mathrm{rgb}}$, retaining the mask and optional point-map streams:
 \begin{equation}
-    a_{\theta_A}:(C_{\mathrm{rgb}},V_G)\longmapsto C_{\mathrm{rgb}}',
+    a_{\theta_A}:(C_{\mathrm{rgb}},V_G)\longmapsto C_{\mathrm{rgb}}'.
 \end{equation}
-where gated fusion preserves the $N_{\mathrm{rgb}}$ RGB tokens and video pooling replaces them with $64$ pooled tokens. The updated RGB tokens are assembled with the retained streams to form $C_G'$, which is reused at every flow step in $v_{\theta_G}(x_\tau,\tau,C_G')$. The concatenation above groups tokens by modality for notation; the native fuser concatenates the individual streams in one operation.
+Gated fusion preserves the $N_{\mathrm{rgb}}$ RGB tokens, while video pooling replaces them with $64$ pooled tokens. The appended-token strategy instead retains all native streams and adds video and mask summaries. Each strategy produces conditioning $C_G'$, which is reused at every flow step in $v_{\theta_G}(x_\tau,\tau,C_G')$. The concatenation above groups tokens by modality for notation; the native fuser concatenates the individual streams in one operation.
 
 \subsection{Fusion Adapter}
 
@@ -185,9 +185,7 @@ where $\operatorname{MHA}(Q,K)$ is 16-head attention with $K$ as both keys and v
 
 \subsection{Video pooling}
 
-
-
-The video-pooling architecture uses a one-layer transformer attentive pooler with $64$ learned queries. Before pooling, we select V-JEPA tokens whose corresponding $2\times16\times16$ tubelets contain at least $50\%$ target-object pixels, measured from the aligned frame masks. If none qualify, we retain the foreground tokens with the highest coverage. This selection focuses pooling on the target object.
+The video-pooling architecture uses a one-layer transformer attentive pooler with $64$ learned queries. Before pooling, we select V-JEPA tokens whose corresponding $2\times16\times16$ tubelets contain at least $50\%$ target-object pixels, measured from the aligned frame masks. If none qualify, we retain the foreground tokens with the highest coverage.
 \begin{equation}
 \begin{aligned}
     H_V &= \operatorname{Pool}_{\theta_A}(V_{G,\mathrm{obj}})
@@ -195,7 +193,21 @@ The video-pooling architecture uses a one-layer transformer attentive pooler wit
     C_{\mathrm{rgb}}' &= H_VW+b\in\mathbb{R}^{64\times1024}.
 \end{aligned}
 \end{equation}
-The resulting tokens replace both native RGB conditioning streams, while the mask and optional point-map streams are retained. The pooler therefore produces a fixed-size conditioning representation regardless of the number of selected video tokens.
+The resulting tokens replace both native RGB conditioning streams, while the mask and optional point-map streams are retained. The output token count is therefore independent of the input sequence length.
+
+To test whether pooling performance depends on the encoder representation, we also replace V-JEPA with SAM 3D's own frozen DINOv2 backbone. We encode the same $16$ frames independently and apply the same foreground selection, attentive pooler, and linear projection to their patch tokens. This tests whether features from the native image encoder provide more compatible conditioning.
+
+\subsection{Appending Video Tokens}
+
+The appended-token architecture linearly projects V-JEPA features to the conditioning width and encodes aligned mask patches and spatiotemporal positions. Their combined features provide attention keys for $1370$ learned queries. Shared attention weights pool separate video and mask value streams, followed by separate linear output projections:
+\begin{equation}
+    H_V,H_M\in\mathbb{R}^{1370\times1024}.
+\end{equation}
+The resulting tokens are appended to the unchanged native conditioning sequence:
+\begin{equation}
+    C_G'=\operatorname{Concat}_{\mathrm{tokens}}(C_G,H_V,H_M).
+\end{equation}
+This adds $2740$ conditioning tokens regardless of the input sequence length.
 
 \section{Experimental Setup}
 \subsection{Synthetic Dataset and Splits}
@@ -220,7 +232,7 @@ We separate coarse-geometry evaluation from full reconstruction evaluation. The 
 
 \subsection{Training Settings}
 
-We train the fusion adapter or attentive pooler and projection, optionally together with SAM 3D LoRA parameters. The video encoder and original SAM 3D parameters remain frozen. Training supervises the coarse shape latent using rectified flow-matching MSE; layout prediction is not supervised. SAM LoRA is applied to the shape stream's cross-attention query, key/value, and output projections. Table~\ref{tab:training-settings} summarizes the shared settings. The image-only control uses one sampled frame in place of the video input.
+We train the fusion adapter, attentive pooler and projection, or appended-token module, optionally together with SAM 3D LoRA parameters. The video encoder and original SAM 3D parameters remain frozen. Training supervises the coarse shape latent using rectified flow-matching MSE; layout prediction is not supervised. SAM LoRA is applied to the shape stream's cross-attention query, key/value, and output projections. Table~\ref{tab:training-settings} summarizes the shared settings. The image-only control uses one sampled frame in place of the video input.
 
 \begin{table}[t]
 \centering
@@ -328,7 +340,7 @@ Our hypothesis is supported in distribution and rejected out of distribution. Ou
 
 \subsection{Limitations and Future Work}
 
-Hard foreground selection may discard useful boundary and scene-context features; an alternative is to pool all video tokens while supplying object coverage as an additional embedding.
+In the video-pooling architecture, hard foreground selection may discard useful boundary and scene-context features. Pooling all video tokens with mask information, as in the appended-token strategy, avoids this filtering.
 
 \newpage
 \IfFileExists{ISBI_template-master/IEEEbib.bst}{%
@@ -361,7 +373,7 @@ Hard foreground selection may discard useful boundary and scene-context features
 After discussion, we agreed to study whether video context from a self-supervised video encoder can help the single-image model SAM 3D reconstruct partially observed objects, while keeping the backbone frozen.
 
 \section{Individual Contributions}
-\textbf{Hans Peter Lyngsøe:} \textit{[\ldots]}\\
+\textbf{Hans Peter Lyngsøe:} Created Figure~\ref{fig:fusion-adapter}, illustrating the gated fusion adapter that updates native RGB conditioning tokens with video features.\\
 \textbf{Harald Franck:} \textit{[\ldots]}\\
 \textbf{Mathias Elmegaard Nielsen:} \textit{[\ldots]}\\
 \textbf{Julian Barragan:} \textit{[\ldots]}
