@@ -85,6 +85,7 @@ def clip_json(clip: Clip) -> dict:
         "T_cw": clip.T_cw.tolist(),
         "objects": objects,
         "visibility": meta["visibility"],
+        "background": meta.get("background", {}),
     }
     if "occlusion" in meta:
         out["occlusion"] = meta["occlusion"]

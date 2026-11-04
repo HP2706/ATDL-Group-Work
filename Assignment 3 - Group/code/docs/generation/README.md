@@ -6,7 +6,7 @@ Training and evaluating such a model needs videos with exact 3D ground truth, wh
 
 ## What a clip contains
 
-- 32 frames at 512×512, composited over a real photo (SA-1B) that is warped consistently with the camera motion.
+- 32 frames at 512×512, composited over a CC0 Poly Haven panorama-derived background (new runs; historical M1 used SA-1B) that is warped consistently with the camera motion.
 - Per frame: camera pose and intrinsics (OpenCV convention), visible instance masks, amodal masks per object, z-depth.
 - Per object: the asset id, its pose in the world (rotation, translation, isotropic scale), and the asset's canonical mesh and 64³ voxels, matching TRELLIS's normalization and voxelization.
 
@@ -37,15 +37,16 @@ uv run python -m sam3dvid.assets --source gso --split eval # -> dataset/assets/e
 uv run python scripts/download_objaverse.py --limit 10000  # TRELLIS-500K Objaverse-XL (Sketchfab) -> data/raw/objaverse
 uv run python -m sam3dvid.assets --source objaverse --split train --workers 8  # -> dataset/assets/train
 uv run python -m sam3dvid.assetfilter --split train        # geometric filter contact sheets -> dataset/review
-uv run python scripts/download_sa1b.py --links data/sa1b_links.txt --archives sa_000000.tar
-uv run python scripts/build_bg_pools.py                    # -> data/bg_pools
+uv run python scripts/generation/prepare_polyhaven.py --limit 200 --views 4  # -> data/bg_pools_polyhaven
 
-uv run python -m sam3dvid.generate --config configs/m1.yaml --split eval --seeds $(seq 0 499)
-uv run python -m sam3dvid.review --split eval --num 20    # mp4s and contact sheets for a visual check
-uv run pytest
+mkdir -p dataset_polyhaven
+ln -s "$(realpath dataset/assets)" dataset_polyhaven/assets
+uv run python -m sam3dvid.generate --config configs/generation/m1_polyhaven.json --split eval --seeds $(seq 0 499)
+uv run python -m sam3dvid.review --dataset dataset_polyhaven --split eval --num 20    # mp4s and contact sheets for a visual check
+SAM3DVID_DATASET=dataset_polyhaven uv run pytest
 ```
 
-SA-1B download links are personal and must be requested from [Meta](https://ai.meta.com/datasets/segment-anything-downloads/); put them in `data/sa1b_links.txt`. No data, assets or rendered clips are included in this repository.
+New runs use CC0 backgrounds, downloaded through the public API. Powered by [Poly Haven](https://polyhaven.com). See `docs/m2_runbook.md` for provenance, frozen pools and release checks. Original SA-1B scripts/configs are retained for historical reproducibility only. No data, assets or rendered clips are included in this repository.
 
 ## Status
 
@@ -69,4 +70,4 @@ docs/              format, spec, runbooks
 
 - Asset normalization reuses code from [TRELLIS](https://github.com/microsoft/TRELLIS) (MIT License, Copyright (c) Microsoft Corporation); see `src/sam3dvid/blender/normalize_assets.py`.
 - Rendering uses [BlenderProc](https://github.com/DLR-RM/BlenderProc) and Blender.
-- Data sources keep their own licenses: [Google Scanned Objects](https://app.gazebosim.org/GoogleResearch) (CC BY 4.0), [SA-1B](https://ai.meta.com/datasets/segment-anything/) (SA-1B research license), [Objaverse-XL](https://github.com/allenai/objaverse-xl) (per-object licenses). [SAM 3D Objects](https://github.com/facebookresearch/sam-3d-objects) is not included and is under its own license.
+- Data sources keep their own licenses: [Google Scanned Objects](https://app.gazebosim.org/GoogleResearch) (CC BY 4.0), [Poly Haven](https://polyhaven.com/license) (CC0 backgrounds for new runs), [SA-1B](https://ai.meta.com/datasets/segment-anything/) (historical clips only; restricted research license), [Objaverse-XL](https://github.com/allenai/objaverse-xl) (per-object licenses). [SAM 3D Objects](https://github.com/facebookresearch/sam-3d-objects) is not included and is under its own license.

@@ -61,3 +61,24 @@ def test_rejection_reasons_and_pool(tmp_path: typing.Any) -> typing.Any:
             (d / "meta.json").write_text(json.dumps({"asset_id": name, "filter_scores": fs, "num_voxels": scores["num_voxels"]}))
     assert accepted_assets(cfg, "train") == ["a"]
     assert accepted_assets(cfg, "eval") == ["a", "b"]
+
+
+def test_audited_exclusions_apply_to_training_only(tmp_path):
+    import json
+    from video3d.data.generation.assetfilter import accepted_assets
+    from video3d.data.generation.config import Config
+    for split in ("train", "eval"):
+        for uid in ("opaque", "alpha"):
+            folder = tmp_path / "assets" / split / uid
+            folder.mkdir(parents=True)
+            (folder / "meta.json").write_text(json.dumps({
+                "asset_id": uid, "num_voxels": 5000,
+                "filter_scores": {"extent_min": 0.5, "normal_eig_min": 0.2, "outlier_area_frac": 0.1}
+            }))
+    exclusions = tmp_path / "exclusions.json"
+    exclusions.write_text(json.dumps({"excluded": {"alpha": {"reason": "alpha material"}}}))
+    cfg = Config(dataset_root=str(tmp_path), asset_exclusions_file=str(exclusions))
+    assert accepted_assets(cfg, "train") == ["opaque"]
+    assert accepted_assets(cfg, "eval") == ["alpha", "opaque"]
+    cfg = Config(dataset_root=str(tmp_path))
+    assert accepted_assets(cfg, "train") == ["alpha", "opaque"]

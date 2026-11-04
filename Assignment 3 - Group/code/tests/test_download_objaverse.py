@@ -26,7 +26,8 @@ def fixtures(root: Path) -> tuple[Path, Path, bytes]:
     manifest = root / 'attribution.json'
     manifest.write_text(json.dumps({'assets': [
         {'uid': uid, 'sha256': hashlib.sha256(content).hexdigest(),
-         'license_spdx': 'CC-BY-4.0', 'author': 'Artist'} for uid in ['b', 'a']]}))
+         'license_spdx': 'CC-BY-4.0', 'author': 'Artist',
+         'name': 'Cup', 'source_url': f'https://sketchfab.com/models/{uid}'} for uid in ['b', 'a']]}))
     paths = root / 'paths.json.gz'
     with gzip.open(paths, 'wt') as stream:
         json.dump({uid: f'glbs/000/{uid}.glb' for uid in ['a', 'b']}, stream)
