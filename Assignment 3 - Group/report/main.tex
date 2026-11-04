@@ -205,7 +205,7 @@ Both our architectures modify only $C_{\mathrm{rgb}}$, retaining the mask and op
 \end{equation}
 Gated fusion preserves the $N_{\mathrm{rgb}}$ RGB tokens, while video pooling replaces them with $64$ pooled tokens. The appended-token strategy instead retains all native streams and adds video and mask summaries. Each strategy produces conditioning $C_G'$, which is reused at every flow step in $v_{\theta_G}(x_\tau,\tau,C_G')$. The concatenation above groups tokens by modality for notation; the native fuser concatenates the individual streams in one operation.
 
-\paragraph{Fusion adapter.}
+\subsubsection{Fusion adapter}
 Each video token is projected to the conditioning width and augmented with object coverage $m_i$ and relative frame offset $\Delta t_i$:
 \begin{equation}
     V_i=\Pi_{\theta_A}((V_G)_i)+m_i e_{\mathrm{obj}}+E_{\mathrm{time}}(\Delta t_i).
@@ -222,7 +222,7 @@ C^{(\ell)} &= \widetilde C^{(\ell)} + \tanh\!\big(g^{(\ell)}_{\mathrm{f}}\big)\,
 \end{equation}
 where $\operatorname{MHA}(Q,K)$ is 16-head attention with $K$ as both keys and values, and the FFN has hidden width $2048$. The output $C'_{\mathrm{rgb}}=C^{(2)}$ has the same shape as $C_{\mathrm{rgb}}$. All gates are initialized to $g=0$, so $C'_{\mathrm{rgb}}=C_{\mathrm{rgb}}$ at initialization and training starts exactly from pretrained SAM 3D~\cite{flamingo}. The adapter has approximately $18$M parameters, about $1.5\%$ of the geometry model.
 
-\paragraph{Video pooling.}
+\subsubsection{Video pooling}
 The video-pooling architecture uses a one-layer transformer attentive pooler with $64$ learned queries. Before pooling, we select V-JEPA tokens whose corresponding $2\times16\times16$ tubelets contain at least $50\%$ target-object pixels, measured from the aligned frame masks. If none qualify, we retain the foreground tokens with the highest coverage. This selection focuses pooling on the target object.
 \begin{equation}
 \begin{aligned}
@@ -402,7 +402,7 @@ would encourage the adapter to aggregate evidence across frames,
 whilst retaining learned shape priors for surfaces that remain unseen.
 Furthermore, our training scenes are limited in diversity:
 objects float without contact, supporting surfaces, or clutter,
-which likely widens the gap to scanned objects. 
+which likely widens the gap to scanned objects.
 
 \subsection{Hypothesis Assessment}
 Our hypotheses are supported in distribution and rejected out of distribution.
