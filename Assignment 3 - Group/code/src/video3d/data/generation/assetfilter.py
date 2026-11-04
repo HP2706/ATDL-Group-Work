@@ -33,6 +33,8 @@ BACKGROUND = (214, 214, 214)
 def rejection_reasons(scores: dict[str, float], cfg: Config) -> list[str]:
     """Which App. B.1 criteria (scores from `load_scores`) an asset fails; empty means accepted."""
     reasons = []
+    if scores.get("compatibility_excluded", False):
+        reasons.append("compatibility")
     if scores["extent_min"] < cfg.filter_extent_min:
         reasons.append("thin")
     if scores["normal_eig_min"] < cfg.filter_normal_eig_min:
@@ -58,9 +60,14 @@ def scene_word(captions: list[str], cfg: Config) -> str | None:
 def load_scores(cfg: Config, split: str) -> dict[str, dict[str, float]]:
     """filter_scores plus num_voxels and captions (empty for GSO) per asset id."""
     root = Path(cfg.dataset_root) / "assets" / split
+    exclusions = {}
+    if split == "train" and cfg.asset_exclusions_file:
+        exclusions = json.loads(Path(cfg.asset_exclusions_file).read_text())["excluded"]
+        if not isinstance(exclusions, dict):
+            raise ValueError("Asset exclusions must be an object keyed by asset ID")
     metas = (json.loads(p.read_text()) for p in sorted(root.glob("*/meta.json")))
     return {
-        m["asset_id"]: {**m["filter_scores"], "num_voxels": m["num_voxels"], "captions": m.get("captions", [])}
+        m["asset_id"]: {**m["filter_scores"], "num_voxels": m["num_voxels"], "captions": m.get("captions", []), "compatibility_excluded": m["asset_id"] in exclusions}
         for m in metas
     }
 
@@ -151,7 +158,7 @@ def run(config: str | None = None, split: str = 'train', num: int = 50, seed: in
         "num_accepted": len(accepted),
         "num_rejected": len(rejected),
         "accept_rate": len(accepted) / max(len(scores), 1),
-        "rejected_by_reason": {k: sum(k in r for r in reasons.values()) for k in ("thin", "flat", "outlier", "small", "scene")},
+        "rejected_by_reason": {k: sum(k in r for r in reasons.values()) for k in ("thin", "flat", "outlier", "small", "scene", "compatibility")},
         "shown": {
             name: {a: {"scores": {k: v for k, v in scores[a].items() if k != "captions"}, "reasons": reasons[a], "scene_word": scene_word(scores[a]["captions"], cfg)} for a in ids}
             for name, ids in shown.items()

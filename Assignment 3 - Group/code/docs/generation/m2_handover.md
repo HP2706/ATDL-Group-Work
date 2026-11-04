@@ -4,7 +4,7 @@ This brief is for whoever runs M2, and for their coding agent: give the agent th
 
 ## Goal
 
-Produce the **train split**: 10,000 clips (seeds 1000000-1009999) rendered from filtered Objaverse assets on SA-1B backgrounds. Validate them, and pack them into training shards (RGB, visible masks, poses, voxels) for the model team.
+Produce the **train split**: 10,000 clips (seeds 1000000-1009999) rendered from filtered Objaverse assets on CC0 Poly Haven backgrounds. Validate them, and pack them into training shards (RGB, visible masks, poses, voxels) for the model team.
 
 **Deliverables:**
 1. Training shards plus `index.json` and the voxels file. Expected about 40 GB (4 MB per clip, measured); this is what the model team trains on.
@@ -24,7 +24,7 @@ Stop at each **checkpoint** and send the listed output to Julian before continui
 | # | Step | Runbook | Checkpoint |
 |---|---|---|---|
 | 1 | Clone the repo on a UCloud GPU job; run `scripts/m2/setup_node.sh` | §1 | - |
-| 2 | Get the SA-1B backgrounds (your own license and links file) and build the pools | §2 | Pool sizes printed (expect 7,258 train) |
+| 2 | Prepare Poly Haven CC0 backgrounds and build the pools | §2 | Pool sizes + source-disjoint manifest (200 panoramas, 4 views each by default) |
 | 3 | Download and preprocess the Objaverse assets; check the filter contact sheet. Then the asset pool is frozen | §2 | **Contact sheets + accept rate** (expect about 67%) |
 | 4 | `scripts/m2/smoke_test.sh` on the B200 | §3 | **Full output** (does Blender render on the B200, s/clip for 1/2/4 workers) |
 | 5 | Pilot: seeds 1000000-1000099 | §4 | **failures.jsonl, s/clip, rejection rate, 20 review videos** |

@@ -91,6 +91,8 @@ class Config:
 
     dataset_root: str = "dataset"
     bg_pool_dir: str = "data/bg_pools"
+    # Optional audited train-only exclusions, e.g. materials incompatible with geometry GT.
+    asset_exclusions_file: str | None = None
     blender_install_path: str = ".blender"
     # An existing Blender to use instead of BlenderProc's default 4.2.1, e.g. 4.5 LTS for GPUs
     # that 4.2 has no kernels for.

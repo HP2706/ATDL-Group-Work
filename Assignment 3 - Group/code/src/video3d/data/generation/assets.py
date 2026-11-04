@@ -150,6 +150,8 @@ def objaverse_assets(raw: Path, limit: int | None) -> list[Asset]:
             "aesthetic_score": o["aesthetic_score"],
             "name": o["name"],
             "author": o["author"],
+            "author_url": o.get("author_url"),
+            "license_url": o.get("license_url"),
             "captions": o.get("captions", []),
         }
         # GLBs are self-contained, so Blender reads them in place.

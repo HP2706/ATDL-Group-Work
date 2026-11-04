@@ -17,14 +17,41 @@ This installs uv and the Python environment and downloads Blender 4.5.15 LTS int
 
 Everything goes under `data/` and `dataset/` in the repo, or symlink those two folders to scratch first. Both are git-ignored.
 
-**SA-1B backgrounds.** Accept the SA-1B license yourself at <https://ai.meta.com/datasets/segment-anything-downloads/> and save the links file it gives you as `data/sa1b_links.txt`. The links are personal signed URLs; don't share or print them. Then:
+**CC0 backgrounds (Poly Haven).** Run this once on a CPU node, in persistent storage:
 
 ```bash
-uv run python scripts/download_sa1b.py --links data/sa1b_links.txt --archives sa_000000.tar
-uv run python scripts/build_bg_pools.py
+uv run python scripts/generation/prepare_polyhaven.py --limit 200 --views 4
 ```
 
-The train/eval split of the backgrounds is a deterministic hash of the image id, so this reproduces exactly the pools used for M1 (7,258 train images).
+This uses the public Poly Haven API to download 200 tone-mapped panoramas and produce
+four 2048x1024 perspective JPEGs per panorama (130 degree horizontal FOV). No GPU,
+API key or SA-1B links file is needed. Powered by Poly Haven (https://polyhaven.com).
+Assets are CC0: https://polyhaven.com/license. Downloads are sequential, cached and
+checksummed. A failed download can be retried with the same command.
+
+- Images and cached selection/API responses: `data/raw/polyhaven/`.
+- Frozen source selection, image provenance and checksums: `data/bg_pools_polyhaven/manifest.json`.
+- Generator pools: `data/bg_pools_polyhaven/{train,eval}.jsonl`; M2 already selects this directory.
+- Train/eval assignment is by source panorama, so different views cannot leak across splits.
+- Freeze both pools before rendering. Changed preparation arguments require new `--raw` and
+  `--out` directories and corresponding config changes. Do not run `build_bg_pools.py` on
+  the prepared views: its image-ID split would break panorama grouping.
+- Copy `manifest.json` and `stats.json` with the eventual HF release. Per-clip background
+  provenance is also retained in exported sample JSON.
+- Preserve the original SA-1B eval privately as historical M1/T6 results. Regenerate any
+  eval split intended for redistribution with `configs/generation/m1_polyhaven.json` and a NEW root:
+
+```bash
+mkdir -p dataset_polyhaven
+ln -s "$(realpath dataset/assets)" dataset_polyhaven/assets
+uv run python -m sam3dvid.generate --config configs/generation/m1_polyhaven.json --split eval --seeds $(seq 0 499)
+```
+
+The new background source needs smoke/coverage checks and visual review. Historical T6
+numbers refer to the old backgrounds. Do not mix old SA-1B clips into the new release.
+A private HF repository does not waive source licenses. Objaverse's per-object licenses
+and GSO attribution must be checked before upload; CC0 backgrounds do not license the
+complete composite or 3D targets as CC0.
 
 **Objaverse train assets.**
 
@@ -34,9 +61,9 @@ uv run python -m sam3dvid.assets --source objaverse --split train --workers 8   
 uv run python -m sam3dvid.assetfilter --split train                             # -> dataset/review
 ```
 
-- **Download:** a seeded subset of TRELLIS-500K's Objaverse-XL Sketchfab list (aesthetic score >= 5.5), with license, author and captions per object in `data/raw/objaverse/index.json`. It resumes, and a larger `--limit` extends a smaller one. The download size per GLB hasn't been measured; check `du -sh data/raw/objaverse/glbs` after the first few hundred.
+- **Download:** only CC0 / CC BY assets pass the release allowlist, before downloading GLBs. Unknown, NC, ND and SA licenses are excluded, and CC BY entries missing title, author or source URL are excluded. `--limit 10000` counts candidates BEFORE this filter, so expect fewer downloaded assets. Rejections are recorded in `index.json`; `ATTRIBUTION.json` records downloaded assets, license links, creators and modifications. Include that file in the HF release, including private sharing. A seeded subset of TRELLIS-500K's Objaverse-XL Sketchfab list (aesthetic score >= 5.5), with license, author and captions per object in `data/raw/objaverse/index.json`. It resumes, and a larger `--limit` extends a smaller one. The download size per GLB hasn't been measured; check `du -sh data/raw/objaverse/glbs` after the first few hundred.
 - **Preprocessing:** finished assets are skipped, so a killed run resumes. Assets that crash or hang Blender are logged to `dataset/assets/failed_train.jsonl` and skipped from then on.
-- **Filter:** it is applied when clips are generated, not at preprocessing, so changing a threshold needs no reprocessing. On 100 test assets, 67% were accepted: 27 were rejected as scenes (houses, floor plans, landscapes, found through the TRELLIS captions) and 6 on geometry. With `--limit 10000`, expect about 6,700 usable assets, each used about 3 times across 10,000 clips.
+- **Filter:** it is applied when clips are generated, not at preprocessing, so changing a threshold needs no reprocessing. On 100 test assets, 67% were accepted: 27 were rejected as scenes (houses, floor plans, landscapes, found through the TRELLIS captions) and 6 on geometry. The earlier 67% acceptance figure predates the license allowlist. Measure the actual downloaded and geometrically accepted pool size before freezing it.
 - **Contact sheets:** `dataset/review/assets_train_{accepted,rejected}.png` show 50 random accepted and rejected assets each. Send them back with the counts the command prints.
 - **Freeze the pool before step 4.** A train seed draws from the sorted list of accepted assets, so adding assets or changing a filter threshold after rendering has started changes which assets every later seed gets. Download, preprocess and filter everything first; don't touch `dataset/assets/train` or the filter settings while clips are being rendered.
 
@@ -55,6 +82,10 @@ It checks four things:
 Send the output back. If the first render fails, the script prints the Blender log. The likeliest cause is the GPU not being supported by this Blender build.
 
 ## 4. Render
+
+Use a fresh dataset root for the Poly Haven run. Existing clips are skipped on resume, so
+reusing a root containing SA-1B clips would silently mix background sources. Link shared
+assets into the fresh root, but do not copy historical clips.
 
 Train seeds are **1000000-1009999**. They must not overlap the eval seeds 0-499: a seed fixes N, layout and camera path regardless of split.
 
@@ -94,3 +125,15 @@ The export packs RGB (JPEG q95, 4:4:4), visible masks, per-frame camera-frame po
 - **Run it only after rendering and validation are finished.** Shards are cut from the sorted clip list, and an existing shard is skipped on resume, so exporting while clips are still missing produces shards whose contents don't match a later index.
 - **Round trip:** `--verify 20` reads the first 20 clips back and checks them against the source clips: masks bit-exact, poses and voxels equal, RGB PSNR > 40 dB. It stops with an AssertionError naming the clip and frame otherwise. Re-running the command only verifies, because finished shards are skipped.
 - **Not yet tried:** reading the shards with the `webdataset` library itself.
+
+
+## Alpha-material compatibility check (2026-10-28)
+
+The full-pool benchmark found T1b silhouette failures on 3/29 clips. Their failing objects
+used BLEND/MASK materials; a geometry-only ray caster cannot reproduce alpha cutouts.
+A conservative material audit excludes such assets via `asset_exclusions_file` in M2.
+The runtime file `dataset/asset_exclusions_train.json` contains IDs and reasons, and must
+travel with the input-pool freeze. No assets are deleted and geometric tolerances stay
+unchanged. The reviewed 5,410-object pool becomes 4,550 opaque-compatible objects.
+The original 1/2/4-worker benchmark was 17.7/9.7/6.3 seconds per clip but failed geometry
+validation, so it is provisional until the revised pool and pilot pass.

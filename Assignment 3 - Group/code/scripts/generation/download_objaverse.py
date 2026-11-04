@@ -15,10 +15,14 @@ With --limit, the subset is the first N candidates of a seeded shuffle of the sh
 candidate list, so a larger limit extends a smaller one. GLBs go to <out>/glbs/<uid>.glb via .part
 files (resumed after interruption); existing files are hash-verified before reuse. Licenses and authors come from the
 Objaverse 1.0 per-chunk metadata, cached compactly under <out>/meta/. <out>/index.json lists the
-selection with sha256, aesthetic score, license and source URL per object; the order of its
+selection with sha256, aesthetic score, license and source URL per object. Only CC0 and
+CC BY assets with attribution metadata are admitted before GLBs are downloaded; --limit
+counts candidates before license filtering, so the downloaded count can be smaller.
+ATTRIBUTION.json records credits for downloaded assets; include it with any release.
+The order of its
 "selection" list is the order `python -m video3d.data.generation.assets --limit N` uses.
 
-For exact SAM3Dvid recovery, use --manifest /path/to/attribution.json and optionally
+For manifest-based SAM3Dvid recovery, use --manifest /path/to/attribution.json and optionally
 --object_paths /path/to/object-paths.json.gz. This preserves manifest order and ignores
 seed/aesthetic filtering; --limit selects a prefix. No captions or aesthetic scores
 are invented. status.json records progress; complete.json is written only after every
@@ -51,6 +55,30 @@ HF = "https://huggingface.co/datasets"
 CSV_URL = f"{HF}/JeffreyXiang/TRELLIS-500K/resolve/main/ObjaverseXL_sketchfab.csv"
 OBJAVERSE = f"{HF}/allenai/objaverse/resolve/main"
 CHUNK = 1 << 20
+
+
+LICENSES = {
+    "by": ("CC-BY-4.0", "https://creativecommons.org/licenses/by/4.0/"),
+    "cc0": ("CC0-1.0", "https://creativecommons.org/publicdomain/zero/1.0/"),
+}
+
+
+def release_entries(entries: list[dict]) -> tuple[list[dict], list[dict]]:
+    """Fail closed: other/unknown licenses and incomplete CC BY credits are excluded."""
+    accepted, rejected = [], []
+    for entry in entries:
+        code = entry.get("license")
+        code = {"CC-BY-4.0": "by", "CC0-1.0": "cc0"}.get(code, code)
+        if code not in LICENSES:
+            reason = "license_not_allowed"
+        elif code == "by" and not all(entry.get(k) for k in ("author", "name", "source_url")):
+            reason = "missing_attribution"
+        else:
+            spdx, url = LICENSES[code]
+            accepted.append({**entry, "license_spdx": spdx, "license_url": url})
+            continue
+        rejected.append({"uid": entry["uid"], "license": code, "reason": reason})
+    return accepted, rejected
 
 
 class DownloadError(RuntimeError):
@@ -187,7 +215,8 @@ def download_glb(entry: dict, object_paths: dict[str, str], out: Path) -> bool:
     return True
 
 
-def write_index(out: Path, args: Options, num_candidates: int, entries: list[dict], failed: dict[str, str], verified: set[str]) -> int:
+def write_index(out: Path, args: Options, num_candidates: int, entries: list[dict], failed: dict[str, str], verified: set[str],
+                license_rejections: list[dict] | None = None) -> int:
     downloaded = [e["uid"] for e in entries if e["uid"] in verified]
     index = {
         "source": {"csv": None if args.manifest else CSV_URL,
@@ -197,6 +226,9 @@ def write_index(out: Path, args: Options, num_candidates: int, entries: list[dic
         "min_aesthetic": args.min_aesthetic,
         "seed": args.seed,
         "num_candidates": num_candidates,
+        "candidate_limit": args.limit,
+        "allowed_licenses": ["CC0-1.0", "CC-BY-4.0"],
+        "license_rejections": license_rejections or [],
         "num_selected": len(entries),
         "num_downloaded": len(downloaded),
         "licenses": dict(Counter(e["license"] for e in entries)),
@@ -208,6 +240,16 @@ def write_index(out: Path, args: Options, num_candidates: int, entries: list[dic
     tmp = out / "index.json.tmp"
     tmp.write_text(json.dumps(index, indent=1) + "\n")
     tmp.replace(out / "index.json")
+    attribution = {
+        "description": "Credits for downloaded source assets. Include with derived clips and shape targets.",
+        "changes": "Assets may be normalized, triangulated, voxelized, posed, lit and rendered into synthetic clips.",
+        "assets": [{key: entry.get(key) for key in (
+            "uid", "name", "author", "author_url", "source_url", "license_spdx", "license_url", "sha256"
+        )} for entry in entries if entry["uid"] in set(downloaded)],
+    }
+    credits_tmp = out / "ATTRIBUTION.json.tmp"
+    credits_tmp.write_text(json.dumps(attribution, indent=2) + "\n")
+    credits_tmp.replace(out / "ATTRIBUTION.json")
     return len(downloaded)
 
 
@@ -222,7 +264,7 @@ class Options(BaseModel):
 
 
 def manifest_entries(path: Path, object_paths: dict[str, str], limit: int | None) -> list[dict]:
-    """Use attribution assets in their original order, without aesthetic filtering."""
+    """Use attribution assets in their original order; run() still applies the license filter."""
     assets = json.loads(path.read_text())["assets"]
     seen: set[str] = set()
     for asset in assets:
@@ -288,13 +330,16 @@ def run(out: Path = Path('data/raw/objaverse'), limit: int | None = None, seed: 
             entries.append({**row, **metadata,
                             "license": metadata.get("license"),
                             "download_url": f"{OBJAVERSE}/{mapping[row['uid']]}"})
+    entries, license_rejections = release_entries(entries)
+    log.info("license filter: %d allowed, %d rejected; reasons: %s", len(entries),
+             len(license_rejections), dict(Counter(e["reason"] for e in license_rejections)))
     if not entries:
-        raise ValueError("Selection contains no assets")
+        raise ValueError("Selection contains no CC0/CC BY assets with sufficient attribution")
     log.info("selected %d; licenses: %s", len(entries), dict(Counter(e["license"] for e in entries)))
 
     failed: dict[str, str] = {}
     verified: set[str] = set()
-    write_index(out, args, num_candidates, entries, failed, verified)
+    write_index(out, args, num_candidates, entries, failed, verified, license_rejections)
     fetched = 0
     with ThreadPoolExecutor(args.workers) as pool:
         futures = {pool.submit(download_glb, e, mapping, out): e["uid"] for e in entries}
@@ -311,7 +356,7 @@ def run(out: Path = Path('data/raw/objaverse'), limit: int | None = None, seed: 
                            "expected": len(entries), "verified": len(verified),
                            "failed": len(failed), "fetched": fetched})
 
-    n_done = write_index(out, args, num_candidates, entries, failed, verified)
+    n_done = write_index(out, args, num_candidates, entries, failed, verified, license_rejections)
     status = {"phase": "failed" if failed else "complete", "count": n_done,
               "expected": len(entries), "failed": failed, "fetched": fetched,
               "verified_bytes": sum((out / "glbs" / f"{uid}.glb").stat().st_size for uid in verified),
